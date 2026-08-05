@@ -437,6 +437,8 @@ class DialogProveedor(QDialog):
         self.txt_rfc.setPlaceholderText("RFC del proveedor")
         self.txt_nombre = QLineEdit()
         self.txt_nombre.setPlaceholderText("Nombre o razón social")
+        self.txt_nombre_comercial = QLineEdit()
+        self.txt_nombre_comercial.setPlaceholderText("Nombre comercial (marca con la que lo conocemos)")
         self.txt_telefono = QLineEdit()
         self.txt_telefono.setPlaceholderText("Teléfono")
         self.txt_email = QLineEdit()
@@ -446,6 +448,7 @@ class DialogProveedor(QDialog):
 
         for w, lbl in [
             (self.txt_rfc, "RFC:"), (self.txt_nombre, "Nombre:"),
+            (self.txt_nombre_comercial, "Nombre Comercial:"),
             (self.txt_telefono, "Teléfono:"), (self.txt_email, "Email:"),
             (self.txt_direccion, "Dirección:"),
         ]:
@@ -549,6 +552,7 @@ class DialogProveedor(QDialog):
         if prov:
             self.txt_rfc.setText(prov.get("rfc", ""))
             self.txt_nombre.setText(prov.get("nombre", ""))
+            self.txt_nombre_comercial.setText(prov.get("nombre_comercial", ""))
             self.txt_telefono.setText(prov.get("telefono", ""))
             self.txt_email.setText(prov.get("email", ""))
             self.txt_direccion.setText(prov.get("direccion", ""))
@@ -565,12 +569,14 @@ class DialogProveedor(QDialog):
                 self.txt_telefono.text().strip(),
                 self.txt_email.text().strip(),
                 self.txt_direccion.text().strip(),
+                self.txt_nombre_comercial.text().strip(),
             )
             proveedor_id = self.proveedor_id
         else:
             proveedor_id = self.controller.crear_proveedor(
                 rfc, nombre, self.txt_telefono.text().strip(),
                 self.txt_email.text().strip(), self.txt_direccion.text().strip(),
+                self.txt_nombre_comercial.text().strip(),
             )
 
         items = []

@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS proveedores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rfc TEXT NOT NULL UNIQUE,
     nombre TEXT NOT NULL,
+    nombre_comercial TEXT,
     telefono TEXT,
     email TEXT,
     direccion TEXT,

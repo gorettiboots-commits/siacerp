@@ -242,6 +242,12 @@ class DatabaseManager:
                 )
             """)
 
+            prov_cols = [r[1] for r in cursor.execute("PRAGMA table_info(proveedores)").fetchall()]
+            if 'nombre_comercial' not in prov_cols:
+                cursor.execute(
+                    "ALTER TABLE proveedores ADD COLUMN nombre_comercial TEXT")
+                print("Migración: columna nombre_comercial agregada a proveedores.")
+
             cursor.execute("PRAGMA foreign_keys=ON")
             conn.commit()
         except Exception as e:

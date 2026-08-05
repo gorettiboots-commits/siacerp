@@ -137,8 +137,9 @@ def main() -> None:
         if row:
             proveedor_ids[clave] = row[0]
             cursor.execute(
-                "UPDATE proveedores SET telefono=?, email=?, direccion=? WHERE id=?",
-                (prov["telefono"], prov["email"], prov["direccion"], row[0]),
+                "UPDATE proveedores SET nombre_comercial=COALESCE(NULLIF(nombre_comercial, ''), ?), "
+                "telefono=?, email=?, direccion=? WHERE id=?",
+                (prov["alias"], prov["telefono"], prov["email"], prov["direccion"], row[0]),
             )
             compact_ids[compact(prov["alias"])] = row[0]
             compact_ids[compact(prov["nombre"])] = row[0]
@@ -149,9 +150,10 @@ def main() -> None:
             seq += 1
             rfc = generar_rfc(prov["nombre"], seq)
         cur = cursor.execute(
-            "INSERT INTO proveedores (rfc, nombre, telefono, email, direccion) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (rfc, prov["nombre"], prov["telefono"], prov["email"], prov["direccion"]),
+            "INSERT INTO proveedores (rfc, nombre, nombre_comercial, telefono, email, direccion) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (rfc, prov["nombre"], prov["alias"],
+             prov["telefono"], prov["email"], prov["direccion"]),
         )
         proveedor_ids[clave] = cur.lastrowid
         compact_ids[compact(prov["alias"])] = cur.lastrowid

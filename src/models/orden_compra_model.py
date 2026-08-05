@@ -24,18 +24,20 @@ class ProveedorModel:
         return self.db.fetch_one("SELECT * FROM proveedores WHERE id = ?", (proveedor_id,))
 
     def crear(self, rfc: str, nombre: str, telefono: str = "", email: str = "",
-              direccion: str = "") -> int:
+              direccion: str = "", nombre_comercial: str = "") -> int:
         cursor = self.db.execute(
-            "INSERT INTO proveedores (rfc, nombre, telefono, email, direccion) VALUES (?, ?, ?, ?, ?)",
-            (rfc, nombre, telefono, email, direccion),
+            "INSERT INTO proveedores (rfc, nombre, nombre_comercial, telefono, email, direccion) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (rfc, nombre, nombre_comercial, telefono, email, direccion),
         )
         return cursor.lastrowid
 
     def actualizar(self, proveedor_id: int, rfc: str, nombre: str, telefono: str,
-                    email: str, direccion: str) -> None:
+                   email: str, direccion: str, nombre_comercial: str = "") -> None:
         self.db.execute(
-            "UPDATE proveedores SET rfc=?, nombre=?, telefono=?, email=?, direccion=? WHERE id=?",
-            (rfc, nombre, telefono, email, direccion, proveedor_id),
+            "UPDATE proveedores SET rfc=?, nombre=?, nombre_comercial=?, telefono=?, "
+            "email=?, direccion=? WHERE id=?",
+            (rfc, nombre, nombre_comercial, telefono, email, direccion, proveedor_id),
         )
 
     def desactivar(self, proveedor_id: int) -> None:

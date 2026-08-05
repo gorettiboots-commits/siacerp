@@ -163,9 +163,10 @@ class OrdenesCompraView(QWidget):
         layout.addLayout(toolbar)
 
         self.table_prov = QTableWidget()
-        self.table_prov.setColumnCount(6)
-        self.table_prov.setHorizontalHeaderLabels(["RFC", "Nombre", "Teléfono", "Email", "Dirección", "ID"])
-        self.table_prov.setColumnHidden(5, True)
+        self.table_prov.setColumnCount(7)
+        self.table_prov.setHorizontalHeaderLabels(
+            ["RFC", "Nombre", "Nombre Comercial", "Teléfono", "Email", "Dirección", "ID"])
+        self.table_prov.setColumnHidden(6, True)
         self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_prov.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table_prov.setAlternatingRowColors(True)
@@ -203,10 +204,11 @@ class OrdenesCompraView(QWidget):
             for i, p in enumerate(proveedores):
                 self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
                 self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(str(p.get("id", ""))))
+                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
+                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
+                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
+                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
+                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
         except Exception as e:
             print(f"Error: {e}")
 
@@ -237,10 +239,11 @@ class OrdenesCompraView(QWidget):
             for i, p in enumerate(resultados):
                 self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
                 self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(str(p.get("id", ""))))
+                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
+                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
+                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
+                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
+                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
         except Exception as e:
             print(f"Error: {e}")
 

@@ -43,12 +43,16 @@ class OrdenesCompraController:
         return self.proveedor_model.obtener(proveedor_id)
 
     def crear_proveedor(self, rfc: str, nombre: str, telefono: str = "",
-                        email: str = "", direccion: str = "") -> int:
-        return self.proveedor_model.crear(rfc, nombre, telefono, email, direccion)
+                        email: str = "", direccion: str = "",
+                        nombre_comercial: str = "") -> int:
+        return self.proveedor_model.crear(rfc, nombre, telefono, email, direccion,
+                                          nombre_comercial)
 
     def actualizar_proveedor(self, proveedor_id: int, rfc: str, nombre: str,
-                              telefono: str, email: str, direccion: str) -> None:
-        self.proveedor_model.actualizar(proveedor_id, rfc, nombre, telefono, email, direccion)
+                             telefono: str, email: str, direccion: str,
+                             nombre_comercial: str = "") -> None:
+        self.proveedor_model.actualizar(proveedor_id, rfc, nombre, telefono, email,
+                                        direccion, nombre_comercial)
 
     def desactivar_proveedor(self, proveedor_id: int) -> None:
         self.proveedor_model.desactivar(proveedor_id)
