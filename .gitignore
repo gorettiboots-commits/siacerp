@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Base de datos (datos reales, NO subir)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Configuración con credenciales
+config.ini
+
+# Exportaciones generadas por la app
+OC_*.xlsx
+Ordenes_Compra.xlsx
+Movimientos_Inventario.xlsx
+*.pdf
+
+# Entorno / editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
