@@ -9,6 +9,7 @@ from src.controllers.inventario_controller import InventarioController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel, print_table
+from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import (
     DialogBOM, DialogModelo, DialogOrdenProduccion,
     DialogSeguimientoOP, DialogVariante,
@@ -141,6 +142,7 @@ class ProduccionView(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.doubleClicked.connect(self._ver_seguimiento)
         layout.addWidget(self.table)
 
@@ -192,6 +194,7 @@ class ProduccionView(QWidget):
         self.table_modelos.setAlternatingRowColors(True)
         self.table_modelos.horizontalHeader().setStretchLastSection(True)
         self.table_modelos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table_modelos)
         self.table_modelos.doubleClicked.connect(self._editar_modelo)
         self.table_modelos.setStyleSheet(self.table.styleSheet())
         mlayout.addWidget(self.table_modelos)
@@ -231,6 +234,7 @@ class ProduccionView(QWidget):
         self.table_variantes.setAlternatingRowColors(True)
         self.table_variantes.horizontalHeader().setStretchLastSection(True)
         self.table_variantes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table_variantes)
         self.table_variantes.doubleClicked.connect(self._editar_variante)
         self.table_variantes.setStyleSheet(self.table.styleSheet())
         vlayout.addWidget(self.table_variantes)
@@ -251,6 +255,7 @@ class ProduccionView(QWidget):
         self.table_bom.setHorizontalHeaderLabels(["Insumo", "Cant. por Par", "Unidad", "Stock Actual"])
         self.table_bom.horizontalHeader().setStretchLastSection(True)
         self.table_bom.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table_bom)
         self.table_bom.setEditTriggers(QTableWidget.NoEditTriggers)
         blayout.addWidget(self.cmb_bom_modelo)
         blayout.addWidget(self.btn_editar_bom)
@@ -288,6 +293,7 @@ class ProduccionView(QWidget):
         self.table_pt.setAlternatingRowColors(True)
         self.table_pt.horizontalHeader().setStretchLastSection(True)
         self.table_pt.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table_pt)
         self.table_pt.setStyleSheet(self.table.styleSheet())
         layout.addWidget(self.table_pt)
 

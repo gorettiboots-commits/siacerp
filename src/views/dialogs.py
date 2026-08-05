@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
+from src.utils.table_utils import configurar_tabla_excel
 
 
 class WidgetImagen(QFrame):
@@ -469,6 +470,7 @@ class DialogProveedor(QDialog):
         self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_prov.verticalHeader().setDefaultSectionSize(46)
+        configurar_tabla_excel(self.table_prov)
         self.table_prov.setMinimumHeight(220)
 
         btn_add_prov = QPushButton("+ Agregar Producto")
@@ -720,10 +722,12 @@ class DialogMatrizTallas(QDialog):
 
 
 class DialogOrdenCompra(QDialog):
-    def __init__(self, controller: OrdenesCompraController) -> None:
+    def __init__(self, controller: OrdenesCompraController, tipo: str = "orden") -> None:
         super().__init__()
         self.controller = controller
-        self.setWindowTitle("Nueva Orden de Compra")
+        self.tipo = tipo
+        es_factura = tipo == "factura"
+        self.setWindowTitle("Ingresar Factura" if es_factura else "Nueva Orden de Compra")
         self.setMinimumSize(820, 620)
         self.setModal(True)
         self._puntos_fila: dict[int, dict[int, int]] = {}
@@ -744,9 +748,13 @@ class DialogOrdenCompra(QDialog):
             self.cmb_proveedor.addItem(p["nombre"], p["id"])
 
         self.txt_folio = QLineEdit()
-        self.txt_folio.setText(siguiente_folio("ordenes_compra", "folio", "OC"))
-        self.txt_folio.setPlaceholderText("Ej: OC-0001")
-        self.txt_folio.setReadOnly(True)
+        prefijo = "FAC" if self.tipo == "factura" else "OC"
+        self.txt_folio.setPlaceholderText(f"Ej: {prefijo}-0001")
+        if self.tipo == "factura":
+            self.txt_folio.setReadOnly(False)
+        else:
+            self.txt_folio.setText(siguiente_folio("ordenes_compra", "folio", prefijo))
+            self.txt_folio.setReadOnly(True)
         self.txt_obs = QTextEdit()
         self.txt_obs.setPlaceholderText("Observaciones (opcional)")
         self.txt_obs.setMaximumHeight(60)
@@ -789,6 +797,7 @@ class DialogOrdenCompra(QDialog):
         self.table_detalle.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_detalle.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_detalle.verticalHeader().setDefaultSectionSize(46)
+        configurar_tabla_excel(self.table_detalle)
         self.table_detalle.setMinimumHeight(200)
 
         btn_add = QPushButton("+ Agregar Insumo")
@@ -816,7 +825,7 @@ class DialogOrdenCompra(QDialog):
         btn_cancel = QPushButton("Cancelar")
         btn_cancel.setObjectName("btnSecondary")
         btn_cancel.clicked.connect(self.reject)
-        btn_save = QPushButton("Crear Orden")
+        btn_save = QPushButton("Guardar Factura" if self.tipo == "factura" else "Crear Orden")
         btn_save.setObjectName("btnSuccess")
         btn_save.clicked.connect(self._save)
         btns.addWidget(btn_cancel)
@@ -911,6 +920,10 @@ class DialogOrdenCompra(QDialog):
         if not folio:
             QMessageBox.warning(self, "Campo requerido", "El folio es obligatorio.")
             return
+        if self.controller.folio_existe(folio):
+            QMessageBox.warning(self, "Folio duplicado",
+                                f"Ya existe un documento con el folio '{folio}'.")
+            return
         proveedor_id = self.cmb_proveedor.currentData()
         detalle = []
         for row in range(self.table_detalle.rowCount()):
@@ -935,6 +948,7 @@ class DialogOrdenCompra(QDialog):
             proveedor_id=proveedor_id,
             metodo_pago=self.cmb_metodo_pago.currentText().strip(),
             solo_remision=self.chk_remision.isChecked(),
+            tipo=self.tipo,
         )
         self.accept()
 
@@ -963,6 +977,7 @@ class DialogSeleccionarInsumo(QDialog):
         self.table.setHorizontalHeaderLabels(["Código", "Nombre", "Categoría", "Stock"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.doubleClicked.connect(self._accept)
@@ -1042,6 +1057,8 @@ class DialogVerOrden(QDialog):
 
         info = QFormLayout()
         info.addRow("Folio:", QLabel(oc.get("folio", "")))
+        info.addRow("Tipo:", QLabel(
+            "Factura" if oc.get("tipo") == "factura" else "Orden de Compra"))
         info.addRow("Proveedor:", QLabel(oc.get("proveedor_nombre") or "Compra a inventario"))
         info.addRow("Fecha:", QLabel(oc.get("fecha_emision", "")))
         info.addRow("Estatus:", QLabel(oc.get("estatus", "").capitalize()))
@@ -1064,6 +1081,7 @@ class DialogVerOrden(QDialog):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setDefaultSectionSize(46)
+        configurar_tabla_excel(self.table)
 
         detalle = self.controller.obtener_detalle_orden(self.oc_id)
         self.table.setRowCount(len(detalle))
@@ -1125,6 +1143,8 @@ class DialogRecibirOrden(QDialog):
 
         info = QFormLayout()
         info.addRow("Folio:", QLabel(f"<b>{oc.get('folio', '')}</b>"))
+        info.addRow("Tipo:", QLabel(
+            "Factura" if oc.get("tipo") == "factura" else "Orden de Compra"))
         info.addRow("Proveedor:", QLabel(oc.get("proveedor_nombre") or "Compra a inventario"))
         info.addRow("Fecha:", QLabel(oc.get("fecha_emision", "")))
         layout.addLayout(info)
@@ -1144,6 +1164,7 @@ class DialogRecibirOrden(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.verticalHeader().setDefaultSectionSize(46)
+        configurar_tabla_excel(self.table)
 
         detalle = self.controller.obtener_detalle_orden(self.oc_id)
         self._spins: list[QDoubleSpinBox] = []
@@ -1609,6 +1630,7 @@ class DialogBOM(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.verticalHeader().setDefaultSectionSize(46)
+        configurar_tabla_excel(self.table)
 
         bom = self.controller.obtener_bom(self.modelo_id)
         self.table.setRowCount(len(bom))
@@ -1952,6 +1974,7 @@ class DialogSeguimientoOP(QDialog):
         self.table.setHorizontalHeaderLabels(["Estación", "Entrada", "Salida", "Procesados", "Estatus"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
 

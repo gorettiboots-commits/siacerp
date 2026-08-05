@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
     QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
@@ -10,6 +11,7 @@ from src.models.accesos_model import tiene
 from src.utils.export_utils import (
     export_orden_compra_excel, export_table_to_excel, print_orden_compra, print_table,
 )
+from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogOrdenCompra, DialogProveedor, DialogRecibirOrden, DialogVerOrden
 
 
@@ -22,6 +24,7 @@ class OrdenesCompraView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self.btn_nueva.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
+        self.btn_factura.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
         self.btn_recibir.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
         self.btn_cancelar.setEnabled(tiene(permisos, "ordenes_compra", "eliminar"))
         self.btn_export.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
@@ -52,6 +55,10 @@ class OrdenesCompraView(QWidget):
         self.btn_nueva.setObjectName("btnPrimary")
         self.btn_nueva.clicked.connect(self._nueva_orden)
 
+        self.btn_factura = QPushButton("Ingresar Factura")
+        self.btn_factura.setObjectName("btnPrimary")
+        self.btn_factura.clicked.connect(self._nueva_factura)
+
         self.btn_proveedor = QPushButton("Proveedores")
         self.btn_proveedor.setObjectName("btnSecondary")
         self.btn_proveedor.clicked.connect(self._gestionar_proveedores)
@@ -59,6 +66,7 @@ class OrdenesCompraView(QWidget):
         hlayout.addLayout(title_col)
         hlayout.addStretch()
         hlayout.addWidget(self.btn_proveedor)
+        hlayout.addWidget(self.btn_factura)
         hlayout.addWidget(self.btn_nueva)
 
         self.tabs = QTabWidget()
@@ -116,14 +124,16 @@ class OrdenesCompraView(QWidget):
         layout.addLayout(toolbar)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(["Folio", "Proveedor", "Fecha", "Total", "Estatus", "ID"])
-        self.table.setColumnHidden(5, True)
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(
+            ["Folio", "Tipo", "Proveedor", "Fecha", "Total", "Estatus", "ID"])
+        self.table.setColumnHidden(6, True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
+        self.table.setAlternatingRowColors(False)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.doubleClicked.connect(self._ver_orden)
         layout.addWidget(self.table)
 
@@ -172,6 +182,7 @@ class OrdenesCompraView(QWidget):
         self.table_prov.setAlternatingRowColors(True)
         self.table_prov.horizontalHeader().setStretchLastSection(True)
         self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table_prov)
         self.table_prov.doubleClicked.connect(self._editar_proveedor)
         self.table_prov.setStyleSheet(self.table.styleSheet())
         layout.addWidget(self.table_prov)
@@ -181,21 +192,33 @@ class OrdenesCompraView(QWidget):
             ordenes = self.controller.listar_ordenes()
             self.table.setRowCount(len(ordenes))
             for i, oc in enumerate(ordenes):
-                self.table.setItem(i, 0, QTableWidgetItem(oc.get("folio", "")))
-                self.table.setItem(i, 1, QTableWidgetItem(oc.get("proveedores", "")))
-                self.table.setItem(i, 2, QTableWidgetItem(oc.get("fecha_emision", "")))
-                self.table.setItem(i, 3, QTableWidgetItem(f"${oc.get('total', 0):.2f}"))
-                est = oc.get("estatus", "").replace("_", " ").capitalize()
-                item_est = QTableWidgetItem(est)
-                if "recibida" in oc.get("estatus", ""):
-                    item_est.setForeground(Qt.darkGreen if est == "Recibida" else Qt.darkYellow)
-                elif est == "Cancelada":
-                    item_est.setForeground(Qt.red)
-                self.table.setItem(i, 4, item_est)
-                self.table.setItem(i, 5, QTableWidgetItem(str(oc.get("id", ""))))
+                self._set_fila_orden(i, oc)
             self._load_proveedores()
         except Exception as e:
             print(f"Error: {e}")
+
+    def _set_fila_orden(self, i: int, oc: dict) -> None:
+        tipo = oc.get("tipo", "orden")
+        self.table.setItem(i, 0, QTableWidgetItem(oc.get("folio", "")))
+        item_tipo = QTableWidgetItem(
+            "Factura" if tipo == "factura" else "Orden de Compra")
+        self.table.setItem(i, 1, item_tipo)
+        self.table.setItem(i, 2, QTableWidgetItem(oc.get("proveedores", "")))
+        self.table.setItem(i, 3, QTableWidgetItem(oc.get("fecha_emision", "")))
+        self.table.setItem(i, 4, QTableWidgetItem(f"${oc.get('total', 0):.2f}"))
+        est = oc.get("estatus", "").replace("_", " ").capitalize()
+        item_est = QTableWidgetItem(est)
+        if "recibida" in oc.get("estatus", ""):
+            item_est.setForeground(Qt.darkGreen if est == "Recibida" else Qt.darkYellow)
+        elif est == "Cancelada":
+            item_est.setForeground(Qt.red)
+        self.table.setItem(i, 5, item_est)
+        self.table.setItem(i, 6, QTableWidgetItem(str(oc.get("id", ""))))
+        color = QColor("#daf2d0") if (tipo == "factura" or oc.get("estatus") == "recibida") else QColor("#ffffff")
+        for c in range(6):
+            it = self.table.item(i, c)
+            if it:
+                it.setBackground(color)
 
     def _load_proveedores(self) -> None:
         try:
@@ -220,12 +243,7 @@ class OrdenesCompraView(QWidget):
             resultados = self.controller.buscar_ordenes(texto)
             self.table.setRowCount(len(resultados))
             for i, oc in enumerate(resultados):
-                self.table.setItem(i, 0, QTableWidgetItem(oc.get("folio", "")))
-                self.table.setItem(i, 1, QTableWidgetItem(oc.get("proveedores", "")))
-                self.table.setItem(i, 2, QTableWidgetItem(oc.get("fecha_emision", "")))
-                self.table.setItem(i, 3, QTableWidgetItem(f"${oc.get('total', 0):.2f}"))
-                self.table.setItem(i, 4, QTableWidgetItem(oc.get("estatus", "").replace("_", " ").capitalize()))
-                self.table.setItem(i, 5, QTableWidgetItem(str(oc.get("id", ""))))
+                self._set_fila_orden(i, oc)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -252,12 +270,17 @@ class OrdenesCompraView(QWidget):
         if dlg.exec():
             self._load_ordenes()
 
+    def _nueva_factura(self) -> None:
+        dlg = DialogOrdenCompra(self.controller, tipo="factura")
+        if dlg.exec():
+            self._load_ordenes()
+
     def _ver_orden(self) -> None:
         row = self.table.currentRow()
         if row < 0:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        oc_id = int(self.table.item(row, 5).text())
+        oc_id = int(self.table.item(row, 6).text())
         dlg = DialogVerOrden(self.controller, oc_id)
         dlg.exec()
 
@@ -266,14 +289,17 @@ class OrdenesCompraView(QWidget):
         if row < 0:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        estatus = self.table.item(row, 4).text().lower()
+        if self.table.item(row, 1).text() == "Factura":
+            QMessageBox.warning(self, "Estatus", "Las facturas no se reciben en inventario.")
+            return
+        estatus = self.table.item(row, 5).text().lower()
         if "recibida" in estatus:
             QMessageBox.warning(self, "Estatus", "Esta orden ya fue recibida.")
             return
         if estatus == "cancelada":
             QMessageBox.warning(self, "Estatus", "No se puede recibir una orden cancelada.")
             return
-        oc_id = int(self.table.item(row, 5).text())
+        oc_id = int(self.table.item(row, 6).text())
         dlg = DialogRecibirOrden(self.controller, oc_id)
         if dlg.exec():
             QMessageBox.information(self, "Éxito", "Orden recibida. Stock actualizado.")
@@ -284,15 +310,15 @@ class OrdenesCompraView(QWidget):
         if row < 0:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        estatus = self.table.item(row, 4).text().lower()
+        estatus = self.table.item(row, 5).text().lower()
         if "recibida" in estatus or estatus == "cancelada":
             QMessageBox.warning(self, "Estatus", "Solo se pueden cancelar órdenes pendientes.")
             return
         folio = self.table.item(row, 0).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar orden '{folio}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar '{folio}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            oc_id = int(self.table.item(row, 5).text())
+            oc_id = int(self.table.item(row, 6).text())
             self.controller.cancelar_orden(oc_id)
             self._load_ordenes()
 
@@ -301,7 +327,7 @@ class OrdenesCompraView(QWidget):
         if row < 0:
             path = export_table_to_excel(self.table, "Ordenes_Compra", self)
         else:
-            oc_id = int(self.table.item(row, 5).text())
+            oc_id = int(self.table.item(row, 6).text())
             datos = self.controller.obtener_orden(oc_id)
             detalle = self.controller.obtener_detalle_orden(oc_id)
             path = export_orden_compra_excel(datos, detalle, self)
@@ -313,7 +339,7 @@ class OrdenesCompraView(QWidget):
         if row < 0:
             print_table(self.table, "Ordenes_Compra", self)
         else:
-            oc_id = int(self.table.item(row, 5).text())
+            oc_id = int(self.table.item(row, 6).text())
             datos = self.controller.obtener_orden(oc_id)
             detalle = self.controller.obtener_detalle_orden(oc_id)
             print_orden_compra(datos, detalle, self)
@@ -336,7 +362,7 @@ class OrdenesCompraView(QWidget):
         if row < 0:
             QMessageBox.information(self, "Seleccionar", "Seleccione un proveedor.")
             return
-        proveedor_id = int(self.table_prov.item(row, 5).text())
+        proveedor_id = int(self.table_prov.item(row, 6).text())
         dlg = DialogProveedor(self.controller, proveedor_id)
         if dlg.exec():
             self._load_proveedores()
@@ -349,6 +375,6 @@ class OrdenesCompraView(QWidget):
         resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            proveedor_id = int(self.table_prov.item(row, 5).text())
+            proveedor_id = int(self.table_prov.item(row, 6).text())
             self.controller.desactivar_proveedor(proveedor_id)
             self._load_proveedores()

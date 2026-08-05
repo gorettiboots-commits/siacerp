@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel, print_table
+from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogInsumo, DialogMovimientoStock
 
 
@@ -120,6 +121,7 @@ class StockView(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.doubleClicked.connect(self._editar_insumo)
         layout.addWidget(self.table)
 
@@ -149,6 +151,7 @@ class StockView(QWidget):
         self.table_mov.setAlternatingRowColors(True)
         self.table_mov.horizontalHeader().setStretchLastSection(True)
         self.table_mov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table_mov)
         self.table_mov.setStyleSheet(self.table.styleSheet())
         layout.addWidget(self.table_mov)
 

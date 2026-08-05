@@ -12,6 +12,7 @@ from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
 from src.utils.icons import mono_icon, tile_icon
+from src.utils.table_utils import configurar_tabla_excel
 
 
 _SECCIONES = [
@@ -230,6 +231,7 @@ class _TabUnidades(QWidget):
         self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Abreviatura"])
         self.table.setColumnHidden(0, True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.doubleClicked.connect(self._editar)
@@ -404,6 +406,7 @@ class _TabEstaciones(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.verticalHeader().setDefaultSectionSize(60)
+        configurar_tabla_excel(self.table)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.doubleClicked.connect(lambda _index: self._editar())
@@ -613,6 +616,7 @@ class _TabPuntos(QWidget):
         self.table.setHorizontalHeaderLabels(["ID", "Punto", "Orden"])
         self.table.setColumnHidden(0, True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)
         self.table.doubleClicked.connect(self._editar)
@@ -829,6 +833,7 @@ class _TabColores(QWidget):
         self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Código", "Orden"])
         self.table.setColumnHidden(0, True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.doubleClicked.connect(self._editar)
@@ -993,6 +998,7 @@ class _TabAccesos(QWidget):
         self.table.setColumnHidden(0, True)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        configurar_tabla_excel(self.table)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
         self.table.itemSelectionChanged.connect(self._on_seleccion)

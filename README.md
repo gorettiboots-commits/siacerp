@@ -17,12 +17,19 @@ Aplicación de escritorio (Python + Qt) para la gestión de una fábrica de calz
   - Alta, búsqueda, cancelación y recepción de órdenes.
   - Detalle por insumo con **pares por punto (talla)** y corrida rápida desde/hasta.
   - Método de pago y modo **"Solo remisión"** (sin cálculo de IVA).
+  - **Ingreso de facturas** (`tipo = factura`): el folio se captura manualmente (`FAC-...`),
+    se guardan en la misma tabla y se distinguen con la columna **Tipo** y color de fila
+    **verde claro** (`#daf2d0`); las órdenes de compra **recibidas** también se resaltan igual.
   - Impresión **PDF** y exportación **Excel** en formato recibo (cabecera, "Vendido a:",
     columnas `#punto`, TOTAL PARES, IVA 16%, TOTAL, información de pago).
-  - Catálogo de proveedores con productos y precios (`proveedor_insumos`).
+  - Catálogo de proveedores con **nombre comercial**, productos y precios (`proveedor_insumos`).
 - **Inventario**
   - Insumos con stock y stock mínimo, movimientos de entrada/salida/ajuste.
-  - Importación masiva de proveedores e insumos desde `DIRECTORIO.xlsx`.
+  - Importación masiva de proveedores e insumos desde `DIRECTORIO.xlsx`
+    (el alias del proveedor se guarda como nombre comercial).
+- **Tablas estilo Excel:** en todas las tablas del sistema puede ajustar el **ancho de columnas**
+  y el **alto de filas** arrastrando el borde de la cabecera, o con **doble clic** para el ajuste
+  automático al contenido.
 - **Producción**
   - Modelos, variantes (color/piel), lista de materiales (BOM).
   - Órdenes de producción con matriz de tallas, kanban por estaciones,
@@ -102,6 +109,7 @@ erDiagram
         int id PK
         string rfc UK
         string nombre
+        string nombre_comercial
         string telefono
         string email
         string direccion
@@ -121,6 +129,7 @@ erDiagram
         real total
         string metodo_pago
         int solo_remision
+        string tipo
     }
     detalle_orden_compra {
         int id PK
@@ -273,7 +282,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Dependencias instaladas: `PySide6`, `psycopg2-binary`, `openpyxl`, `Pillow`, `reportlab`.
+Dependencias instaladas: `PySide6`, `bcrypt`, `psycopg2-binary`, `openpyxl`, `Pillow`, `reportlab`.
 
 ### 3. Configurar la base de datos
 
@@ -359,7 +368,8 @@ Antes de operar, revise **Archivo → Configuración**:
 El script `scripts/importar_directorio.py` carga el catálogo desde `DIRECTORIO.xlsx`
 colocado en la raíz del proyecto:
 
-- **Hoja `DIRECTOS`** → proveedores (nombre, razón social, teléfono, email, dirección).
+- **Hoja `DIRECTOS`** → proveedores (nombre, **alias → nombre comercial**, razón social,
+  teléfono, email, dirección).
 - **Hoja `MATERIALES `** → materiales por proveedor (material, unidad, precio, comentario).
 
 El proceso es **idempotente** (no duplica proveedores/insumos; actualiza lo que falte).
@@ -379,8 +389,13 @@ python scripts/importar_directorio.py
    (con corrida rápida *De punto → A punto → pares por punto*).
 3. Guardar. Con la orden seleccionada: **Ver Detalle**, **Imprimir PDF** o **Exportar Excel**
    (formato recibo, orientación horizontal automática si hay más de 6 columnas de puntos).
-4. **Recibir Orden** actualiza el stock de insumos y registra movimientos.
-5. Las órdenes pendientes se pueden **Cancelar**.
+4. **Ingresar Factura** → captura el **folio manualmente** (ej. `FAC-0001`); la factura se
+   guarda como un documento más en la tabla (tipo *Factura*, resaltada en verde claro).
+   No se recibe en inventario.
+5. **Recibir Orden** actualiza el stock de insumos y registra movimientos.
+6. Las órdenes pendientes se pueden **Cancelar**.
+7. La columna **Tipo** identifica cada documento; las filas con orden **recibida** o tipo
+   **factura** se muestran en color `#daf2d0`.
 
 ### Inventario
 - **Insumos**: alta con código, categoría y unidad de medida; stock y stock mínimo.
@@ -445,6 +460,7 @@ siacerp/
     └── utils/
         ├── export_utils.py     # PDF / Excel (recibos y listados)
         ├── folios.py           # Folios secuenciales OC-/OP-
+        ├── table_utils.py      # Tablas estilo Excel (ancho/alto por arrastre o doble clic)
         ├── ui_helpers.py       # Carga de estilos QSS
         └── styles.qss
 ```

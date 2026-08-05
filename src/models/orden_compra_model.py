@@ -166,6 +166,11 @@ class OrdenCompraModel:
         )
         return self._con_proveedores(ordenes)
 
+    def folio_existe(self, folio: str) -> bool:
+        return self.db.fetch_one(
+            "SELECT 1 FROM ordenes_compra WHERE folio = ?", (folio,)
+        ) is not None
+
     def obtener(self, oc_id: int) -> Optional[dict]:
         return self.db.fetch_one(
             """SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
@@ -217,10 +222,11 @@ class OrdenCompraModel:
         return self.db.fetch_all("SELECT * FROM puntos_catalogo WHERE activo = 1 ORDER BY orden")
 
     def crear(self, folio: str, observaciones: str = "", proveedor_id: int | None = None,
-              metodo_pago: str = "Transferencia bancaria", solo_remision: bool = False) -> int:
+              metodo_pago: str = "Transferencia bancaria", solo_remision: bool = False,
+              tipo: str = "orden") -> int:
         cursor = self.db.execute(
-            "INSERT INTO ordenes_compra (folio, observaciones, proveedor_id, metodo_pago, solo_remision) VALUES (?, ?, ?, ?, ?)",
-            (folio, observaciones, proveedor_id, metodo_pago, 1 if solo_remision else 0),
+            "INSERT INTO ordenes_compra (folio, observaciones, proveedor_id, metodo_pago, solo_remision, tipo) VALUES (?, ?, ?, ?, ?, ?)",
+            (folio, observaciones, proveedor_id, metodo_pago, 1 if solo_remision else 0, tipo),
         )
         return cursor.lastrowid
 

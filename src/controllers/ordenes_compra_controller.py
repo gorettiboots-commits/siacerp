@@ -66,6 +66,9 @@ class OrdenesCompraController:
     def obtener_orden(self, oc_id: int) -> dict | None:
         return self.oc_model.obtener(oc_id)
 
+    def folio_existe(self, folio: str) -> bool:
+        return self.oc_model.folio_existe(folio)
+
     def obtener_detalle_orden(self, oc_id: int) -> list[dict]:
         return self.oc_model.obtener_detalle(oc_id)
 
@@ -75,9 +78,9 @@ class OrdenesCompraController:
     def crear_orden(self, folio: str, detalle: list[dict] | None = None,
                     observaciones: str = "", proveedor_id: int | None = None,
                     metodo_pago: str = "Transferencia bancaria",
-                    solo_remision: bool = False) -> int:
+                    solo_remision: bool = False, tipo: str = "orden") -> int:
         oc_id = self.oc_model.crear(folio, observaciones, proveedor_id,
-                                    metodo_pago, solo_remision)
+                                    metodo_pago, solo_remision, tipo)
         if detalle:
             for d in detalle:
                 self.oc_model.agregar_detalle(

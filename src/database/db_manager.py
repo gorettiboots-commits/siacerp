@@ -227,6 +227,10 @@ class DatabaseManager:
                 cursor.execute(
                     "ALTER TABLE ordenes_compra ADD COLUMN solo_remision INTEGER NOT NULL DEFAULT 0")
                 print("Migración: columna solo_remision agregada a ordenes_compra.")
+            if 'tipo' not in cols:
+                cursor.execute(
+                    "ALTER TABLE ordenes_compra ADD COLUMN tipo TEXT NOT NULL DEFAULT 'orden'")
+                print("Migración: columna tipo agregada a ordenes_compra.")
 
             cursor.execute("DROP TABLE IF EXISTS detalle_orden_compra_tallas")
 

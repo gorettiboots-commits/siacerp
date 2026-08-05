@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS ordenes_compra (
     observaciones TEXT,
     metodo_pago TEXT NOT NULL DEFAULT 'Transferencia bancaria',
     solo_remision INTEGER NOT NULL DEFAULT 0,
+    tipo TEXT NOT NULL DEFAULT 'orden',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (proveedor_id) REFERENCES proveedores(id)
 );
