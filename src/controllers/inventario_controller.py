@@ -35,7 +35,7 @@ class InventarioController:
     def vaciar_puntos(self) -> int:
         return self.puntos_model.vaciar()
 
-    def generar_puntos(self, desde: int, hasta: int) -> int:
+    def generar_puntos(self, desde: float, hasta: float) -> int:
         return self.puntos_model.generar(desde, hasta)
 
     def listar_colores(self, solo_activos: bool = True) -> list[dict]:
@@ -62,13 +62,18 @@ class InventarioController:
     def obtener_insumo(self, insumo_id: int) -> dict | None:
         return self.insumo_model.obtener(insumo_id)
 
+    def obtener_imagen_insumo(self, insumo_id: int) -> bytes | None:
+        return self.insumo_model.obtener_imagen(insumo_id)
+
     def crear_insumo(self, codigo: str, nombre: str, categoria: str,
-                     unidad: str = "pieza", stock_minimo: float = 0) -> int:
-        return self.insumo_model.crear(codigo, nombre, categoria, unidad, stock_minimo)
+                     unidad: str = "pieza", stock_minimo: float = 0,
+                     imagen: bytes | None = None) -> int:
+        return self.insumo_model.crear(codigo, nombre, categoria, unidad, stock_minimo, imagen)
 
     def actualizar_insumo(self, insumo_id: int, codigo: str, nombre: str,
-                           categoria: str, unidad: str, stock_minimo: float) -> None:
-        self.insumo_model.actualizar(insumo_id, codigo, nombre, categoria, unidad, stock_minimo)
+                           categoria: str, unidad: str, stock_minimo: float,
+                           imagen: bytes | None = None) -> None:
+        self.insumo_model.actualizar(insumo_id, codigo, nombre, categoria, unidad, stock_minimo, imagen)
 
     def desactivar_insumo(self, insumo_id: int) -> None:
         self.insumo_model.desactivar(insumo_id)

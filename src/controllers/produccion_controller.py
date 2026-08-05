@@ -31,6 +31,9 @@ class ProduccionController:
     def desactivar_estacion(self, estacion_id: int) -> None:
         self.estacion_model.desactivar(estacion_id)
 
+    def eliminar_estacion(self, estacion_id: int) -> None:
+        self.estacion_model.eliminar(estacion_id)
+
     def posicion_op(self, op_id: int) -> dict:
         return self.op_model.posicion_actual(op_id)
 
@@ -47,11 +50,16 @@ class ProduccionController:
     def obtener_modelo(self, modelo_id: int) -> dict | None:
         return self.modelo_model.obtener(modelo_id)
 
-    def crear_modelo(self, codigo: str, nombre: str, descripcion: str = "") -> int:
-        return self.modelo_model.crear(codigo, nombre, descripcion)
+    def obtener_imagen_modelo(self, modelo_id: int) -> bytes | None:
+        return self.modelo_model.obtener_imagen(modelo_id)
 
-    def actualizar_modelo(self, modelo_id: int, codigo: str, nombre: str, descripcion: str) -> None:
-        self.modelo_model.actualizar(modelo_id, codigo, nombre, descripcion)
+    def crear_modelo(self, codigo: str, nombre: str, descripcion: str = "",
+                     imagen: bytes | None = None) -> int:
+        return self.modelo_model.crear(codigo, nombre, descripcion, imagen)
+
+    def actualizar_modelo(self, modelo_id: int, codigo: str, nombre: str, descripcion: str,
+                          imagen: bytes | None = None) -> None:
+        self.modelo_model.actualizar(modelo_id, codigo, nombre, descripcion, imagen)
 
     def desactivar_modelo(self, modelo_id: int) -> None:
         self.modelo_model.desactivar(modelo_id)
@@ -66,14 +74,22 @@ class ProduccionController:
     def obtener_variante(self, variante_id: int) -> dict | None:
         return self.variante_model.obtener(variante_id)
 
-    def crear_variante(self, modelo_id: int, color: str, piel: str, codigo_variante: str) -> int:
-        return self.variante_model.crear(modelo_id, color, piel, codigo_variante)
+    def existe_codigo_variante(self, codigo_variante: str) -> bool:
+        return self.variante_model.existe_codigo(codigo_variante)
 
-    def actualizar_variante(self, variante_id: int, modelo_id: int, color: str, piel: str, codigo_variante: str) -> None:
-        self.variante_model.actualizar(variante_id, modelo_id, color, piel, codigo_variante)
+    def crear_variante(self, modelo_id: int, color: str, piel: str, talla: str,
+                       codigo_variante: str) -> int:
+        return self.variante_model.crear(modelo_id, color, piel, talla, codigo_variante)
+
+    def actualizar_variante(self, variante_id: int, modelo_id: int, color: str, piel: str,
+                            talla: str, codigo_variante: str) -> None:
+        self.variante_model.actualizar(variante_id, modelo_id, color, piel, talla, codigo_variante)
 
     def desactivar_variante(self, variante_id: int) -> None:
         self.variante_model.desactivar(variante_id)
+
+    def listar_tallas(self) -> list[dict]:
+        return self.op_model.listar_tallas_corrida()
 
     # -- BOM (Lista de Materiales) --
     def obtener_bom(self, modelo_id: int) -> list[dict]:

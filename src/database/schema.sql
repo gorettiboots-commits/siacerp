@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS modelos (
     codigo TEXT NOT NULL UNIQUE,
     nombre TEXT NOT NULL,
     descripcion TEXT,
+    imagen BLOB,
     activo INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS variantes (
     modelo_id INTEGER NOT NULL REFERENCES modelos(id),
     color TEXT NOT NULL,
     piel TEXT NOT NULL,
+    talla TEXT NOT NULL DEFAULT '',
     codigo_variante TEXT NOT NULL UNIQUE,
     activo INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -42,6 +44,7 @@ CREATE TABLE IF NOT EXISTS insumos (
     unidad_medida TEXT NOT NULL DEFAULT 'pieza',
     stock_actual REAL NOT NULL DEFAULT 0,
     stock_minimo REAL NOT NULL DEFAULT 0,
+    imagen BLOB,
     activo INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -293,7 +296,7 @@ INSERT OR IGNORE INTO estaciones_produccion (nombre, orden, descripcion) VALUES
     ('Empaque', 6, 'Control de calidad y empaquetado');
 
 INSERT OR IGNORE INTO usuarios (username, password_hash, nombre_completo, rol) VALUES
-    ('admin', 'admin123', 'Administrador del Sistema', 'admin');
+    ('admin', '$2b$12$kEIruH3TEa8FcJoALGeXBu7tk3mj9xRxbBMEUvqYteqKmTUMO3Zia', 'Administrador del Sistema', 'admin');
 
 INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) VALUES
     ('ordenes_compra', 'ver', 'Ver el módulo de Órdenes de Compra'),

@@ -1,7 +1,8 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QBuffer, Qt
+from PySide6.QtGui import QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDoubleSpinBox,
-    QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
+    QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox,
     QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
@@ -9,6 +10,89 @@ from PySide6.QtWidgets import (
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
+
+
+class WidgetImagen(QFrame):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("card")
+        self._imagen: bytes | None = None
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 12, 12, 12)
+        lay.setSpacing(12)
+        self.lbl_preview = QLabel("Sin imagen")
+        self.lbl_preview.setObjectName("imgPreview")
+        self.lbl_preview.setAlignment(Qt.AlignCenter)
+        self.lbl_preview.setFixedSize(100, 100)
+        lay.addWidget(self.lbl_preview)
+        col = QVBoxLayout()
+        col.setSpacing(8)
+        btn_sel = QPushButton("Seleccionar...")
+        btn_sel.setObjectName("btnSecondary")
+        btn_sel.clicked.connect(self._seleccionar)
+        btn_pegar = QPushButton("Pegar (Ctrl+V)")
+        btn_pegar.setObjectName("btnSecondary")
+        btn_pegar.clicked.connect(self._pegar)
+        btn_quitar = QPushButton("Quitar")
+        btn_quitar.setObjectName("btnDanger")
+        btn_quitar.clicked.connect(self._quitar)
+        col.addWidget(btn_sel)
+        col.addWidget(btn_pegar)
+        col.addWidget(btn_quitar)
+        col.addStretch()
+        lay.addLayout(col)
+        lay.addStretch()
+
+    def _seleccionar(self) -> None:
+        archivo, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar imagen", "",
+            "Imágenes (*.png *.jpg *.jpeg *.bmp *.webp *.gif)")
+        if not archivo:
+            return
+        imagen = QImage(archivo)
+        if imagen.isNull():
+            QMessageBox.warning(self, "Imagen inválida",
+                                "No se pudo leer el archivo seleccionado.")
+            return
+        self._set_qimage(imagen)
+
+    def _pegar(self) -> None:
+        imagen = QGuiApplication.clipboard().image()
+        if imagen.isNull():
+            QMessageBox.information(self, "Portapapeles",
+                                    "El portapapeles no contiene una imagen.")
+            return
+        self._set_qimage(imagen)
+
+    def _quitar(self) -> None:
+        self._imagen = None
+        self.lbl_preview.setPixmap(QPixmap())
+        self.lbl_preview.setText("Sin imagen")
+
+    def _set_qimage(self, imagen: QImage) -> None:
+        buf = QBuffer()
+        buf.open(QBuffer.WriteOnly)
+        imagen.save(buf, "PNG")
+        self._imagen = bytes(buf.data())
+        self._mostrar(self._imagen)
+
+    def _mostrar(self, data: bytes) -> None:
+        pix = QPixmap()
+        pix.loadFromData(data)
+        if not pix.isNull():
+            self.lbl_preview.setPixmap(
+                pix.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self.lbl_preview.setText("")
+
+    def set_imagen(self, data: bytes | None) -> None:
+        if data:
+            self._imagen = data
+            self._mostrar(data)
+        else:
+            self._quitar()
+
+    def get_imagen(self) -> bytes | None:
+        return self._imagen
 
 
 class DialogInsumo(QDialog):
@@ -35,6 +119,7 @@ class DialogInsumo(QDialog):
         self.txt_codigo = QLineEdit()
         self.txt_codigo.setText(siguiente_folio("insumos", "codigo", "INS"))
         self.txt_codigo.setPlaceholderText("Ej: INS-0001")
+        self.txt_codigo.setReadOnly(True)
         self.txt_nombre = QLineEdit()
         self.txt_nombre.setPlaceholderText("Nombre del insumo")
         self.txt_categoria = QLineEdit()
@@ -54,6 +139,9 @@ class DialogInsumo(QDialog):
             (self.spn_minimo, "Stock mínimo:"),
         ]:
             form.addRow(QLabel(lbl), w)
+
+        self.img_widget = WidgetImagen()
+        form.addRow(QLabel("Imagen:"), self.img_widget)
 
         layout.addLayout(form)
 
@@ -220,6 +308,8 @@ class DialogInsumo(QDialog):
             if idx >= 0:
                 self.cmb_unidad.setCurrentIndex(idx)
             self.spn_minimo.setValue(ins.get("stock_minimo", 0))
+            self.img_widget.set_imagen(
+                self.controller.obtener_imagen_insumo(self.insumo_id))
 
     def _save(self) -> None:
         codigo = self.txt_codigo.text().strip()
@@ -230,6 +320,7 @@ class DialogInsumo(QDialog):
             return
         unidad = self.cmb_unidad.currentText()
         minimo = self.spn_minimo.value()
+        imagen = self.img_widget.get_imagen()
         variantes = [self.lst_variantes.item(i).text() for i in range(self.lst_variantes.count())]
         if variantes:
             existentes = [c for c in variantes if self.controller.existe_codigo_insumo(c)]
@@ -243,12 +334,12 @@ class DialogInsumo(QDialog):
                 return
         if self.insumo_id:
             self.controller.actualizar_insumo(
-                self.insumo_id, codigo, nombre, categoria, unidad, minimo,
+                self.insumo_id, codigo, nombre, categoria, unidad, minimo, imagen,
             )
         else:
-            self.controller.crear_insumo(codigo, nombre, categoria, unidad, minimo)
+            self.controller.crear_insumo(codigo, nombre, categoria, unidad, minimo, imagen)
         for c in variantes:
-            self.controller.crear_insumo(c, nombre, categoria, unidad, minimo)
+            self.controller.crear_insumo(c, nombre, categoria, unidad, minimo, imagen)
         self.accept()
 
 
@@ -649,6 +740,7 @@ class DialogOrdenCompra(QDialog):
         self.txt_folio = QLineEdit()
         self.txt_folio.setText(siguiente_folio("ordenes_compra", "folio", "OC"))
         self.txt_folio.setPlaceholderText("Ej: OC-0001")
+        self.txt_folio.setReadOnly(True)
         self.txt_obs = QTextEdit()
         self.txt_obs.setPlaceholderText("Observaciones (opcional)")
         self.txt_obs.setMaximumHeight(60)
@@ -1144,13 +1236,16 @@ class DialogRecibirOrden(QDialog):
 # ============================================================
 
 class DialogModelo(QDialog):
-    def __init__(self, controller: ProduccionController, modelo_id: int | None = None) -> None:
+    def __init__(self, controller: ProduccionController, inv_controller: InventarioController,
+                 modelo_id: int | None = None) -> None:
         super().__init__()
         self.controller = controller
+        self.inv_controller = inv_controller
         self.modelo_id = modelo_id
         self.setWindowTitle("Nuevo Modelo" if modelo_id is None else "Editar Modelo")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(560)
         self.setModal(True)
+        self._combos: list[dict] = []
         self._setup_ui()
         if modelo_id:
             self._load_data()
@@ -1159,12 +1254,15 @@ class DialogModelo(QDialog):
         from src.utils.folios import siguiente_folio
 
         layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
         form = QFormLayout()
         form.setSpacing(12)
 
         self.txt_codigo = QLineEdit()
         self.txt_codigo.setText(siguiente_folio("modelos", "codigo", "MOD"))
         self.txt_codigo.setPlaceholderText("Ej: MOD-0001")
+        self.txt_codigo.setReadOnly(True)
         self.txt_nombre = QLineEdit()
         self.txt_nombre.setPlaceholderText("Ej: Botín Vaquero, Bota Roper, etc.")
         self.txt_desc = QLineEdit()
@@ -1173,7 +1271,91 @@ class DialogModelo(QDialog):
         form.addRow("Código:", self.txt_codigo)
         form.addRow("Nombre:", self.txt_nombre)
         form.addRow("Descripción:", self.txt_desc)
+        self.img_widget = WidgetImagen()
+        form.addRow("Imagen:", self.img_widget)
         layout.addLayout(form)
+
+        self.chk_variantes = QCheckBox("Generar variantes por talla")
+        self.chk_variantes.toggled.connect(self._on_variantes_toggled)
+        layout.addWidget(self.chk_variantes)
+
+        self.frame_tallas = QFrame()
+        self.frame_tallas.setObjectName("card")
+        ft = QVBoxLayout(self.frame_tallas)
+        ft.setContentsMargins(12, 12, 12, 12)
+        ft.setSpacing(8)
+
+        sel = QHBoxLayout()
+        sel.addWidget(QLabel("De talla:"))
+        self.cmb_desde = QComboBox()
+        self.cmb_hasta = QComboBox()
+        for t in self.controller.listar_tallas():
+            self.cmb_desde.addItem(t["talla"], t["talla"])
+            self.cmb_hasta.addItem(t["talla"], t["talla"])
+        self.cmb_hasta.setCurrentIndex(max(0, self.cmb_hasta.count() - 1))
+        sel.addWidget(self.cmb_desde)
+        sel.addWidget(QLabel("a talla:"))
+        sel.addWidget(self.cmb_hasta)
+        sel.addSpacing(8)
+        btn_generar = QPushButton("Generar")
+        btn_generar.setObjectName("btnPrimary")
+        btn_generar.clicked.connect(self._regenerar_variantes)
+        sel.addWidget(btn_generar)
+        btn_limpiar = QPushButton("Limpiar")
+        btn_limpiar.setObjectName("btnSecondary")
+        btn_limpiar.clicked.connect(self._limpiar_variantes)
+        sel.addWidget(btn_limpiar)
+        sel.addStretch()
+        ft.addLayout(sel)
+
+        layout.addWidget(self.frame_tallas)
+        self.frame_tallas.setVisible(False)
+
+        self.chk_colores = QCheckBox("Variantes de color")
+        self.chk_colores.toggled.connect(self._on_colores_toggled)
+        layout.addWidget(self.chk_colores)
+
+        self.frame_colores = QFrame()
+        self.frame_colores.setObjectName("card")
+        fc = QVBoxLayout(self.frame_colores)
+        fc.setContentsMargins(12, 12, 12, 12)
+        fc.setSpacing(8)
+        fc.addWidget(QLabel("Seleccione los colores a generar:"))
+
+        self._color_checks: list[tuple[QCheckBox, dict]] = []
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        for i, c in enumerate(self.inv_controller.listar_colores()):
+            chk = QCheckBox(f"{c['nombre']} ({c['codigo']})")
+            chk.setChecked(True)
+            chk.toggled.connect(self._regenerar_variantes)
+            self._color_checks.append((chk, c))
+            grid.addWidget(chk, i // 3, i % 3)
+        fc.addLayout(grid)
+
+        layout.addWidget(self.frame_colores)
+        self.frame_colores.setVisible(False)
+
+        layout.addWidget(QLabel("Piel de las variantes (opcional):"))
+        self.txt_piel = QLineEdit()
+        self.txt_piel.setPlaceholderText("Ej: Vaquera, Gamuza, Industrial")
+        layout.addWidget(self.txt_piel)
+
+        self.frame_preview = QFrame()
+        self.frame_preview.setObjectName("card")
+        fpv = QVBoxLayout(self.frame_preview)
+        fpv.setContentsMargins(12, 12, 12, 12)
+        fpv.setSpacing(8)
+        fpv.addWidget(QLabel("Previsualización de variantes:"))
+        self.lst_variantes = QListWidget()
+        self.lst_variantes.setMaximumHeight(150)
+        fpv.addWidget(self.lst_variantes)
+        self.lbl_variantes_count = QLabel("0 variantes generadas")
+        self.lbl_variantes_count.setObjectName("sectionSubtitle")
+        fpv.addWidget(self.lbl_variantes_count)
+
+        layout.addWidget(self.frame_preview)
+        self.frame_preview.setVisible(False)
 
         btns = QHBoxLayout()
         btns.addStretch()
@@ -1193,6 +1375,74 @@ class DialogModelo(QDialog):
             self.txt_codigo.setText(m.get("codigo", ""))
             self.txt_nombre.setText(m.get("nombre", ""))
             self.txt_desc.setText(m.get("descripcion", ""))
+            self.img_widget.set_imagen(
+                self.controller.obtener_imagen_modelo(self.modelo_id))
+
+    def _on_variantes_toggled(self, checked: bool) -> None:
+        self.frame_tallas.setVisible(checked)
+        self._regenerar_variantes()
+        self._update_preview_visibility()
+
+    def _on_colores_toggled(self, checked: bool) -> None:
+        self.frame_colores.setVisible(checked)
+        self._regenerar_variantes()
+        self._update_preview_visibility()
+
+    def _update_preview_visibility(self) -> None:
+        self.frame_preview.setVisible(
+            self.chk_variantes.isChecked() or self.chk_colores.isChecked())
+
+    def _tallas_seleccionadas(self) -> list[str]:
+        if not self.chk_variantes.isChecked():
+            return []
+        idx_d = self.cmb_desde.currentIndex()
+        idx_h = self.cmb_hasta.currentIndex()
+        if idx_d > idx_h:
+            idx_d, idx_h = idx_h, idx_d
+        return [self.cmb_desde.itemData(i) for i in range(idx_d, idx_h + 1)]
+
+    def _colores_seleccionados(self) -> list[dict]:
+        if not self.chk_colores.isChecked():
+            return []
+        return [c for chk, c in self._color_checks if chk.isChecked()]
+
+    def _regenerar_variantes(self) -> None:
+        base = self.txt_codigo.text().strip()
+        self._combos = []
+        self.lst_variantes.clear()
+        if not base:
+            self._update_count()
+            return
+        tallas = self._tallas_seleccionadas()
+        colores = self._colores_seleccionados()
+        if tallas and colores:
+            combos = [{"talla": t, "color": c["nombre"], "codigo_color": c["codigo"]}
+                      for t in tallas for c in colores]
+            codigos = [f"{base}-{co['talla']}-{co['codigo_color']}" for co in combos]
+        elif tallas:
+            combos = [{"talla": t, "color": "", "codigo_color": ""} for t in tallas]
+            codigos = [f"{base}-{co['talla']}" for co in combos]
+        elif colores:
+            combos = [{"talla": "", "color": c["nombre"], "codigo_color": c["codigo"]}
+                      for c in colores]
+            codigos = [f"{base}-{co['codigo_color']}" for co in combos]
+        else:
+            combos, codigos = [], []
+        for co, cod in zip(combos, codigos):
+            co["codigo"] = cod
+            self.lst_variantes.addItem(cod)
+        self._combos = combos
+        self._update_count()
+
+    def _limpiar_variantes(self) -> None:
+        self._combos = []
+        self.lst_variantes.clear()
+        self._update_count()
+
+    def _update_count(self) -> None:
+        n = len(self._combos)
+        self.lbl_variantes_count.setText(
+            f"{n} variante{'s' if n != 1 else ''} generada{'s' if n != 1 else ''}")
 
     def _save(self) -> None:
         codigo = self.txt_codigo.text().strip()
@@ -1200,10 +1450,42 @@ class DialogModelo(QDialog):
         if not codigo or not nombre:
             QMessageBox.warning(self, "Campos requeridos", "Código y nombre son obligatorios.")
             return
+
+        existentes_modelo: set[str] = set()
         if self.modelo_id:
-            self.controller.actualizar_modelo(self.modelo_id, codigo, nombre, self.txt_desc.text().strip())
+            existentes_modelo = {v["codigo_variante"]
+                                 for v in self.controller.listar_variantes(self.modelo_id)}
+
+        combos: list[dict] = []
+        conflictos: list[str] = []
+        for c in self._combos:
+            if c["codigo"] in existentes_modelo:
+                continue
+            if self.controller.existe_codigo_variante(c["codigo"]):
+                conflictos.append(c["codigo"])
+            else:
+                combos.append(c)
+        if conflictos:
+            QMessageBox.warning(
+                self, "Códigos existentes",
+                "Los siguientes códigos de variante ya existen en otros modelos:\n\n"
+                + "\n".join(conflictos)
+                + "\n\nAjuste el código base o la selección de variantes.")
+            return
+
+        if self.modelo_id:
+            self.controller.actualizar_modelo(self.modelo_id, codigo, nombre,
+                                              self.txt_desc.text().strip(),
+                                              self.img_widget.get_imagen())
+            modelo_id = self.modelo_id
         else:
-            self.controller.crear_modelo(codigo, nombre, self.txt_desc.text().strip())
+            modelo_id = self.controller.crear_modelo(codigo, nombre,
+                                                     self.txt_desc.text().strip(),
+                                                     self.img_widget.get_imagen())
+
+        piel = self.txt_piel.text().strip()
+        for c in combos:
+            self.controller.crear_variante(modelo_id, c["color"], piel, c["talla"], c["codigo"])
         self.accept()
 
 
@@ -1234,14 +1516,22 @@ class DialogVariante(QDialog):
         self.txt_codigo = QLineEdit()
         self.txt_codigo.setText(siguiente_folio("variantes", "codigo_variante", "VAR"))
         self.txt_codigo.setPlaceholderText("Ej: VAR-0001")
+        self.txt_codigo.setReadOnly(True)
         self.txt_color = QLineEdit()
         self.txt_color.setPlaceholderText("Ej: Negro, Café, Blanco")
+        self.cmb_talla = QComboBox()
+        self.cmb_talla.setEditable(True)
+        self.cmb_talla.addItem("")
+        for t in self.controller.listar_tallas():
+            self.cmb_talla.addItem(t["talla"])
+        self.cmb_talla.setPlaceholderText("Ej: 25, 25.5 (opcional)")
         self.txt_piel = QLineEdit()
         self.txt_piel.setPlaceholderText("Ej: Vaquera, Gamuza, Industrial")
 
         form.addRow("Modelo:", self.cmb_modelo)
         form.addRow("Código Variante:", self.txt_codigo)
         form.addRow("Color:", self.txt_color)
+        form.addRow("Talla:", self.cmb_talla)
         form.addRow("Piel:", self.txt_piel)
         layout.addLayout(form)
 
@@ -1266,20 +1556,26 @@ class DialogVariante(QDialog):
                     break
             self.txt_codigo.setText(v.get("codigo_variante", ""))
             self.txt_color.setText(v.get("color", ""))
+            idx = self.cmb_talla.findText(v.get("talla", ""))
+            if idx >= 0:
+                self.cmb_talla.setCurrentIndex(idx)
+            else:
+                self.cmb_talla.setEditText(v.get("talla", ""))
             self.txt_piel.setText(v.get("piel", ""))
 
     def _save(self) -> None:
         codigo = self.txt_codigo.text().strip()
         color = self.txt_color.text().strip()
         piel = self.txt_piel.text().strip()
+        talla = self.cmb_talla.currentText().strip()
         if not codigo or not color:
             QMessageBox.warning(self, "Campos requeridos", "Código y color son obligatorios.")
             return
         if self.variante_id:
             self.controller.actualizar_variante(self.variante_id, self.cmb_modelo.currentData(),
-                                                 color, piel, codigo)
+                                                 color, piel, talla, codigo)
         else:
-            self.controller.crear_variante(self.cmb_modelo.currentData(), color, piel, codigo)
+            self.controller.crear_variante(self.cmb_modelo.currentData(), color, piel, talla, codigo)
         self.accept()
 
 
@@ -1407,12 +1703,16 @@ class DialogOrdenProduccion(QDialog):
         self.txt_folio = QLineEdit()
         self.txt_folio.setText(siguiente_folio("ordenes_produccion", "folio", "OP"))
         self.txt_folio.setPlaceholderText("Ej: OP-0001")
+        self.txt_folio.setReadOnly(True)
 
         self.cmb_variante = QComboBox()
         variantes = self.controller.listar_variantes()
         for v in variantes:
+            detalle = f"{v['color']}/{v['piel']}"
+            if v.get("talla"):
+                detalle += f"/T{v['talla']}"
             self.cmb_variante.addItem(
-                f"{v['codigo_variante']} - {v.get('modelo_nombre', '')} ({v['color']}/{v['piel']})",
+                f"{v['codigo_variante']} - {v.get('modelo_nombre', '')} ({detalle})",
                 v["id"],
             )
 

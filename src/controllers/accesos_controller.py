@@ -30,6 +30,9 @@ class AccesosController:
     def set_activo(self, usuario_id: int, activo: bool) -> None:
         self.usuario_model.set_activo(usuario_id, activo)
 
+    def autenticar(self, username: str, password: str) -> dict | None:
+        return self.usuario_model.autenticar(username, password)
+
     def listar_permisos(self) -> list[dict]:
         return self.permisos_model.listar()
 

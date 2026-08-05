@@ -3,11 +3,14 @@ from src.database.db_manager import DatabaseManager
 
 
 class ModeloModel:
+    _COLUMNAS = ("id", "codigo", "nombre", "descripcion", "activo",
+                 "created_at", "updated_at")
+
     def __init__(self) -> None:
         self.db = DatabaseManager()
 
     def listar(self, solo_activos: bool = True) -> list[dict]:
-        query = "SELECT * FROM modelos"
+        query = f"SELECT {', '.join(self._COLUMNAS)} FROM modelos"
         if solo_activos:
             query += " WHERE activo = 1"
         query += " ORDER BY nombre"
@@ -16,23 +19,29 @@ class ModeloModel:
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
         return self.db.fetch_all(
-            "SELECT * FROM modelos WHERE activo=1 AND (codigo LIKE ? OR nombre LIKE ?) ORDER BY nombre", (q, q)
+            f"SELECT {', '.join(self._COLUMNAS)} FROM modelos WHERE activo=1 AND (codigo LIKE ? OR nombre LIKE ?) ORDER BY nombre", (q, q)
         )
 
     def obtener(self, modelo_id: int) -> Optional[dict]:
         return self.db.fetch_one("SELECT * FROM modelos WHERE id = ?", (modelo_id,))
 
-    def crear(self, codigo: str, nombre: str, descripcion: str = "") -> int:
+    def obtener_imagen(self, modelo_id: int) -> Optional[bytes]:
+        row = self.db.fetch_one("SELECT imagen FROM modelos WHERE id = ?", (modelo_id,))
+        return row["imagen"] if row else None
+
+    def crear(self, codigo: str, nombre: str, descripcion: str = "",
+              imagen: Optional[bytes] = None) -> int:
         cursor = self.db.execute(
-            "INSERT INTO modelos (codigo, nombre, descripcion) VALUES (?, ?, ?)",
-            (codigo, nombre, descripcion),
+            "INSERT INTO modelos (codigo, nombre, descripcion, imagen) VALUES (?, ?, ?, ?)",
+            (codigo, nombre, descripcion, imagen),
         )
         return cursor.lastrowid
 
-    def actualizar(self, modelo_id: int, codigo: str, nombre: str, descripcion: str) -> None:
+    def actualizar(self, modelo_id: int, codigo: str, nombre: str, descripcion: str,
+                   imagen: Optional[bytes] = None) -> None:
         self.db.execute(
-            "UPDATE modelos SET codigo=?, nombre=?, descripcion=?, updated_at=datetime('now') WHERE id=?",
-            (codigo, nombre, descripcion, modelo_id),
+            "UPDATE modelos SET codigo=?, nombre=?, descripcion=?, imagen=?, updated_at=datetime('now') WHERE id=?",
+            (codigo, nombre, descripcion, imagen, modelo_id),
         )
 
     def desactivar(self, modelo_id: int) -> None:
@@ -59,8 +68,8 @@ class VarianteModel:
         return self.db.fetch_all(
             """SELECT v.*, m.nombre as modelo_nombre
                FROM variantes v JOIN modelos m ON m.id = v.modelo_id
-               WHERE v.activo=1 AND (v.codigo_variante LIKE ? OR v.color LIKE ? OR v.piel LIKE ?)
-               ORDER BY v.codigo_variante""", (q, q, q)
+               WHERE v.activo=1 AND (v.codigo_variante LIKE ? OR v.color LIKE ? OR v.piel LIKE ? OR v.talla LIKE ?)
+               ORDER BY v.codigo_variante""", (q, q, q, q)
         )
 
     def obtener(self, variante_id: int) -> Optional[dict]:
@@ -69,17 +78,24 @@ class VarianteModel:
             (variante_id,),
         )
 
-    def crear(self, modelo_id: int, color: str, piel: str, codigo_variante: str) -> int:
+    def existe_codigo(self, codigo_variante: str) -> bool:
+        row = self.db.fetch_one(
+            "SELECT id FROM variantes WHERE codigo_variante = ?", (codigo_variante,))
+        return row is not None
+
+    def crear(self, modelo_id: int, color: str, piel: str, talla: str,
+              codigo_variante: str) -> int:
         cursor = self.db.execute(
-            "INSERT INTO variantes (modelo_id, color, piel, codigo_variante) VALUES (?, ?, ?, ?)",
-            (modelo_id, color, piel, codigo_variante),
+            "INSERT INTO variantes (modelo_id, color, piel, talla, codigo_variante) VALUES (?, ?, ?, ?, ?)",
+            (modelo_id, color, piel, talla, codigo_variante),
         )
         return cursor.lastrowid
 
-    def actualizar(self, variante_id: int, modelo_id: int, color: str, piel: str, codigo_variante: str) -> None:
+    def actualizar(self, variante_id: int, modelo_id: int, color: str, piel: str,
+                   talla: str, codigo_variante: str) -> None:
         self.db.execute(
-            "UPDATE variantes SET modelo_id=?, color=?, piel=?, codigo_variante=? WHERE id=?",
-            (modelo_id, color, piel, codigo_variante, variante_id),
+            "UPDATE variantes SET modelo_id=?, color=?, piel=?, talla=?, codigo_variante=? WHERE id=?",
+            (modelo_id, color, piel, talla, codigo_variante, variante_id),
         )
 
     def desactivar(self, variante_id: int) -> None:
@@ -136,6 +152,9 @@ class EstacionModel:
     def desactivar(self, estacion_id: int) -> None:
         self.db.execute("UPDATE estaciones_produccion SET activo=0 WHERE id=?", (estacion_id,))
 
+    def eliminar(self, estacion_id: int) -> None:
+        self.db.execute("DELETE FROM estaciones_produccion WHERE id=?", (estacion_id,))
+
 
 class OrdenProduccionModel:
     def __init__(self) -> None:
@@ -144,12 +163,16 @@ class OrdenProduccionModel:
     def listar(self) -> list[dict]:
         return self.db.fetch_all(
             """SELECT op.*, v.codigo_variante, m.nombre as modelo_nombre,
-                      v.color, v.piel
+                      v.color, v.piel, v.talla
                FROM ordenes_produccion op
                JOIN variantes v ON v.id = op.variante_id
                JOIN modelos m ON m.id = v.modelo_id
                ORDER BY op.created_at DESC"""
         )
+
+    def listar_tallas_corrida(self) -> list[dict]:
+        return self.db.fetch_all(
+            "SELECT * FROM tallas_corrida ORDER BY orden, id")
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"

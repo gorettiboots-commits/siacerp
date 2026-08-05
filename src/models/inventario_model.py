@@ -3,11 +3,14 @@ from src.database.db_manager import DatabaseManager
 
 
 class InsumoModel:
+    _COLUMNAS = ("id", "codigo", "nombre", "categoria", "unidad_medida",
+                 "stock_actual", "stock_minimo", "activo", "created_at", "updated_at")
+
     def __init__(self) -> None:
         self.db = DatabaseManager()
 
     def listar(self, solo_activos: bool = True) -> list[dict]:
-        query = "SELECT * FROM insumos"
+        query = f"SELECT {', '.join(self._COLUMNAS)} FROM insumos"
         if solo_activos:
             query += " WHERE activo = 1"
         query += " ORDER BY nombre"
@@ -16,30 +19,34 @@ class InsumoModel:
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
         return self.db.fetch_all(
-            "SELECT * FROM insumos WHERE activo = 1 AND (codigo LIKE ? OR nombre LIKE ? OR categoria LIKE ?) ORDER BY nombre",
+            f"SELECT {', '.join(self._COLUMNAS)} FROM insumos WHERE activo = 1 AND (codigo LIKE ? OR nombre LIKE ? OR categoria LIKE ?) ORDER BY nombre",
             (q, q, q),
         )
 
     def obtener(self, insumo_id: int) -> Optional[dict]:
         return self.db.fetch_one("SELECT * FROM insumos WHERE id = ?", (insumo_id,))
 
+    def obtener_imagen(self, insumo_id: int) -> Optional[bytes]:
+        row = self.db.fetch_one("SELECT imagen FROM insumos WHERE id = ?", (insumo_id,))
+        return row["imagen"] if row else None
+
     def existe_codigo(self, codigo: str) -> bool:
         row = self.db.fetch_one("SELECT id FROM insumos WHERE codigo = ?", (codigo,))
         return row is not None
 
     def crear(self, codigo: str, nombre: str, categoria: str, unidad: str = "pieza",
-              stock_minimo: float = 0) -> int:
+              stock_minimo: float = 0, imagen: Optional[bytes] = None) -> int:
         cursor = self.db.execute(
-            "INSERT INTO insumos (codigo, nombre, categoria, unidad_medida, stock_minimo) VALUES (?, ?, ?, ?, ?)",
-            (codigo, nombre, categoria, unidad, stock_minimo),
+            "INSERT INTO insumos (codigo, nombre, categoria, unidad_medida, stock_minimo, imagen) VALUES (?, ?, ?, ?, ?, ?)",
+            (codigo, nombre, categoria, unidad, stock_minimo, imagen),
         )
         return cursor.lastrowid
 
     def actualizar(self, insumo_id: int, codigo: str, nombre: str, categoria: str,
-                    unidad: str, stock_minimo: float) -> None:
+                    unidad: str, stock_minimo: float, imagen: Optional[bytes] = None) -> None:
         self.db.execute(
-            "UPDATE insumos SET codigo=?, nombre=?, categoria=?, unidad_medida=?, stock_minimo=?, updated_at=datetime('now') WHERE id=?",
-            (codigo, nombre, categoria, unidad, stock_minimo, insumo_id),
+            "UPDATE insumos SET codigo=?, nombre=?, categoria=?, unidad_medida=?, stock_minimo=?, imagen=?, updated_at=datetime('now') WHERE id=?",
+            (codigo, nombre, categoria, unidad, stock_minimo, imagen, insumo_id),
         )
 
     def desactivar(self, insumo_id: int) -> None:

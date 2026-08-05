@@ -1,9 +1,9 @@
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFormLayout, QGridLayout, QGroupBox,
-    QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
-    QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
-    QWidget,
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
+    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from src.controllers.accesos_controller import AccesosController
@@ -11,61 +11,207 @@ from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
+from src.utils.icons import mono_icon, tile_icon
+
+
+_SECCIONES = [
+    ("unidades", "Unidades de Medida",
+     "Catálogo de unidades usadas en insumos y órdenes de compra."),
+    ("areas", "Áreas de Producción",
+     "Estaciones del taller por las que avanza la producción."),
+    ("puntos", "Puntos de Variante",
+     "Catálogo de puntos, con generación en serie."),
+    ("colores", "Colores de Variante",
+     "Colores y códigos cortos para variantes de insumo."),
+    ("usuarios", "Usuarios y Accesos",
+     "Usuarios del sistema y sus permisos por módulo."),
+]
+
+
+class _BotonSeccion(QPushButton):
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        lay = self.layout()
+        if lay is not None:
+            hint = hint.expandedTo(lay.sizeHint())
+        return hint
+
+
+class _ConfigSidebar(QFrame):
+    currentChanged = Signal(int)
+
+    def __init__(self, secciones: list, parent=None) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        self._botones: list[QPushButton] = []
+        self._grupo = QButtonGroup(self)
+        self._grupo.setExclusive(True)
+
+        for i, (key, nombre) in enumerate(secciones):
+            btn = _BotonSeccion()
+            btn.setObjectName("cfgSidebarItem")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            fila = QHBoxLayout(btn)
+            fila.setContentsMargins(12, 10, 12, 10)
+            fila.setSpacing(12)
+            icono = QLabel()
+            icono.setPixmap(tile_icon(key).pixmap(28, 28))
+            fila.addWidget(icono)
+            lbl = QLabel(nombre)
+            lbl.setObjectName("cfgSidebarItemLabel")
+            fila.addWidget(lbl)
+            fila.addStretch()
+            self._grupo.addButton(btn, i)
+            layout.addWidget(btn)
+            self._botones.append(btn)
+            btn.installEventFilter(self)
+
+        self._grupo.idClicked.connect(self._seleccionar)
+        if self._botones:
+            self._botones[0].setChecked(True)
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.KeyPress and obj in self._botones:
+            if event.key() in (Qt.Key_Up, Qt.Key_Down):
+                self._mover(-1 if event.key() == Qt.Key_Up else 1)
+                return True
+        return super().eventFilter(obj, event)
+
+    def _mover(self, delta: int) -> None:
+        actual = self._grupo.checkedId()
+        actual = actual if actual >= 0 else 0
+        self._seleccionar((actual + delta) % len(self._botones))
+
+    def _seleccionar(self, index: int) -> None:
+        self._botones[index].setChecked(True)
+        self._botones[index].setFocus()
+        self.currentChanged.emit(index)
 
 
 class DialogConfiguracion(QDialog):
     def __init__(self, parent=None, permisos=None) -> None:
         super().__init__(parent)
         self.permisos = permisos or set()
+        self.setObjectName("dlgConfiguracion")
         self.controller = OrdenesCompraController()
         self.prod_controller = ProduccionController()
         self.accesos_controller = AccesosController()
         self.inv_controller = InventarioController()
         self.setWindowTitle("Configuración")
-        self.setMinimumSize(780, 580)
+        self.setMinimumSize(960, 620)
+        self.resize(1020, 680)
         self.setModal(True)
         self._setup_ui()
         self._cargar()
 
     def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        self.tabs = QTabWidget()
+        titulo = QLabel("Configuración")
+        titulo.setObjectName("cfgDialogTitle")
+        root.addWidget(titulo)
 
-        if tiene(self.permisos, "configuracion", "ver"):
-            self.tab_unidades = _TabUnidades(self.controller, self.permisos)
-            self.tabs.addTab(self.tab_unidades, "Unidades de Medida")
-            self.tab_estaciones = _TabEstaciones(self.prod_controller, self.permisos)
-            self.tabs.addTab(self.tab_estaciones, "Áreas de Producción")
-            self.tab_puntos = _TabPuntos(self.inv_controller, self.permisos)
-            self.tabs.addTab(self.tab_puntos, "Puntos de Variante")
-            self.tab_colores = _TabColores(self.inv_controller, self.permisos)
-            self.tabs.addTab(self.tab_colores, "Colores de Variante")
+        cuerpo = QHBoxLayout()
+        cuerpo.setContentsMargins(0, 0, 0, 0)
+        cuerpo.setSpacing(0)
 
-        if tiene(self.permisos, "usuarios", "ver"):
-            self.tab_accesos = _TabAccesos(self.accesos_controller, self.permisos)
-            self.tabs.addTab(self.tab_accesos, "Usuarios y Accesos")
+        secciones = list(_SECCIONES)
+        if not tiene(self.permisos, "configuracion", "ver"):
+            secciones = [s for s in secciones if s[0] != "unidades"
+                         and s[0] != "areas" and s[0] != "puntos"
+                         and s[0] != "colores"]
+        if not tiene(self.permisos, "usuarios", "ver"):
+            secciones = [s for s in secciones if s[0] != "usuarios"]
+        self._secciones = secciones
 
-        layout.addWidget(self.tabs)
+        contenedor_side = QFrame()
+        contenedor_side.setObjectName("cfgSidebar")
+        contenedor_side.setFixedWidth(264)
+        sb = QVBoxLayout(contenedor_side)
+        sb.setContentsMargins(14, 6, 14, 12)
+        sb.setSpacing(2)
+        self.sidebar = _ConfigSidebar([(k, n) for k, n, _ in secciones], self)
+        sb.addWidget(self.sidebar)
+        sb.addStretch()
 
-        btns = QHBoxLayout()
-        btns.addStretch()
-        btn_close = QPushButton("Cerrar")
-        btn_close.setObjectName("btnPrimary")
-        btn_close.clicked.connect(self.accept)
-        btns.addWidget(btn_close)
-        layout.addLayout(btns)
+        self.stack = QStackedWidget()
+        if secciones:
+            for key, _, _ in secciones:
+                self.stack.addWidget(self._crear_pagina(key))
+        else:
+            pag = QWidget()
+            lay = QVBoxLayout(pag)
+            msg = QLabel("No tiene permisos para ver ninguna sección de configuración.")
+            msg.setAlignment(Qt.AlignCenter)
+            lay.addWidget(msg)
+            self.stack.addWidget(pag)
+
+        contenedor = QFrame()
+        contenedor.setObjectName("cfgContent")
+        cl = QVBoxLayout(contenedor)
+        cl.setContentsMargins(30, 18, 30, 18)
+        cl.setSpacing(10)
+        self.lbl_titulo = QLabel("")
+        self.lbl_titulo.setObjectName("cfgSectionTitle")
+        self.lbl_subtitulo = QLabel("")
+        self.lbl_subtitulo.setObjectName("cfgSectionSubtitle")
+        divisor = QFrame()
+        divisor.setObjectName("cfgDivider")
+        divisor.setFixedHeight(1)
+        cl.addWidget(self.lbl_titulo)
+        cl.addWidget(self.lbl_subtitulo)
+        cl.addWidget(divisor)
+        cl.addWidget(self.stack, 1)
+
+        cuerpo.addWidget(contenedor_side)
+        cuerpo.addWidget(contenedor, 1)
+        root.addLayout(cuerpo, 1)
+
+        pie = QHBoxLayout()
+        pie.setContentsMargins(16, 8, 16, 14)
+        pie.addStretch()
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.setObjectName("btnPrimary")
+        btn_cerrar.clicked.connect(self.accept)
+        pie.addWidget(btn_cerrar)
+        root.addLayout(pie)
+
+        self.sidebar.currentChanged.connect(self._navegar)
+        self._navegar(0)
+
+    def _crear_pagina(self, key: str) -> QWidget:
+        if key == "unidades":
+            return _TabUnidades(self.controller, self.permisos)
+        if key == "areas":
+            return _TabEstaciones(self.prod_controller, self.permisos)
+        if key == "puntos":
+            return _TabPuntos(self.inv_controller, self.permisos)
+        if key == "colores":
+            return _TabColores(self.inv_controller, self.permisos)
+        if key == "usuarios":
+            return _TabAccesos(self.accesos_controller, self.permisos)
+        raise ValueError(f"Sección de configuración desconocida: {key}")
+
+    def _navegar(self, index: int) -> None:
+        if not self._secciones:
+            return
+        self.stack.setCurrentIndex(index)
+        _, titulo, subtitulo = self._secciones[index]
+        self.lbl_titulo.setText(titulo)
+        self.lbl_subtitulo.setText(subtitulo)
 
     def _cargar(self) -> None:
-        if hasattr(self, "tab_unidades"):
-            self.tab_unidades.recargar()
-        if hasattr(self, "tab_estaciones"):
-            self.tab_estaciones.recargar()
-        if hasattr(self, "tab_puntos"):
-            self.tab_puntos.recargar()
-        if hasattr(self, "tab_colores"):
-            self.tab_colores.recargar()
+        for i in range(self.stack.count()):
+            pagina = self.stack.widget(i)
+            recargar = getattr(pagina, "recargar", None)
+            if callable(recargar):
+                recargar()
 
 
 class _TabUnidades(QWidget):
@@ -238,37 +384,31 @@ class _TabEstaciones(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Orden", "Área", "Descripción", "ID"])
-        self.table.setColumnHidden(3, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
-
-        layout.addWidget(self.table)
-
         self.btn_add = QPushButton("+ Nueva Área")
         self.btn_add.setObjectName("btnPrimary")
+        self.btn_add.setCursor(Qt.PointingHandCursor)
         self.btn_add.clicked.connect(self._crear)
-        self.btn_edit = QPushButton("Editar")
-        self.btn_edit.setObjectName("btnSecondary")
-        self.btn_edit.clicked.connect(self._editar)
-        self.btn_del = QPushButton("Desactivar")
-        self.btn_del.setObjectName("btnDanger")
-        self.btn_del.clicked.connect(self._desactivar)
-
         self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
-        self.btn_edit.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        self.btn_del.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
 
         toolbar = QHBoxLayout()
         toolbar.addWidget(self.btn_add)
-        toolbar.addWidget(self.btn_edit)
-        toolbar.addWidget(self.btn_del)
         toolbar.addStretch()
         layout.addLayout(toolbar)
+
+        self.table = QTableWidget()
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["Orden", "Área", "Descripción", "Acciones", "ID"])
+        self.table.setColumnHidden(4, True)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.table.verticalHeader().setDefaultSectionSize(60)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.doubleClicked.connect(lambda _index: self._editar())
+
+        layout.addWidget(self.table)
 
     def recargar(self) -> None:
         estaciones = self.controller.listar_estaciones(solo_activos=False)
@@ -277,43 +417,79 @@ class _TabEstaciones(QWidget):
             self.table.setItem(i, 0, QTableWidgetItem(str(e.get("orden", 0))))
             self.table.setItem(i, 1, QTableWidgetItem(e.get("nombre", "")))
             self.table.setItem(i, 2, QTableWidgetItem(e.get("descripcion", "") or ""))
-            self.table.setItem(i, 3, QTableWidgetItem(str(e.get("id", ""))))
+            self.table.setItem(i, 4, QTableWidgetItem(str(e.get("id", ""))))
+            self.table.setCellWidget(i, 3, self._celda_acciones(i))
             if not e.get("activo"):
                 for col in range(self.table.columnCount()):
                     item = self.table.item(i, col)
                     if item:
                         item.setForeground(Qt.gray)
 
+    def _celda_acciones(self, row: int) -> QWidget:
+        contenedor = QWidget()
+        fila = QHBoxLayout(contenedor)
+        fila.setContentsMargins(4, 8, 4, 8)
+        fila.setSpacing(6)
+
+        btn_editar = QPushButton()
+        btn_editar.setIcon(mono_icon("editar", 18, "#4f46e5"))
+        btn_editar.setIconSize(QSize(18, 18))
+        btn_editar.setFixedSize(34, 34)
+        btn_editar.setToolTip("Editar")
+        btn_editar.setObjectName("btnRowEdit")
+        btn_editar.setCursor(Qt.PointingHandCursor)
+        btn_editar.setEnabled(tiene(self.permisos, "configuracion", "editar"))
+        btn_editar.clicked.connect(lambda: self._editar(row))
+        fila.addWidget(btn_editar)
+
+        btn_eliminar = QPushButton()
+        btn_eliminar.setIcon(mono_icon("eliminar", 18, "#dc2626"))
+        btn_eliminar.setIconSize(QSize(18, 18))
+        btn_eliminar.setFixedSize(34, 34)
+        btn_eliminar.setToolTip("Eliminar")
+        btn_eliminar.setObjectName("btnRowDel")
+        btn_eliminar.setCursor(Qt.PointingHandCursor)
+        btn_eliminar.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
+        btn_eliminar.clicked.connect(lambda: self._eliminar(row))
+        fila.addWidget(btn_eliminar)
+
+        fila.addStretch()
+        return contenedor
+
     def _crear(self) -> None:
         dlg = _DialogEstacion(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self) -> None:
-        row = self.table.currentRow()
+    def _editar(self, row: int | None = None) -> None:
+        if row is None:
+            row = self.table.currentRow()
         if row < 0:
             QMessageBox.information(self, "Seleccione", "Seleccione un área de la lista.")
             return
-        estacion_id = int(self.table.item(row, 3).text())
+        estacion_id = int(self.table.item(row, 4).text())
         dlg = _DialogEstacion(self.controller, estacion_id)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            QMessageBox.information(self, "Seleccione", "Seleccione un área de la lista.")
-            return
-        estacion_id = int(self.table.item(row, 3).text())
+    def _eliminar(self, row: int) -> None:
+        estacion_id = int(self.table.item(row, 4).text())
         nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar el área '{nombre}'?\nLas órdenes que ya la usan conservan su avance.",
+            f"¿Eliminar el área '{nombre}'?\nEsta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No,
         )
-        if resp == QMessageBox.Yes:
-            self.controller.desactivar_estacion(estacion_id)
-            self.recargar()
+        if resp != QMessageBox.Yes:
+            return
+        try:
+            self.controller.eliminar_estacion(estacion_id)
+        except Exception:
+            QMessageBox.warning(
+                self, "No se pudo eliminar",
+                f"El área '{nombre}' está en uso por órdenes de producción y no se puede eliminar.")
+            return
+        self.recargar()
 
 
 class _DialogEstacion(QDialog):
@@ -410,15 +586,19 @@ class _TabPuntos(QWidget):
         serie_layout.setSpacing(8)
 
         serie_layout.addWidget(QLabel("Desde:"))
-        self.spn_serie_desde = QSpinBox()
+        self.spn_serie_desde = QDoubleSpinBox()
         self.spn_serie_desde.setRange(0, 99)
-        self.spn_serie_desde.setValue(0)
+        self.spn_serie_desde.setSingleStep(0.5)
+        self.spn_serie_desde.setDecimals(1)
+        self.spn_serie_desde.setValue(15)
         serie_layout.addWidget(self.spn_serie_desde)
 
         serie_layout.addWidget(QLabel("hasta:"))
-        self.spn_serie_hasta = QSpinBox()
+        self.spn_serie_hasta = QDoubleSpinBox()
         self.spn_serie_hasta.setRange(0, 99)
-        self.spn_serie_hasta.setValue(21)
+        self.spn_serie_hasta.setSingleStep(0.5)
+        self.spn_serie_hasta.setDecimals(1)
+        self.spn_serie_hasta.setValue(17)
         serie_layout.addWidget(self.spn_serie_hasta)
 
         btn_generar = QPushButton("Generar")
@@ -491,7 +671,7 @@ class _TabPuntos(QWidget):
         total = len(self.controller.listar_puntos(solo_activos=False))
         QMessageBox.information(
             self, "Puntos generados",
-            f"Puntos {desde:02d} a {hasta:02d} listos.\n"
+            f"Puntos {desde:g} a {hasta:g} listos.\n"
             f"{creados} nuevos; el resto ya existía (se reactivaron).\n"
             f"Total en catálogo: {total}.",
         )
