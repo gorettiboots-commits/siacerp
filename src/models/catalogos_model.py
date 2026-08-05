@@ -39,25 +39,34 @@ class PuntosModel:
         cursor = self.db.execute("DELETE FROM puntos_catalogo")
         return cursor.rowcount
 
-    def generar(self, desde: int, hasta: int) -> int:
+    def generar(self, desde: float, hasta: float) -> int:
         if desde > hasta:
             desde, hasta = hasta, desde
         existentes = {r["punto"] for r in self.db.fetch_all("SELECT punto FROM puntos_catalogo")}
         creados = 0
-        for n in range(desde, hasta + 1):
-            punto = f"{n:02d}"
+        for i in range(int(desde * 2), int(hasta * 2) + 1):
+            valor = i / 2
+            punto = self._formatear_punto(valor)
+            orden = valor + 1
             if punto not in existentes:
                 self.db.execute(
                     "INSERT INTO puntos_catalogo (punto, orden) VALUES (?, ?)",
-                    (punto, n + 1),
+                    (punto, orden),
                 )
                 creados += 1
             else:
                 self.db.execute(
                     "UPDATE puntos_catalogo SET activo=1, orden=? WHERE punto=?",
-                    (n + 1, punto),
+                    (orden, punto),
                 )
         return creados
+
+    @staticmethod
+    def _formatear_punto(valor: float) -> str:
+        entero = int(valor)
+        if valor == entero:
+            return f"{entero:02d}"
+        return f"{entero:02d}.5"
 
 
 class ColoresModel:

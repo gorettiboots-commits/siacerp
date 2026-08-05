@@ -223,9 +223,9 @@ class ProduccionView(QWidget):
         vlayout.addLayout(vtoolbar)
 
         self.table_variantes = QTableWidget()
-        self.table_variantes.setColumnCount(5)
-        self.table_variantes.setHorizontalHeaderLabels(["Código", "Modelo", "Color", "Piel", "ID"])
-        self.table_variantes.setColumnHidden(4, True)
+        self.table_variantes.setColumnCount(6)
+        self.table_variantes.setHorizontalHeaderLabels(["Código", "Modelo", "Talla", "Color", "Piel", "ID"])
+        self.table_variantes.setColumnHidden(5, True)
         self.table_variantes.setSelectionBehavior(QTableWidget.SelectRows)
         self.table_variantes.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table_variantes.setAlternatingRowColors(True)
@@ -334,9 +334,10 @@ class ProduccionView(QWidget):
             for i, v in enumerate(variantes):
                 self.table_variantes.setItem(i, 0, QTableWidgetItem(v.get("codigo_variante", "")))
                 self.table_variantes.setItem(i, 1, QTableWidgetItem(v.get("modelo_nombre", "")))
-                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("color", "")))
-                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("piel", "")))
-                self.table_variantes.setItem(i, 4, QTableWidgetItem(str(v.get("id", ""))))
+                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("talla", "")))
+                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("color", "")))
+                self.table_variantes.setItem(i, 4, QTableWidgetItem(v.get("piel", "")))
+                self.table_variantes.setItem(i, 5, QTableWidgetItem(str(v.get("id", ""))))
         except Exception as e:
             print(f"Error catálogos: {e}")
 
@@ -399,9 +400,10 @@ class ProduccionView(QWidget):
             for i, v in enumerate(res):
                 self.table_variantes.setItem(i, 0, QTableWidgetItem(v.get("codigo_variante", "")))
                 self.table_variantes.setItem(i, 1, QTableWidgetItem(v.get("modelo_nombre", "")))
-                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("color", "")))
-                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("piel", "")))
-                self.table_variantes.setItem(i, 4, QTableWidgetItem(str(v.get("id", ""))))
+                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("talla", "")))
+                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("color", "")))
+                self.table_variantes.setItem(i, 4, QTableWidgetItem(v.get("piel", "")))
+                self.table_variantes.setItem(i, 5, QTableWidgetItem(str(v.get("id", ""))))
         except Exception as e:
             print(f"Error: {e}")
 
@@ -431,7 +433,7 @@ class ProduccionView(QWidget):
         self._load_ops()
 
     def _nuevo_modelo(self) -> None:
-        dlg = DialogModelo(self.controller)
+        dlg = DialogModelo(self.controller, self.inv_controller)
         if dlg.exec():
             self._load_catalogos()
 
@@ -441,7 +443,7 @@ class ProduccionView(QWidget):
             QMessageBox.information(self, "Seleccionar", "Seleccione un modelo.")
             return
         modelo_id = int(self.table_modelos.item(row, 3).text())
-        dlg = DialogModelo(self.controller, modelo_id)
+        dlg = DialogModelo(self.controller, self.inv_controller, modelo_id)
         if dlg.exec():
             self._load_catalogos()
 
@@ -465,7 +467,7 @@ class ProduccionView(QWidget):
         row = self.table_variantes.currentRow()
         if row < 0:
             return
-        v_id = int(self.table_variantes.item(row, 4).text())
+        v_id = int(self.table_variantes.item(row, 5).text())
         dlg = DialogVariante(self.controller, v_id)
         if dlg.exec():
             self._load_catalogos()
@@ -478,7 +480,7 @@ class ProduccionView(QWidget):
         resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar variante '{cod}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_variante(int(self.table_variantes.item(row, 4).text()))
+            self.controller.desactivar_variante(int(self.table_variantes.item(row, 5).text()))
             self._load_catalogos()
 
     def _on_modelo_selected(self) -> None:

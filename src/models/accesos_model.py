@@ -1,5 +1,9 @@
 from typing import Optional
+
 from src.database.db_manager import DatabaseManager
+from src.utils.security import (
+    coincide_plano, es_hash_bcrypt, hash_contrasena, verificar_contrasena,
+)
 
 
 MODULOS = [
@@ -39,7 +43,7 @@ class UsuarioModel:
     def crear(self, username: str, password: str, nombre: str, rol: str) -> int:
         cursor = self.db.execute(
             "INSERT INTO usuarios (username, password_hash, nombre_completo, rol) VALUES (?, ?, ?, ?)",
-            (username, password, nombre, rol),
+            (username, hash_contrasena(password), nombre, rol),
         )
         return cursor.lastrowid
 
@@ -51,13 +55,29 @@ class UsuarioModel:
 
     def cambiar_password(self, usuario_id: int, password: str) -> None:
         self.db.execute(
-            "UPDATE usuarios SET password_hash=? WHERE id=?", (password, usuario_id))
+            "UPDATE usuarios SET password_hash=? WHERE id=?",
+            (hash_contrasena(password), usuario_id),
+        )
 
     def set_activo(self, usuario_id: int, activo: bool) -> None:
         self.db.execute(
             "UPDATE usuarios SET activo=? WHERE id=?",
             (1 if activo else 0, usuario_id),
         )
+
+    def autenticar(self, username: str, password: str) -> Optional[dict]:
+        user = self.obtener_por_username(username)
+        if user is None or not user.get("activo", 1):
+            return None
+        almacenado = user["password_hash"]
+        if es_hash_bcrypt(almacenado):
+            if not verificar_contrasena(password, almacenado):
+                return None
+        else:
+            if not coincide_plano(password, almacenado):
+                return None
+            self.cambiar_password(user["id"], password)
+        return user
 
 
 class PermisosModel:

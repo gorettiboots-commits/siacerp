@@ -104,6 +104,38 @@ class DatabaseManager:
         print("Esquema de base de datos inicializado correctamente.")
 
     def _migrar(self) -> None:
+        self._migrar_passwords()
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            if self.engine == 'sqlite':
+                cols = [r[1] for r in cursor.execute("PRAGMA table_info(variantes)").fetchall()]
+                if 'talla' not in cols:
+                    cursor.execute(
+                        "ALTER TABLE variantes ADD COLUMN talla TEXT NOT NULL DEFAULT ''")
+                    conn.commit()
+                    print("Migración: columna talla agregada a variantes.")
+            else:
+                cursor.execute(
+                    "ALTER TABLE variantes ADD COLUMN IF NOT EXISTS talla TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+        except Exception as e:
+            print(f"Migración talla omitida: {e}")
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            for tabla in ("insumos", "modelos"):
+                if self.engine == 'sqlite':
+                    cols = [r[1] for r in cursor.execute(f"PRAGMA table_info({tabla})").fetchall()]
+                    if 'imagen' not in cols:
+                        cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN imagen BLOB")
+                        conn.commit()
+                        print(f"Migración: columna imagen agregada a {tabla}.")
+                else:
+                    cursor.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS imagen BYTEA")
+                    conn.commit()
+        except Exception as e:
+            print(f"Migración imagen omitida: {e}")
         if self.engine != 'sqlite':
             return
         conn = self.connect()
@@ -218,3 +250,24 @@ class DatabaseManager:
             except Exception:
                 pass
             print(f"Migración tallas/pago omitida: {e}")
+
+    def _migrar_passwords(self) -> None:
+        from src.utils.security import es_hash_bcrypt, hash_contrasena
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            ph = "%s" if self.engine == 'postgresql' else "?"
+            filas = cursor.execute("SELECT id, password_hash FROM usuarios").fetchall()
+            migradas = 0
+            for usuario_id, almacenado in filas:
+                if almacenado and not es_hash_bcrypt(almacenado):
+                    cursor.execute(
+                        f"UPDATE usuarios SET password_hash = {ph} WHERE id = {ph}",
+                        (hash_contrasena(almacenado), usuario_id),
+                    )
+                    migradas += 1
+            conn.commit()
+            if migradas:
+                print(f"Migración: {migradas} contraseña(s) migradas a bcrypt.")
+        except Exception as e:
+            print(f"Migración de contraseñas omitida: {e}")
