@@ -10,6 +10,7 @@ MODULOS = [
     ("ordenes_compra", "Órdenes de Compra"),
     ("produccion", "Producción"),
     ("inventario", "Inventario"),
+    ("clientes", "Clientes"),
     ("configuracion", "Configuración"),
     ("usuarios", "Usuarios y Accesos"),
 ]

@@ -50,7 +50,7 @@ class LoginView(QWidget):
         layout.setContentsMargins(40, 48, 40, 48)
 
         logo_label = QLabel()
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
         if logo_path.exists():
             pixmap = QPixmap(str(logo_path)).scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo_label.setPixmap(pixmap)

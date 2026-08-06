@@ -14,6 +14,7 @@ from src.controllers.accesos_controller import AccesosController
 from src.models.accesos_model import tiene
 from src.utils.icons import mono_icon
 from src.views.login_view import LoginView
+from src.views.clientes_view import ClientesView
 from src.views.ordenes_compra_view import OrdenesCompraView
 from src.views.produccion_view import ProduccionView
 from src.views.stock_view import StockView
@@ -33,7 +34,7 @@ class AcercaDeDialog(QDialog):
         layout.setContentsMargins(32, 24, 32, 24)
 
         from pathlib import Path
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
         if logo_path.exists():
             lbl_logo = QLabel()
             pixmap = QPixmap(str(logo_path)).scaled(
@@ -166,12 +167,14 @@ class MainWindow(QMainWindow):
         self._view_ordenes = OrdenesCompraView()
         self._view_produccion = ProduccionView()
         self._view_stock = StockView()
+        self._view_clientes = ClientesView()
 
         self._video_splash = self._create_video_splash()
         self._content_area.addWidget(self._video_splash)
         self._content_area.addWidget(self._view_ordenes)
         self._content_area.addWidget(self._view_produccion)
         self._content_area.addWidget(self._view_stock)
+        self._content_area.addWidget(self._view_clientes)
 
         layout.addWidget(self._nav_panel)
         layout.addWidget(self._content_area, 1)
@@ -193,7 +196,7 @@ class MainWindow(QMainWindow):
         l = QVBoxLayout(logo_page)
         l.addStretch()
         logo_label = QLabel()
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
         if logo_path.exists():
             logo_label.setPixmap(QPixmap(str(logo_path)).scaled(
                 160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -249,7 +252,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.nav_toggle)
 
         from pathlib import Path
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
         self._logo_original = None
         self._nav_logo_label = QLabel()
         if logo_path.exists():
@@ -275,6 +278,7 @@ class MainWindow(QMainWindow):
         self.nav_ordenes = QPushButton("Órdenes de Compra")
         self.nav_produccion = QPushButton("Producción")
         self.nav_stock = QPushButton("Inventario")
+        self.nav_clientes = QPushButton("Clientes")
 
         self.nav_salir = QPushButton("Cerrar Sesión")
         self.nav_salir.setObjectName("navButton")
@@ -283,6 +287,7 @@ class MainWindow(QMainWindow):
             "oc": self.nav_ordenes,
             "produccion": self.nav_produccion,
             "inventario": self.nav_stock,
+            "clientes": self.nav_clientes,
         }
         for clave, btn in _iconos_nav.items():
             btn.setObjectName("navButton")
@@ -310,6 +315,7 @@ class MainWindow(QMainWindow):
 
         for btn, idx in [
             (self.nav_ordenes, 0), (self.nav_produccion, 1), (self.nav_stock, 2),
+            (self.nav_clientes, 3),
         ]:
             btn.clicked.connect(lambda checked, i=idx: self._switch_view(i))
 
@@ -369,6 +375,7 @@ class MainWindow(QMainWindow):
             (self.nav_ordenes, "Órdenes de Compra"),
             (self.nav_produccion, "Producción"),
             (self.nav_stock, "Inventario"),
+            (self.nav_clientes, "Clientes"),
         ]:
             btn.setText(texto if abierto else "")
             btn.setToolTip("" if abierto else texto)
@@ -386,13 +393,14 @@ class MainWindow(QMainWindow):
             self._splash_stack.setCurrentIndex(1)
 
     def _switch_view(self, index: int) -> None:
-        mods = ["ordenes_compra", "produccion", "inventario"]
+        mods = ["ordenes_compra", "produccion", "inventario", "clientes"]
         if not tiene(self._permisos, mods[index], "ver"):
             return
         self._content_area.setCurrentIndex(index + 1)
-        for i, nav in enumerate([self.nav_ordenes, self.nav_produccion, self.nav_stock]):
+        for i, nav in enumerate([self.nav_ordenes, self.nav_produccion,
+                                 self.nav_stock, self.nav_clientes]):
             nav.setChecked(i == index)
-        names = ["Órdenes de Compra", "Producción", "Inventario"]
+        names = ["Órdenes de Compra", "Producción", "Inventario", "Clientes"]
         if index < len(names):
             self.status_bar.showMessage(f"Módulo: {names[index]}")
 
@@ -400,12 +408,14 @@ class MainWindow(QMainWindow):
         self.nav_ordenes.setVisible(tiene(self._permisos, "ordenes_compra", "ver"))
         self.nav_produccion.setVisible(tiene(self._permisos, "produccion", "ver"))
         self.nav_stock.setVisible(tiene(self._permisos, "inventario", "ver"))
+        self.nav_clientes.setVisible(tiene(self._permisos, "clientes", "ver"))
         self._config_action.setEnabled(
             tiene(self._permisos, "configuracion", "ver")
             or tiene(self._permisos, "usuarios", "ver"))
         self._view_ordenes.set_permisos(self._permisos)
         self._view_produccion.set_permisos(self._permisos)
         self._view_stock.set_permisos(self._permisos)
+        self._view_clientes.set_permisos(self._permisos)
 
     def _on_login(self, credentials: dict) -> None:
         user = AccesosController().autenticar(

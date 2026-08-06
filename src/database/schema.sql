@@ -155,6 +155,55 @@ CREATE TABLE IF NOT EXISTS detalle_orden_compra_puntos (
     FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
 );
 
+-- -----------------------------------------------------------
+-- 2.1 CLIENTES Y PEDIDOS DE CLIENTE
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS clientes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rfc TEXT,
+    nombre TEXT NOT NULL,
+    nombre_comercial TEXT,
+    telefono TEXT,
+    email TEXT,
+    direccion TEXT,
+    activo INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pedidos_cliente (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio TEXT NOT NULL UNIQUE,
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    fecha_pedido TEXT NOT NULL DEFAULT (datetime('now')),
+    fecha_programado TEXT,
+    estatus TEXT NOT NULL DEFAULT 'pendiente',
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    observaciones TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+);
+
+CREATE TABLE IF NOT EXISTS detalle_pedido_cliente (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pedido_id INTEGER NOT NULL REFERENCES pedidos_cliente(id) ON DELETE CASCADE,
+    modelo TEXT NOT NULL,
+    piel TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (pedido_id) REFERENCES pedidos_cliente(id)
+);
+
+-- Pares por punto (talla) por renglón del pedido de cliente
+CREATE TABLE IF NOT EXISTS detalle_pedido_cliente_puntos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    detalle_id INTEGER NOT NULL REFERENCES detalle_pedido_cliente(id) ON DELETE CASCADE,
+    punto_id INTEGER NOT NULL REFERENCES puntos_catalogo(id),
+    pares INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(detalle_id, punto_id),
+    FOREIGN KEY (detalle_id) REFERENCES detalle_pedido_cliente(id),
+    FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
+);
+
 CREATE TABLE IF NOT EXISTS movimiento_inventario (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     insumo_id INTEGER NOT NULL REFERENCES insumos(id),
@@ -325,7 +374,12 @@ INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) VALUES
     ('usuarios', 'crear', 'Crear usuarios'),
     ('usuarios', 'editar', 'Editar usuarios y permisos'),
     ('usuarios', 'eliminar', 'Desactivar usuarios'),
-    ('usuarios', 'exportar', 'Exportar e imprimir');
+    ('usuarios', 'exportar', 'Exportar e imprimir'),
+    ('clientes', 'ver', 'Ver el módulo de Clientes y Pedidos'),
+    ('clientes', 'crear', 'Crear clientes y pedidos de cliente'),
+    ('clientes', 'editar', 'Editar clientes y pedidos'),
+    ('clientes', 'eliminar', 'Desactivar clientes y cancelar pedidos'),
+    ('clientes', 'exportar', 'Exportar e imprimir pedidos');
 
 INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
     ('Pieza', 'pieza'),
