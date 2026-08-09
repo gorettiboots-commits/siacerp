@@ -286,6 +286,65 @@ def main() -> None:
         )
         insertados += 1
 
+    # ---------- 4. Variantes por color desde hoja Hoja1 ----------
+    HOJA_COLORES = "Hoja1"
+    ws3 = wb[HOJA_COLORES]
+    color_rows = 0
+    for i in range(2, ws3.max_row + 1):
+        alias = ws3.cell(i, 1).value
+        material = ws3.cell(i, 2).value
+        color = ws3.cell(i, 3).value
+        if not alias or not material or not norm(material):
+            continue
+        if not color or not norm(color):
+            continue
+        if norm(material).upper() in ("MATERIAL",) or norm(color).upper() in ("COLOR",):
+            continue
+        proveedor_id = resolver_proveedor(alias)
+        if proveedor_id is None:
+            para_mensaje.append(f"  ! Sin proveedor resuelto (colores): {material}")
+            continue
+        nombre = norm(material)
+        if nombre not in por_nombre:
+            codigo = f"IM{next_codigo:03d}"
+            while cursor.execute("SELECT 1 FROM insumos WHERE codigo = ?", (codigo,)).fetchone():
+                next_codigo += 1
+                codigo = f"IM{next_codigo:03d}"
+            next_codigo += 1
+            categoria = categoria_de_material(nombre)
+            unidad = unidad_normalizada(ws3.cell(i, 4).value)
+            cur = cursor.execute(
+                "INSERT INTO insumos (codigo, nombre, categoria, unidad_medida, stock_minimo) "
+                "VALUES (?, ?, ?, ?, 0)",
+                (codigo, nombre, categoria, unidad),
+            )
+            por_nombre[nombre] = cur.lastrowid
+            if not cursor.execute(
+                    "SELECT 1 FROM unidades_medida WHERE abreviatura = ?", (unidad,)
+            ).fetchone():
+                cursor.execute(
+                    "INSERT INTO unidades_medida (nombre, abreviatura) VALUES (?, ?)",
+                    (unidad.capitalize(), unidad),
+                )
+            print(f"  + Insumo (color): {nombre} [{categoria}] ({unidad})")
+        insumo_id = por_nombre[nombre]
+        unidad = unidad_normalizada(ws3.cell(i, 4).value)
+        precio = float(ws3.cell(i, 5).value) if ws3.cell(i, 5).value is not None else 0.0
+        comentario = norm(ws3.cell(i, 6).value)
+        ya = cursor.execute(
+            "SELECT 1 FROM proveedor_insumos WHERE proveedor_id = ? AND insumo_id = ? AND color = ?",
+            (proveedor_id, insumo_id, norm(color)),
+        ).fetchone()
+        if ya:
+            continue
+        cursor.execute(
+            "INSERT INTO proveedor_insumos "
+            "(proveedor_id, insumo_id, color, unidad_medida, precio, comentario) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (proveedor_id, insumo_id, norm(color), unidad, precio, comentario),
+        )
+        color_rows += 1
+
     conn.commit()
 
     # ---------- Resumen ----------
@@ -296,6 +355,7 @@ def main() -> None:
     print(f"Proveedores en BD: {nprov}")
     print(f"Insumos en BD: {nins}")
     print(f"Relaciones proveedor-insumo en BD: {nrel}")
+    print(f"Variantes por color insertadas: {color_rows}")
     if para_mensaje:
         print("\nSin proveedor resuelto:")
         print("\n".join(para_mensaje))

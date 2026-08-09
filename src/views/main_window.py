@@ -16,6 +16,7 @@ from src.utils.icons import mono_icon
 from src.views.login_view import LoginView
 from src.views.ordenes_compra_view import OrdenesCompraView
 from src.views.produccion_view import ProduccionView
+from src.views.sandbox_view import SandboxView
 from src.views.stock_view import StockView
 
 
@@ -166,12 +167,14 @@ class MainWindow(QMainWindow):
         self._view_ordenes = OrdenesCompraView()
         self._view_produccion = ProduccionView()
         self._view_stock = StockView()
+        self._view_sandbox = SandboxView()
 
         self._video_splash = self._create_video_splash()
         self._content_area.addWidget(self._video_splash)
         self._content_area.addWidget(self._view_ordenes)
         self._content_area.addWidget(self._view_produccion)
         self._content_area.addWidget(self._view_stock)
+        self._content_area.addWidget(self._view_sandbox)
 
         layout.addWidget(self._nav_panel)
         layout.addWidget(self._content_area, 1)
@@ -275,6 +278,7 @@ class MainWindow(QMainWindow):
         self.nav_ordenes = QPushButton("Órdenes de Compra")
         self.nav_produccion = QPushButton("Producción")
         self.nav_stock = QPushButton("Inventario")
+        self.nav_sandbox = QPushButton("Sandbox")
 
         self.nav_salir = QPushButton("Cerrar Sesión")
         self.nav_salir.setObjectName("navButton")
@@ -283,6 +287,7 @@ class MainWindow(QMainWindow):
             "oc": self.nav_ordenes,
             "produccion": self.nav_produccion,
             "inventario": self.nav_stock,
+            "sandbox": self.nav_sandbox,
         }
         for clave, btn in _iconos_nav.items():
             btn.setObjectName("navButton")
@@ -307,6 +312,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(divider)
 
         layout.addWidget(self.nav_salir)
+
+        self.nav_sandbox.setVisible(False)
+        self.nav_sandbox.clicked.connect(self._mostrar_sandbox)
 
         for btn, idx in [
             (self.nav_ordenes, 0), (self.nav_produccion, 1), (self.nav_stock, 2),
@@ -369,6 +377,7 @@ class MainWindow(QMainWindow):
             (self.nav_ordenes, "Órdenes de Compra"),
             (self.nav_produccion, "Producción"),
             (self.nav_stock, "Inventario"),
+            (self.nav_sandbox, "Sandbox"),
         ]:
             btn.setText(texto if abierto else "")
             btn.setToolTip("" if abierto else texto)
@@ -400,6 +409,8 @@ class MainWindow(QMainWindow):
         self.nav_ordenes.setVisible(tiene(self._permisos, "ordenes_compra", "ver"))
         self.nav_produccion.setVisible(tiene(self._permisos, "produccion", "ver"))
         self.nav_stock.setVisible(tiene(self._permisos, "inventario", "ver"))
+        self.nav_sandbox.setVisible(
+            bool(self._current_user) and self._current_user.get("rol") == "admin")
         self._config_action.setEnabled(
             tiene(self._permisos, "configuracion", "ver")
             or tiene(self._permisos, "usuarios", "ver"))
@@ -430,6 +441,10 @@ class MainWindow(QMainWindow):
             for w in self._stack.findChildren(LoginView):
                 w.lbl_error.setText("Usuario o contraseña incorrectos")
                 w.lbl_error.setVisible(True)
+
+    def _mostrar_sandbox(self) -> None:
+        self._content_area.setCurrentWidget(self._view_sandbox)
+        self.status_bar.showMessage("Módulo: Sandbox")
 
     def _logout(self) -> None:
         self._current_user = None

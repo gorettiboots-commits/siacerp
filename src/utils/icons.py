@@ -42,6 +42,28 @@ _TILES = {
           <path d="M42 24v-4a3 3 0 0 1 6 0v4"
                 fill="none" stroke="#2563eb" stroke-width="2.4"/>
         </svg>""",
+    "oc": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#4f46e5"/>
+          <path d="M24 16h14l8 8v22a2 2 0 0 1-2 2H24a2 2 0 0 1-2-2V18a2 2 0 0 1 2-2z"
+                fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+          <path d="M38 16v8h8M27 34h14M27 41h10"
+                stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+        </svg>""",
+    "produccion": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#0d9488"/>
+          <circle cx="32" cy="32" r="9" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <circle cx="32" cy="32" r="3" fill="#ffffff"/>
+          <path d="M32 17v6M32 41v6M17 32h6M41 32h6M22.6 22.6l4.2 4.2M37.2 37.2l4.2 4.2M41.4 22.6l-4.2 4.2M26.8 37.2l-4.2 4.2"
+                stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+        </svg>""",
+    "inventario": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#ea580c"/>
+          <path d="M20 24l12-6 12 6v16l-12 6-12-6z" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+          <path d="M20 24l12 6 12-6M32 30v16" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        </svg>""",
 }
 
 _GLIFOS = {
@@ -84,6 +106,32 @@ _GLIFOS = {
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M14 20h36M28 20v-6a4 4 0 0 1 4-4h0a4 4 0 0 1 4 4v6M22 20l2.5 32a4 4 0 0 0 4 3.6h7a4 4 0 0 0 4-3.6L42 20M27 28v16M37 28v16"
                 fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>""",
+    "lista": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="12" cy="18" r="2.8" fill="#COLOR"/>
+          <circle cx="12" cy="32" r="2.8" fill="#COLOR"/>
+          <circle cx="12" cy="46" r="2.8" fill="#COLOR"/>
+          <path d="M22 18h32M22 32h32M22 46h32" stroke="#COLOR" stroke-width="4" stroke-linecap="round"/>
+        </svg>""",
+    "tabla": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="12" y="12" width="40" height="40" rx="4" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <path d="M12 24h40M12 38h40M24 12v40M38 12v40" stroke="#COLOR" stroke-width="3.5"/>
+        </svg>""",
+    "iconos": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="12" y="12" width="18" height="18" rx="4" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="34" y="12" width="18" height="18" rx="4" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="12" y="34" width="18" height="18" rx="4" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="34" y="34" width="18" height="18" rx="4" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+        </svg>""",
+    "sandbox": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <path d="M10 18h44M16 18v8a16 16 0 0 0 32 0v-8M14 50h36" fill="none"
+                stroke="#COLOR" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M24 18v6a8 8 0 0 0 16 0v-6M28 38l8 8M28 46l8-8" fill="none"
+                stroke="#COLOR" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>""",
 }
 

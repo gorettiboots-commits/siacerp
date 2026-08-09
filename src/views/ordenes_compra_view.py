@@ -11,6 +11,7 @@ from src.models.accesos_model import tiene
 from src.utils.export_utils import (
     export_orden_compra_excel, export_table_to_excel, print_orden_compra, print_table,
 )
+from src.utils.odoo_list import OdooListView
 from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogOrdenCompra, DialogProveedor, DialogRecibirOrden, DialogVerOrden
 
@@ -123,19 +124,16 @@ class OrdenesCompraView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(
-            ["Folio", "Tipo", "Proveedor", "Fecha", "Total", "Estatus", "ID"])
-        self.table.setColumnHidden(6, True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(False)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.doubleClicked.connect(self._ver_orden)
-        layout.addWidget(self.table)
+        self.vista = OdooListView(["Folio", "Tipo", "Proveedor", "Fecha", "Total", "Estatus"])
+        self.vista.set_renderers(
+            fila=self._fila_orden,
+            claves=self._claves_orden,
+            estilo=self._estilo_orden,
+            tarjeta=self._tarjeta_orden,
+            lista=self._lista_orden,
+        )
+        self.vista.doubleClicked.connect(self._ver_orden)
+        layout.addWidget(self.vista)
 
     def _setup_tab_proveedores(self) -> None:
         layout = QVBoxLayout(self.tab_proveedores)
@@ -184,41 +182,63 @@ class OrdenesCompraView(QWidget):
         self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         configurar_tabla_excel(self.table_prov)
         self.table_prov.doubleClicked.connect(self._editar_proveedor)
-        self.table_prov.setStyleSheet(self.table.styleSheet())
+        self.table_prov.setStyleSheet(self.vista.table.styleSheet())
         layout.addWidget(self.table_prov)
 
     def _load_ordenes(self) -> None:
         try:
             ordenes = self.controller.listar_ordenes()
-            self.table.setRowCount(len(ordenes))
-            for i, oc in enumerate(ordenes):
-                self._set_fila_orden(i, oc)
+            self.vista.set_datos(ordenes)
             self._load_proveedores()
         except Exception as e:
             print(f"Error: {e}")
 
-    def _set_fila_orden(self, i: int, oc: dict) -> None:
+    def _fila_orden(self, oc: dict) -> list[str]:
         tipo = oc.get("tipo", "orden")
-        self.table.setItem(i, 0, QTableWidgetItem(oc.get("folio", "")))
-        item_tipo = QTableWidgetItem(
-            "Factura" if tipo == "factura" else "Orden de Compra")
-        self.table.setItem(i, 1, item_tipo)
-        self.table.setItem(i, 2, QTableWidgetItem(oc.get("proveedores", "")))
-        self.table.setItem(i, 3, QTableWidgetItem(oc.get("fecha_emision", "")))
-        self.table.setItem(i, 4, QTableWidgetItem(f"${oc.get('total', 0):.2f}"))
+        return [
+            oc.get("folio", ""),
+            "Factura" if tipo == "factura" else "Orden de Compra",
+            oc.get("proveedores", ""),
+            oc.get("fecha_emision", ""),
+            f"${oc.get('total', 0):.2f}",
+            oc.get("estatus", "").replace("_", " ").capitalize(),
+        ]
+
+    def _claves_orden(self, oc: dict) -> list:
+        return [
+            oc.get("folio", ""),
+            oc.get("tipo", "orden"),
+            (oc.get("proveedores", "") or "").lower(),
+            oc.get("fecha_emision", "") or "",
+            float(oc.get("total", 0) or 0),
+            oc.get("estatus", ""),
+        ]
+
+    def _estilo_orden(self, oc: dict, item, col: int) -> None:
+        tipo = oc.get("tipo", "orden")
+        estatus = oc.get("estatus", "")
+        if tipo == "factura" or estatus == "recibida":
+            item.setBackground(QColor("#daf2d0"))
+        if col == 5:
+            if "recibida" in estatus:
+                item.setForeground(Qt.darkGreen if estatus == "recibida" else Qt.darkYellow)
+            elif estatus == "cancelada":
+                item.setForeground(Qt.red)
+
+    def _tarjeta_orden(self, oc: dict) -> dict:
         est = oc.get("estatus", "").replace("_", " ").capitalize()
-        item_est = QTableWidgetItem(est)
-        if "recibida" in oc.get("estatus", ""):
-            item_est.setForeground(Qt.darkGreen if est == "Recibida" else Qt.darkYellow)
-        elif est == "Cancelada":
-            item_est.setForeground(Qt.red)
-        self.table.setItem(i, 5, item_est)
-        self.table.setItem(i, 6, QTableWidgetItem(str(oc.get("id", ""))))
-        color = QColor("#daf2d0") if (tipo == "factura" or oc.get("estatus") == "recibida") else QColor("#ffffff")
-        for c in range(6):
-            it = self.table.item(i, c)
-            if it:
-                it.setBackground(color)
+        return {
+            "tile": "oc",
+            "titulo": oc.get("folio", ""),
+            "subtitulo": oc.get("proveedores", ""),
+            "badge": f"{est} · ${oc.get('total', 0):.2f}",
+        }
+
+    def _lista_orden(self, oc: dict) -> tuple:
+        return (
+            oc.get("folio", ""),
+            f"{oc.get('proveedores', '')} · {oc.get('fecha_emision', '')} · ${oc.get('total', 0):.2f}",
+        )
 
     def _load_proveedores(self) -> None:
         try:
@@ -241,9 +261,7 @@ class OrdenesCompraView(QWidget):
             return
         try:
             resultados = self.controller.buscar_ordenes(texto)
-            self.table.setRowCount(len(resultados))
-            for i, oc in enumerate(resultados):
-                self._set_fila_orden(i, oc)
+            self.vista.set_datos(resultados)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -276,72 +294,66 @@ class OrdenesCompraView(QWidget):
             self._load_ordenes()
 
     def _ver_orden(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        oc = self.vista.registro_seleccionado()
+        if not oc:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        oc_id = int(self.table.item(row, 6).text())
-        dlg = DialogVerOrden(self.controller, oc_id)
+        dlg = DialogVerOrden(self.controller, oc["id"])
         dlg.exec()
 
     def _recibir_orden(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        oc = self.vista.registro_seleccionado()
+        if not oc:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        if self.table.item(row, 1).text() == "Factura":
+        if oc.get("tipo") == "factura":
             QMessageBox.warning(self, "Estatus", "Las facturas no se reciben en inventario.")
             return
-        estatus = self.table.item(row, 5).text().lower()
+        estatus = oc.get("estatus", "")
         if "recibida" in estatus:
             QMessageBox.warning(self, "Estatus", "Esta orden ya fue recibida.")
             return
         if estatus == "cancelada":
             QMessageBox.warning(self, "Estatus", "No se puede recibir una orden cancelada.")
             return
-        oc_id = int(self.table.item(row, 6).text())
-        dlg = DialogRecibirOrden(self.controller, oc_id)
+        dlg = DialogRecibirOrden(self.controller, oc["id"])
         if dlg.exec():
             QMessageBox.information(self, "Éxito", "Orden recibida. Stock actualizado.")
             self._load_ordenes()
 
     def _cancelar_orden(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        oc = self.vista.registro_seleccionado()
+        if not oc:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        estatus = self.table.item(row, 5).text().lower()
+        estatus = oc.get("estatus", "")
         if "recibida" in estatus or estatus == "cancelada":
             QMessageBox.warning(self, "Estatus", "Solo se pueden cancelar órdenes pendientes.")
             return
-        folio = self.table.item(row, 0).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar '{folio}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar '{oc['folio']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            oc_id = int(self.table.item(row, 6).text())
-            self.controller.cancelar_orden(oc_id)
+            self.controller.cancelar_orden(oc["id"])
             self._load_ordenes()
 
     def _exportar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            path = export_table_to_excel(self.table, "Ordenes_Compra", self)
+        oc = self.vista.registro_seleccionado()
+        if not oc:
+            path = export_table_to_excel(self.vista.table, "Ordenes_Compra", self)
         else:
-            oc_id = int(self.table.item(row, 6).text())
-            datos = self.controller.obtener_orden(oc_id)
-            detalle = self.controller.obtener_detalle_orden(oc_id)
+            datos = self.controller.obtener_orden(oc["id"])
+            detalle = self.controller.obtener_detalle_orden(oc["id"])
             path = export_orden_compra_excel(datos, detalle, self)
         if path:
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
     def _imprimir(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            print_table(self.table, "Ordenes_Compra", self)
+        oc = self.vista.registro_seleccionado()
+        if not oc:
+            print_table(self.vista.table, "Ordenes_Compra", self)
         else:
-            oc_id = int(self.table.item(row, 6).text())
-            datos = self.controller.obtener_orden(oc_id)
-            detalle = self.controller.obtener_detalle_orden(oc_id)
+            datos = self.controller.obtener_orden(oc["id"])
+            detalle = self.controller.obtener_detalle_orden(oc["id"])
             print_orden_compra(datos, detalle, self)
 
     def _exportar_proveedores(self) -> None:
