@@ -50,3 +50,12 @@ registrar_componente(
     "Vista de listado con alternador tabla/lista/iconos (tarjetas), columnas "
     "ordenables y selección/doble clic configurable.",
 )
+
+from src.components.tallas_matrix import MatrizTallasDialog  # noqa: E402
+
+registrar_componente(
+    "matriz_tallas",
+    MatrizTallasDialog,
+    "Matriz de tallas por bloques: encabezado negro/texto blanco, filas de "
+    "captura con navegación Enter/Tab y celdas sin flechas numéricas.",
+)

@@ -30,6 +30,8 @@ Aplicación de escritorio (Python + Qt) para la gestión de una fábrica de calz
 - **Tablas estilo Excel:** en todas las tablas del sistema puede ajustar el **ancho de columnas**
   y el **alto de filas** arrastrando el borde de la cabecera, o con **doble clic** para el ajuste
   automático al contenido.
+- **Sandbox y componentes propios:** área de pruebas de controles (solo admin) y stack de
+  componentes **reutilizables** en `src/components/` con catálogo (`listar_componentes()`).
 - **Producción**
   - Modelos, variantes (color/piel), lista de materiales (BOM).
   - Órdenes de producción con matriz de tallas, kanban por estaciones,
@@ -415,6 +417,49 @@ python scripts/importar_directorio.py
 
 ---
 
+## Componentes propios del sistema
+
+Los controles se prototipan primero en el **Sandbox** (`src/views/sandbox_view.py`,
+visible solo para el rol `admin`). Cuando un control se **aprueba**, se desarrolla de
+forma **reutilizable** en `src/components/` y se registra en el catálogo. El sandbox deja
+de ser el dueño del código y pasa a ser una demo que usa el componente aprobado.
+
+### Catálogo (`src/components/__init__.py`)
+
+| Función | Descripción |
+|---|---|
+| `registrar_componente(nombre, clase, descripcion)` | Registra un componente reutilizable en el catálogo |
+| `listar_componentes()` | Lista los componentes disponibles (nombre + descripción) |
+| `obtener_componente(nombre)` | Devuelve la clase registrada o lanza `KeyError` |
+
+### Componentes disponibles
+
+| Nombre | Descripción |
+|---|---|
+| `odoo_list` | Vista de listado con alternador tabla/lista/iconos (tarjetas), columnas ordenables y selección/doble clic configurable |
+| `matriz_tallas` | Matriz de tallas por bloques: encabezado negro/texto blanco, filas de captura, navegación Enter/Tab y celdas sin flechas numéricas |
+
+### Ejemplo de uso
+
+```python
+from src.components import obtener_componente
+
+MatrizTallas = obtener_componente("matriz_tallas")
+dlg = MatrizTallas(puntos)           # puntos: list[dict] con "id" y "punto"
+if dlg.exec():
+    valores = dlg.obtener_valores()  # -> {"15": 42, "15.5": 0, ...}
+```
+
+El componente `matriz_tallas` expone cada elemento de texto como **propiedad** para
+referenciarlo con precisión en el código:
+
+- `dlg.encabezado_general` — `QLabel` con el encabezado general (por defecto `TALLAS`).
+- `dlg.encabezados["15"]` — `QLabel` del encabezado del punto.
+- `dlg.celdas["15"]` — celda de captura del punto.
+- `dlg.obtener_valores()` / `dlg.establecer_valores({...})` — leer o precargar valores.
+
+---
+
 ## Respaldo y restauración
 
 **SQLite**
@@ -453,9 +498,12 @@ siacerp/
     ├── database/
     │   ├── schema.sql          # Esquema completo (SQLite y PostgreSQL)
     │   └── db_manager.py       # Conexión, esquema y migraciones
+    ├── components/             # Stack de componentes propios (catálogo)
+    │   ├── __init__.py         # registro, listar_componentes(), obtener_componente()
+    │   └── tallas_matrix.py    # MatrizTallasDialog (aprobado desde Sandbox)
     ├── models/                 # Acceso a datos (ORM ligero, capa SQL)
     ├── controllers/            # Lógica de negocio
-    ├── views/                  # Vistas Qt y diálogos
+    ├── views/                  # Vistas Qt y diálogos (incluye sandbox_view.py)
     │   └── assets/logo.png
     └── utils/
         ├── export_utils.py     # PDF / Excel (recibos y listados)
