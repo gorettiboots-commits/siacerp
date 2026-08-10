@@ -9,6 +9,7 @@ from src.controllers.inventario_controller import InventarioController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel, print_table
+from src.utils.odoo_list import OdooListView
 from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import (
     DialogBOM, DialogModelo, DialogOrdenProduccion,
@@ -112,10 +113,10 @@ class ProduccionView(QWidget):
 
         self.btn_export = QPushButton("Exportar Excel")
         self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(lambda: self._exportar_tabla(self.table, "Ordenes_Produccion"))
+        self.btn_export.clicked.connect(lambda: self._exportar_tabla(self.vista.table, "Ordenes_Produccion"))
         self.btn_print = QPushButton("Imprimir")
         self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(lambda: print_table(self.table, "Ordenes_Produccion", self))
+        self.btn_print.clicked.connect(lambda: print_table(self.vista.table, "Ordenes_Produccion", self))
 
         btn_refresh = QPushButton("Actualizar")
         btn_refresh.setObjectName("btnPrimary")
@@ -130,21 +131,69 @@ class ProduccionView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels([
+        self.vista = OdooListView([
             "Folio", "Modelo", "Variante", "Pares", "F. Inicio",
-            "F. Entrega", "Prioridad", "Estatus", "ID",
+            "F. Entrega", "Prioridad", "Estatus",
         ])
-        self.table.setColumnHidden(8, True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.doubleClicked.connect(self._ver_seguimiento)
-        layout.addWidget(self.table)
+        self.vista.set_renderers(
+            fila=self._fila_op,
+            claves=self._claves_op,
+            estilo=self._estilo_op,
+            tarjeta=self._tarjeta_op,
+            lista=self._lista_op,
+        )
+        self.vista.doubleClicked.connect(self._ver_seguimiento)
+        layout.addWidget(self.vista)
+
+    def _fila_op(self, op: dict) -> list[str]:
+        return [
+            op.get("folio", ""),
+            op.get("modelo_nombre", ""),
+            op.get("codigo_variante", ""),
+            str(op.get("total_pares", 0)),
+            op.get("fecha_inicio", "") or "",
+            op.get("fecha_entrega", "") or "",
+            op.get("prioridad", "").capitalize(),
+            op.get("estatus", "").replace("_", " ").capitalize(),
+        ]
+
+    def _claves_op(self, op: dict) -> list:
+        return [
+            op.get("folio", ""),
+            (op.get("modelo_nombre", "") or "").lower(),
+            op.get("codigo_variante", ""),
+            float(op.get("total_pares", 0) or 0),
+            op.get("fecha_inicio", "") or "",
+            op.get("fecha_entrega", "") or "",
+            op.get("prioridad", ""),
+            op.get("estatus", ""),
+        ]
+
+    def _estilo_op(self, op: dict, item, col: int) -> None:
+        if col == 7:
+            est = op.get("estatus", "")
+            if est == "terminada":
+                item.setForeground(Qt.darkGreen)
+            elif "produccion" in est:
+                item.setForeground(Qt.darkYellow)
+            elif est == "planeada":
+                item.setForeground(Qt.blue)
+
+    def _tarjeta_op(self, op: dict) -> dict:
+        est = op.get("estatus", "").replace("_", " ").capitalize()
+        return {
+            "tile": "produccion",
+            "titulo": op.get("folio", ""),
+            "subtitulo": f"{op.get('modelo_nombre', '')} · {op.get('codigo_variante', '')}",
+            "badge": f"{est} · {op.get('total_pares', 0)} pares",
+        }
+
+    def _lista_op(self, op: dict) -> tuple:
+        return (
+            f"{op.get('folio', '')} · {op.get('prioridad', '').capitalize()}",
+            f"{op.get('modelo_nombre', '')} · {op.get('codigo_variante', '')} · "
+            f"{op.get('total_pares', 0)} pares · {op.get('fecha_entrega', '') or '—'}",
+        )
 
     def _setup_tab_catalogos(self) -> None:
         layout = QVBoxLayout(self.tab_catalogos)
@@ -196,7 +245,7 @@ class ProduccionView(QWidget):
         self.table_modelos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         configurar_tabla_excel(self.table_modelos)
         self.table_modelos.doubleClicked.connect(self._editar_modelo)
-        self.table_modelos.setStyleSheet(self.table.styleSheet())
+        self.table_modelos.setStyleSheet(self.vista.table.styleSheet())
         mlayout.addWidget(self.table_modelos)
 
         # Variantes
@@ -236,7 +285,7 @@ class ProduccionView(QWidget):
         self.table_variantes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         configurar_tabla_excel(self.table_variantes)
         self.table_variantes.doubleClicked.connect(self._editar_variante)
-        self.table_variantes.setStyleSheet(self.table.styleSheet())
+        self.table_variantes.setStyleSheet(self.vista.table.styleSheet())
         vlayout.addWidget(self.table_variantes)
 
         # BOM
@@ -294,7 +343,7 @@ class ProduccionView(QWidget):
         self.table_pt.horizontalHeader().setStretchLastSection(True)
         self.table_pt.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         configurar_tabla_excel(self.table_pt)
-        self.table_pt.setStyleSheet(self.table.styleSheet())
+        self.table_pt.setStyleSheet(self.vista.table.styleSheet())
         layout.addWidget(self.table_pt)
 
     def _load_ops(self) -> None:
@@ -302,25 +351,7 @@ class ProduccionView(QWidget):
             ops = self.controller.listar_ops()
             if hasattr(self, "kanban"):
                 self.kanban.recargar()
-            self.table.setRowCount(len(ops))
-            for i, op in enumerate(ops):
-                self.table.setItem(i, 0, QTableWidgetItem(op.get("folio", "")))
-                self.table.setItem(i, 1, QTableWidgetItem(op.get("modelo_nombre", "")))
-                self.table.setItem(i, 2, QTableWidgetItem(op.get("codigo_variante", "")))
-                self.table.setItem(i, 3, QTableWidgetItem(str(op.get("total_pares", 0))))
-                self.table.setItem(i, 4, QTableWidgetItem(op.get("fecha_inicio", "") or ""))
-                self.table.setItem(i, 5, QTableWidgetItem(op.get("fecha_entrega", "") or ""))
-                self.table.setItem(i, 6, QTableWidgetItem(op.get("prioridad", "").capitalize()))
-                est_item = QTableWidgetItem(op.get("estatus", "").replace("_", " ").capitalize())
-                est = op.get("estatus", "")
-                if est == "terminada":
-                    est_item.setForeground(Qt.darkGreen)
-                elif "produccion" in est:
-                    est_item.setForeground(Qt.darkYellow)
-                elif est == "planeada":
-                    est_item.setForeground(Qt.blue)
-                self.table.setItem(i, 7, est_item)
-                self.table.setItem(i, 8, QTableWidgetItem(str(op.get("id", ""))))
+            self.vista.set_datos(ops)
             self._load_catalogos()
             self._load_pt()
         except Exception as e:
@@ -367,17 +398,7 @@ class ProduccionView(QWidget):
             return
         try:
             resultados = self.controller.buscar_ops(texto)
-            self.table.setRowCount(len(resultados))
-            for i, op in enumerate(resultados):
-                self.table.setItem(i, 0, QTableWidgetItem(op.get("folio", "")))
-                self.table.setItem(i, 1, QTableWidgetItem(op.get("modelo_nombre", "")))
-                self.table.setItem(i, 2, QTableWidgetItem(op.get("codigo_variante", "")))
-                self.table.setItem(i, 3, QTableWidgetItem(str(op.get("total_pares", 0))))
-                self.table.setItem(i, 4, QTableWidgetItem(op.get("fecha_inicio", "") or ""))
-                self.table.setItem(i, 5, QTableWidgetItem(op.get("fecha_entrega", "") or ""))
-                self.table.setItem(i, 6, QTableWidgetItem(op.get("prioridad", "")))
-                self.table.setItem(i, 7, QTableWidgetItem(op.get("estatus", "")))
-                self.table.setItem(i, 8, QTableWidgetItem(str(op.get("id", ""))))
+            self.vista.set_datos(resultados)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -419,22 +440,20 @@ class ProduccionView(QWidget):
             self._load_ops()
 
     def _ver_seguimiento(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        op = self.vista.registro_seleccionado()
+        if not op:
             QMessageBox.information(self, "Seleccionar", "Seleccione una OP.")
             return
-        op_id = int(self.table.item(row, 8).text())
-        dlg = DialogSeguimientoOP(self.controller, op_id)
+        dlg = DialogSeguimientoOP(self.controller, op["id"])
         dlg.exec()
         self._load_ops()
 
     def _avanzar_desde_tabla(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        op = self.vista.registro_seleccionado()
+        if not op:
             QMessageBox.information(self, "Seleccionar", "Seleccione una OP.")
             return
-        op_id = int(self.table.item(row, 8).text())
-        dlg = DialogSeguimientoOP(self.controller, op_id)
+        dlg = DialogSeguimientoOP(self.controller, op["id"])
         dlg.exec()
         self._load_ops()
 

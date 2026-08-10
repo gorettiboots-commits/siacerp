@@ -7,7 +7,7 @@ Aplicación de escritorio (Python + Qt) para la gestión de una fábrica de calz
 - **Interfaz:** PySide6 (Qt for Python)
 - **Base de datos:** SQLite (por defecto) o PostgreSQL
 - **Reportes:** PDF e Excel (recibos de orden de compra, listados)
-- **Desarrollado por:** Francisco Aguirre — © 2026
+- **Desarrollado por:** Mario Felipe Luevano — © 2026
 
 ---
 
@@ -30,6 +30,8 @@ Aplicación de escritorio (Python + Qt) para la gestión de una fábrica de calz
 - **Tablas estilo Excel:** en todas las tablas del sistema puede ajustar el **ancho de columnas**
   y el **alto de filas** arrastrando el borde de la cabecera, o con **doble clic** para el ajuste
   automático al contenido.
+- **Sandbox y componentes propios:** área de pruebas de controles (solo admin) y stack de
+  componentes **reutilizables** en `src/components/` con catálogo (`listar_componentes()`).
 - **Producción**
   - Modelos, variantes (color/piel), lista de materiales (BOM).
   - Órdenes de producción con matriz de tallas, kanban por estaciones,
@@ -415,6 +417,95 @@ python scripts/importar_directorio.py
 
 ---
 
+## Componentes propios del sistema
+
+Los controles se prototipan primero en el **Sandbox** (`src/views/sandbox_view.py`,
+visible solo para el rol `admin`). Cuando un control se **aprueba**, se desarrolla de
+forma **reutilizable** en `src/components/` y se registra en el catálogo. El sandbox deja
+de ser el dueño del código y pasa a ser una demo que usa el componente aprobado.
+
+### Catálogo (`src/components/__init__.py`)
+
+| Función | Descripción |
+|---|---|
+| `registrar_componente(nombre, clase, descripcion)` | Registra un componente reutilizable en el catálogo |
+| `listar_componentes()` | Lista los componentes disponibles (nombre + descripción) |
+| `obtener_componente(nombre)` | Devuelve la clase registrada o lanza `KeyError` |
+
+### Componentes disponibles
+
+| Nombre | Descripción |
+|---|---|
+| `odoo_list` | Vista de listado con alternador tabla/lista/iconos (tarjetas), columnas ordenables y selección/doble clic configurable |
+| `matriz_tallas` | Matriz de tallas por bloques: encabezado negro/texto blanco, filas de captura, navegación Enter/Tab y celdas sin flechas numéricas |
+| `complexGrid` | Tabla de datos con búsqueda, filtros, agrupación, vistas lista/iconos/tabla, acciones por registro y exportación Excel/PDF/Imprimir |
+
+### Ejemplo de uso
+
+```python
+from src.components import obtener_componente
+
+MatrizTallas = obtener_componente("matriz_tallas")
+dlg = MatrizTallas(puntos)           # puntos: list[dict] con "id" y "punto"
+if dlg.exec():
+    valores = dlg.obtener_valores()  # -> {"15": 42, "15.5": 0, ...}
+```
+
+El componente `matriz_tallas` expone cada elemento de texto como **propiedad** para
+referenciarlo con precisión en el código:
+
+- `dlg.encabezado_general` — `QLabel` con el encabezado general (por defecto `TALLAS`).
+- `dlg.encabezados["15"]` — `QLabel` del encabezado del punto.
+- `dlg.celdas["15"]` — celda de captura del punto.
+- `dlg.obtener_valores()` / `dlg.establecer_valores({...})` — leer o precargar valores.
+
+### `complexGrid`
+
+Tabla de datos con búsqueda, filtros, agrupación, vistas **lista/iconos/tabla**,
+acciones por registro y exportación **Excel/PDF/Imprimir**.
+
+```python
+from src.components import obtener_componente
+
+ComplexGrid = obtener_componente("complexGrid")
+
+grid = ComplexGrid()
+grid.set_columnas([
+    {"key": "codigo", "titulo": "Código", "ancho": 100},
+    {"key": "nombre", "titulo": "Insumo", "ancho": 240},
+    {"key": "stock_actual", "titulo": "Stock", "ancho": 90, "tipo": "numero"},
+])
+grid.set_renderers(
+    fila=lambda r: [r["codigo"], r["nombre"], r["stock_actual"]],
+    tarjeta=lambda r: {"icono": "inventario", "titulo": r["nombre"],
+                       "subtitulo": r["codigo"], "badge": str(r["stock_actual"])},
+)
+grid.set_acciones([
+    {"texto": "Ver", "icono": "ver", "color": "#4f46e5", "callback": ver},
+    {"texto": "Eliminar", "icono": "eliminar", "color": "#dc2626", "callback": eliminar},
+])
+grid.set_agrupacion("categoria")      # o None para desagrupar
+grid.set_filtros([lambda r: r["stock_actual"] > 0])
+grid.set_reporte_config({"titulo": "Reporte", "subtitulo": "..."})
+grid.set_datos(registros)             # list[dict]
+```
+
+Métodos/atributos principales:
+
+- `set_columnas([{key, titulo, ancho, tipo}])` — define columnas; `tipo: "numero"`
+  alinea a la derecha.
+- `set_renderers(fila, claves, tarjeta, lista)` — funciones de render por vista.
+- `set_acciones([{texto, icono, color, callback}])` — botones por registro (la fila
+  duplica su alto para mostrarlos).
+- `set_filtros([fn(rec) -> bool])`, `set_agrupacion(clave | None)`.
+- `set_plantilla_excel(ruta, inicio="A3")` — exportar sobre una plantilla `.xlsx`.
+- `set_reporte_config({titulo, subtitulo})` — encabezado para exportar/imprimir.
+- `buscar(texto)` / `set_buscador_visible(bool)`.
+- `datos_visibles()`, `registro_seleccionado()`, `table` (`QTableWidget`).
+- Señales: `doubleClicked`, `selectionChanged`.
+
+---
+
 ## Respaldo y restauración
 
 **SQLite**
@@ -453,9 +544,13 @@ siacerp/
     ├── database/
     │   ├── schema.sql          # Esquema completo (SQLite y PostgreSQL)
     │   └── db_manager.py       # Conexión, esquema y migraciones
+    ├── components/             # Stack de componentes propios (catálogo)
+    │   ├── __init__.py         # registro, listar_componentes(), obtener_componente()
+    │   ├── tallas_matrix.py    # MatrizTallasDialog (aprobado desde Sandbox)
+    │   └── complex_grid.py     # ComplexGrid (aprobado desde Sandbox)
     ├── models/                 # Acceso a datos (ORM ligero, capa SQL)
     ├── controllers/            # Lógica de negocio
-    ├── views/                  # Vistas Qt y diálogos
+    ├── views/                  # Vistas Qt y diálogos (incluye sandbox_view.py)
     │   └── assets/logo.png
     └── utils/
         ├── export_utils.py     # PDF / Excel (recibos y listados)
@@ -482,4 +577,9 @@ siacerp/
 
 ## Licencia
 
-Uso interno. Todos los derechos reservados — © 2026 Francisco Aguirre.
+Software propietario — **no es open source**.
+
+- **Desarrollo:** Mario Felipe Luevano.
+- **Derechos de uso y modificación:** Francisco Aguirre (titular del repositorio).
+
+Todos los derechos reservados — © 2026.

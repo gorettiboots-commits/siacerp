@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel, print_table
+from src.utils.odoo_list import OdooListView
 from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogInsumo, DialogMovimientoStock
 
@@ -109,21 +110,16 @@ class StockView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Código", "Nombre", "Categoría", "Unidad", "Stock Actual",
-            "Stock Mínimo", "ID"
-        ])
-        self.table.setColumnHidden(6, True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.doubleClicked.connect(self._editar_insumo)
-        layout.addWidget(self.table)
+        self.vista = OdooListView(["Código", "Nombre", "Categoría", "Unidad", "Stock Actual", "Stock Mínimo"])
+        self.vista.set_renderers(
+            fila=self._fila_insumo,
+            claves=self._claves_insumo,
+            estilo=self._estilo_insumo,
+            tarjeta=self._tarjeta_insumo,
+            lista=self._lista_insumo,
+        )
+        self.vista.doubleClicked.connect(self._editar_insumo)
+        layout.addWidget(self.vista)
 
     def _setup_tab_movimientos(self) -> None:
         layout = QVBoxLayout(self.tab_movimientos)
@@ -152,29 +148,56 @@ class StockView(QWidget):
         self.table_mov.horizontalHeader().setStretchLastSection(True)
         self.table_mov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         configurar_tabla_excel(self.table_mov)
-        self.table_mov.setStyleSheet(self.table.styleSheet())
+        self.table_mov.setStyleSheet(self.vista.table.styleSheet())
         layout.addWidget(self.table_mov)
 
-    def _set_fila_insumo(self, i: int, ins: dict) -> None:
+    def _fila_insumo(self, ins: dict) -> list[str]:
+        return [
+            ins.get("codigo", ""),
+            ins.get("nombre", ""),
+            ins.get("categoria", ""),
+            ins.get("unidad_medida", ""),
+            str(ins.get("stock_actual", 0)),
+            str(ins.get("stock_minimo", 0)),
+        ]
+
+    def _claves_insumo(self, ins: dict) -> list:
+        return [
+            ins.get("codigo", ""),
+            (ins.get("nombre", "") or "").lower(),
+            (ins.get("categoria", "") or "").lower(),
+            ins.get("unidad_medida", ""),
+            float(ins.get("stock_actual", 0) or 0),
+            float(ins.get("stock_minimo", 0) or 0),
+        ]
+
+    def _estilo_insumo(self, ins: dict, item, col: int) -> None:
         stock = ins.get("stock_actual", 0)
         stock_min = ins.get("stock_minimo", 0)
-        self.table.setItem(i, 0, QTableWidgetItem(ins.get("codigo", "")))
-        self.table.setItem(i, 1, QTableWidgetItem(ins.get("nombre", "")))
-        self.table.setItem(i, 2, QTableWidgetItem(ins.get("categoria", "")))
-        self.table.setItem(i, 3, QTableWidgetItem(ins.get("unidad_medida", "")))
-        self.table.setItem(i, 4, QTableWidgetItem(str(stock)))
-        self.table.setItem(i, 5, QTableWidgetItem(str(stock_min)))
-        self.table.setItem(i, 6, QTableWidgetItem(str(ins.get("id", ""))))
-        if stock <= stock_min and stock_min > 0:
-            self.table.item(i, 4).setForeground(Qt.red)
-            self.table.item(i, 5).setForeground(Qt.red)
+        if stock <= stock_min and stock_min > 0 and col in (4, 5):
+            item.setForeground(Qt.red)
+
+    def _tarjeta_insumo(self, ins: dict) -> dict:
+        stock = ins.get("stock_actual", 0)
+        unidad = ins.get("unidad_medida", "")
+        return {
+            "tile": "inventario",
+            "titulo": ins.get("nombre", ""),
+            "subtitulo": f"{ins.get('codigo', '')} · {ins.get('categoria', '')}",
+            "badge": f"{stock} {unidad}",
+        }
+
+    def _lista_insumo(self, ins: dict) -> tuple:
+        return (
+            ins.get("nombre", ""),
+            f"{ins.get('codigo', '')} · {ins.get('categoria', '')} · "
+            f"{ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')}",
+        )
 
     def _load_insumos(self) -> None:
         try:
             insumos = self.controller.listar_insumos()
-            self.table.setRowCount(len(insumos))
-            for i, ins in enumerate(insumos):
-                self._set_fila_insumo(i, ins)
+            self.vista.set_datos(insumos)
             self._load_movimientos()
         except Exception as e:
             print(f"Error: {e}")
@@ -199,9 +222,7 @@ class StockView(QWidget):
             return
         try:
             resultados = self.controller.buscar_insumos(texto)
-            self.table.setRowCount(len(resultados))
-            for i, ins in enumerate(resultados):
-                self._set_fila_insumo(i, ins)
+            self.vista.set_datos(resultados)
         except Exception as e:
             print(f"Error búsqueda: {e}")
 
@@ -211,30 +232,28 @@ class StockView(QWidget):
             self._load_insumos()
 
     def _editar_insumo(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        ins = self.vista.registro_seleccionado()
+        if not ins:
             QMessageBox.information(self, "Seleccionar", "Seleccione un insumo.")
             return
-        insumo_id = int(self.table.item(row, 6).text())
-        dlg = DialogInsumo(self.controller, insumo_id)
+        dlg = DialogInsumo(self.controller, ins["id"])
         if dlg.exec():
             self._load_insumos()
 
     def _desactivar_insumo(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        ins = self.vista.registro_seleccionado()
+        if not ins:
             return
-        nombre = self.table.item(row, 1).text()
+        nombre = ins.get("nombre", "")
         resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_insumo(int(self.table.item(row, 6).text()))
+            self.controller.desactivar_insumo(ins["id"])
             self._load_insumos()
 
     def _registrar_movimiento(self) -> None:
-        row = self.table.currentRow()
-        insumo_id = int(self.table.item(row, 6).text()) if row >= 0 else None
-        dlg = DialogMovimientoStock(self.controller, insumo_id)
+        ins = self.vista.registro_seleccionado()
+        dlg = DialogMovimientoStock(self.controller, ins["id"] if ins else None)
         if dlg.exec():
             self._load_insumos()
 
@@ -249,12 +268,12 @@ class StockView(QWidget):
         QMessageBox.warning(self, f"Alertas de Stock ({len(bajos)})", msg)
 
     def _exportar_insumos(self) -> None:
-        path = export_table_to_excel(self.table, "Insumos", self)
+        path = export_table_to_excel(self.vista.table, "Insumos", self)
         if path:
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
     def _imprimir_insumos(self) -> None:
-        print_table(self.table, "Insumos", self)
+        print_table(self.vista.table, "Insumos", self)
 
     def _exportar_movimientos(self) -> None:
         path = export_table_to_excel(self.table_mov, "Movimientos_Inventario", self)
