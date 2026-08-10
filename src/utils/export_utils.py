@@ -114,7 +114,7 @@ def _table_to_html(table: QTableWidget, titulo: str) -> str:
 {rows_html}
 </table>
 <p style='color:#94a3b8;font-size:9px;margin-top:16px;text-align:center'>
-Generado por SIAC ERP - Todos los derechos reservados - Francisco Aguirre</p>
+Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derechos reservados</p>
 </body></html>"""
 
 
