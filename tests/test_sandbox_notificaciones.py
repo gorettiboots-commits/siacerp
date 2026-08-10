@@ -29,7 +29,8 @@ def host(qapp):
     QTest.qWait(80)
     yield widget
     widget.close()
-    QTest.qWait(30)
+    widget.deleteLater()
+    QTest.qWait(60)
 
 
 @pytest.fixture(autouse=True)

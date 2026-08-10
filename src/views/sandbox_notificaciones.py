@@ -162,6 +162,27 @@ class NotificacionesFlotantes(QWidget):
         self._timer.timeout.connect(self._seguir_ancla)
         self._timer.start()
 
+        # Limpieza: detiene timers y animaciones si el objeto se cierra o es
+        # destruido (p. ej. por el GC), evitando que Qt acceda a objetivos ya
+        # borrados y corrompa el heap.
+        self.destroyed.connect(self._detener_todo)
+
+    def _detener_todo(self) -> None:
+        try:
+            self._timer.stop()
+        except RuntimeError:
+            pass
+        for anim in list(self._animaciones):
+            try:
+                anim.stop()
+            except RuntimeError:
+                pass
+        self._animaciones.clear()
+
+    def closeEvent(self, event) -> None:
+        self._detener_todo()
+        super().closeEvent(event)
+
     # ------------------------------------------------------------- Anclaje
     def set_host(self, host: QWidget) -> None:
         """Fija el widget sobre el que se dibujan las notificaciones (overlay)."""
