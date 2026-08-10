@@ -58,14 +58,15 @@ class AcercaDeDialog(QDialog):
         info.addRow("Versión:", QLabel("1.0.0"))
         info.addRow("Plataforma:", QLabel("Python 3.11+ / PySide6"))
         info.addRow("Base de Datos:", QLabel("SQLite / PostgreSQL"))
-        info.addRow("Desarrollado por:", QLabel("Francisco Aguirre"))
+        info.addRow("Desarrollado por:", QLabel("Mario Felipe Luevano"))
         layout.addLayout(info)
 
         layout.addStretch()
 
         rights = QLabel(
             "Todos los derechos reservados\n"
-            "© 2026 Francisco Aguirre")
+            "Derechos de uso y modificación: Francisco Aguirre\n"
+            "© 2026 Mario Felipe Luevano")
         rights.setAlignment(Qt.AlignCenter)
         rights.setStyleSheet("font-size: 11px; color: #94a3b8; padding: 8px; "
                              "border-top: 1px solid #e2e8f0;")

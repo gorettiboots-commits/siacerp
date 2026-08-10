@@ -2,6 +2,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from src.components.tallas_matrix import MatrizTallasDialog
+from src.views.sandbox_complex_grid import ComplexGridDemo
+from src.views.sandbox_notificaciones import NotificacionesDemo
 
 
 class SandboxView(QWidget):
@@ -36,8 +38,30 @@ class SandboxView(QWidget):
         btn_tallas.clicked.connect(self._abrir_tallas)
         layout.addWidget(btn_tallas, 0, Qt.AlignLeft)
 
+        btn_grid = QPushButton("ComplexGrid (prototipo)")
+        btn_grid.setObjectName("btnSecondary")
+        btn_grid.setMinimumHeight(42)
+        btn_grid.setCursor(Qt.PointingHandCursor)
+        btn_grid.clicked.connect(self._abrir_complex_grid)
+        layout.addWidget(btn_grid, 0, Qt.AlignLeft)
+
+        btn_notif = QPushButton("Notificaciones flotantes (prototipo)")
+        btn_notif.setObjectName("btnSecondary")
+        btn_notif.setMinimumHeight(42)
+        btn_notif.setCursor(Qt.PointingHandCursor)
+        btn_notif.clicked.connect(self._abrir_notificaciones)
+        layout.addWidget(btn_notif, 0, Qt.AlignLeft)
+
         layout.addStretch()
 
     def _abrir_tallas(self) -> None:
         dlg = MatrizTallasDialog(parent=self)
+        dlg.exec()
+
+    def _abrir_complex_grid(self) -> None:
+        dlg = ComplexGridDemo(parent=self)
+        dlg.exec()
+
+    def _abrir_notificaciones(self) -> None:
+        dlg = NotificacionesDemo(parent=self)
         dlg.exec()

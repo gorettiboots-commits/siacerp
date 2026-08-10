@@ -7,7 +7,7 @@ Aplicación de escritorio (Python + Qt) para la gestión de una fábrica de calz
 - **Interfaz:** PySide6 (Qt for Python)
 - **Base de datos:** SQLite (por defecto) o PostgreSQL
 - **Reportes:** PDF e Excel (recibos de orden de compra, listados)
-- **Desarrollado por:** Francisco Aguirre — © 2026
+- **Desarrollado por:** Mario Felipe Luevano — © 2026
 
 ---
 
@@ -438,6 +438,7 @@ de ser el dueño del código y pasa a ser una demo que usa el componente aprobad
 |---|---|
 | `odoo_list` | Vista de listado con alternador tabla/lista/iconos (tarjetas), columnas ordenables y selección/doble clic configurable |
 | `matriz_tallas` | Matriz de tallas por bloques: encabezado negro/texto blanco, filas de captura, navegación Enter/Tab y celdas sin flechas numéricas |
+| `complexGrid` | Tabla de datos con búsqueda, filtros, agrupación, vistas lista/iconos/tabla, acciones por registro y exportación Excel/PDF/Imprimir |
 
 ### Ejemplo de uso
 
@@ -457,6 +458,51 @@ referenciarlo con precisión en el código:
 - `dlg.encabezados["15"]` — `QLabel` del encabezado del punto.
 - `dlg.celdas["15"]` — celda de captura del punto.
 - `dlg.obtener_valores()` / `dlg.establecer_valores({...})` — leer o precargar valores.
+
+### `complexGrid`
+
+Tabla de datos con búsqueda, filtros, agrupación, vistas **lista/iconos/tabla**,
+acciones por registro y exportación **Excel/PDF/Imprimir**.
+
+```python
+from src.components import obtener_componente
+
+ComplexGrid = obtener_componente("complexGrid")
+
+grid = ComplexGrid()
+grid.set_columnas([
+    {"key": "codigo", "titulo": "Código", "ancho": 100},
+    {"key": "nombre", "titulo": "Insumo", "ancho": 240},
+    {"key": "stock_actual", "titulo": "Stock", "ancho": 90, "tipo": "numero"},
+])
+grid.set_renderers(
+    fila=lambda r: [r["codigo"], r["nombre"], r["stock_actual"]],
+    tarjeta=lambda r: {"icono": "inventario", "titulo": r["nombre"],
+                       "subtitulo": r["codigo"], "badge": str(r["stock_actual"])},
+)
+grid.set_acciones([
+    {"texto": "Ver", "icono": "ver", "color": "#4f46e5", "callback": ver},
+    {"texto": "Eliminar", "icono": "eliminar", "color": "#dc2626", "callback": eliminar},
+])
+grid.set_agrupacion("categoria")      # o None para desagrupar
+grid.set_filtros([lambda r: r["stock_actual"] > 0])
+grid.set_reporte_config({"titulo": "Reporte", "subtitulo": "..."})
+grid.set_datos(registros)             # list[dict]
+```
+
+Métodos/atributos principales:
+
+- `set_columnas([{key, titulo, ancho, tipo}])` — define columnas; `tipo: "numero"`
+  alinea a la derecha.
+- `set_renderers(fila, claves, tarjeta, lista)` — funciones de render por vista.
+- `set_acciones([{texto, icono, color, callback}])` — botones por registro (la fila
+  duplica su alto para mostrarlos).
+- `set_filtros([fn(rec) -> bool])`, `set_agrupacion(clave | None)`.
+- `set_plantilla_excel(ruta, inicio="A3")` — exportar sobre una plantilla `.xlsx`.
+- `set_reporte_config({titulo, subtitulo})` — encabezado para exportar/imprimir.
+- `buscar(texto)` / `set_buscador_visible(bool)`.
+- `datos_visibles()`, `registro_seleccionado()`, `table` (`QTableWidget`).
+- Señales: `doubleClicked`, `selectionChanged`.
 
 ---
 
@@ -500,7 +546,8 @@ siacerp/
     │   └── db_manager.py       # Conexión, esquema y migraciones
     ├── components/             # Stack de componentes propios (catálogo)
     │   ├── __init__.py         # registro, listar_componentes(), obtener_componente()
-    │   └── tallas_matrix.py    # MatrizTallasDialog (aprobado desde Sandbox)
+    │   ├── tallas_matrix.py    # MatrizTallasDialog (aprobado desde Sandbox)
+    │   └── complex_grid.py     # ComplexGrid (aprobado desde Sandbox)
     ├── models/                 # Acceso a datos (ORM ligero, capa SQL)
     ├── controllers/            # Lógica de negocio
     ├── views/                  # Vistas Qt y diálogos (incluye sandbox_view.py)
@@ -530,4 +577,9 @@ siacerp/
 
 ## Licencia
 
-Uso interno. Todos los derechos reservados — © 2026 Francisco Aguirre.
+Software propietario — **no es open source**.
+
+- **Desarrollo:** Mario Felipe Luevano.
+- **Derechos de uso y modificación:** Francisco Aguirre (titular del repositorio).
+
+Todos los derechos reservados — © 2026.

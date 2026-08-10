@@ -59,3 +59,13 @@ registrar_componente(
     "Matriz de tallas por bloques: encabezado negro/texto blanco, filas de "
     "captura con navegación Enter/Tab y celdas sin flechas numéricas.",
 )
+
+from src.components.complex_grid import ComplexGrid  # noqa: E402
+
+registrar_componente(
+    "complexGrid",
+    ComplexGrid,
+    "Tabla de datos con búsqueda, filtros, agrupación, vistas "
+    "lista/iconos/tabla, acciones por registro y exportación "
+    "Excel/PDF/Imprimir.",
+)
