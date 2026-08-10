@@ -37,11 +37,12 @@ class ClientesController:
 
     # ---- Pedidos de cliente ----
 
-    def listar_pedidos(self) -> list[dict]:
-        return self.pedido_model.listar()
+    def listar_pedidos(self, cliente_id: int | None = None) -> list[dict]:
+        return self.pedido_model.listar(cliente_id)
 
-    def buscar_pedidos(self, termino: str) -> list[dict]:
-        return self.pedido_model.buscar(termino)
+    def buscar_pedidos(self, termino: str,
+                       cliente_id: int | None = None) -> list[dict]:
+        return self.pedido_model.buscar(termino, cliente_id)
 
     def obtener_pedido(self, pedido_id: int) -> dict | None:
         return self.pedido_model.obtener(pedido_id)

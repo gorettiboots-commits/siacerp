@@ -17,6 +17,7 @@ from src.views.login_view import LoginView
 from src.views.clientes_view import ClientesView
 from src.views.ordenes_compra_view import OrdenesCompraView
 from src.views.produccion_view import ProduccionView
+from src.views.programacion_view import ProgramacionView
 from src.views.stock_view import StockView
 
 
@@ -168,6 +169,7 @@ class MainWindow(QMainWindow):
         self._view_produccion = ProduccionView()
         self._view_stock = StockView()
         self._view_clientes = ClientesView()
+        self._view_programacion = ProgramacionView()
 
         self._video_splash = self._create_video_splash()
         self._content_area.addWidget(self._video_splash)
@@ -175,6 +177,7 @@ class MainWindow(QMainWindow):
         self._content_area.addWidget(self._view_produccion)
         self._content_area.addWidget(self._view_stock)
         self._content_area.addWidget(self._view_clientes)
+        self._content_area.addWidget(self._view_programacion)
 
         layout.addWidget(self._nav_panel)
         layout.addWidget(self._content_area, 1)
@@ -279,6 +282,7 @@ class MainWindow(QMainWindow):
         self.nav_produccion = QPushButton("Producción")
         self.nav_stock = QPushButton("Inventario")
         self.nav_clientes = QPushButton("Clientes")
+        self.nav_programacion = QPushButton("Programación")
 
         self.nav_salir = QPushButton("Cerrar Sesión")
         self.nav_salir.setObjectName("navButton")
@@ -288,6 +292,7 @@ class MainWindow(QMainWindow):
             "produccion": self.nav_produccion,
             "inventario": self.nav_stock,
             "clientes": self.nav_clientes,
+            "programacion": self.nav_programacion,
         }
         for clave, btn in _iconos_nav.items():
             btn.setObjectName("navButton")
@@ -315,7 +320,7 @@ class MainWindow(QMainWindow):
 
         for btn, idx in [
             (self.nav_ordenes, 0), (self.nav_produccion, 1), (self.nav_stock, 2),
-            (self.nav_clientes, 3),
+            (self.nav_clientes, 3), (self.nav_programacion, 4),
         ]:
             btn.clicked.connect(lambda checked, i=idx: self._switch_view(i))
 
@@ -376,6 +381,7 @@ class MainWindow(QMainWindow):
             (self.nav_produccion, "Producción"),
             (self.nav_stock, "Inventario"),
             (self.nav_clientes, "Clientes"),
+            (self.nav_programacion, "Programación"),
         ]:
             btn.setText(texto if abierto else "")
             btn.setToolTip("" if abierto else texto)
@@ -393,14 +399,16 @@ class MainWindow(QMainWindow):
             self._splash_stack.setCurrentIndex(1)
 
     def _switch_view(self, index: int) -> None:
-        mods = ["ordenes_compra", "produccion", "inventario", "clientes"]
+        mods = ["ordenes_compra", "produccion", "inventario", "clientes", "programacion"]
         if not tiene(self._permisos, mods[index], "ver"):
             return
         self._content_area.setCurrentIndex(index + 1)
         for i, nav in enumerate([self.nav_ordenes, self.nav_produccion,
-                                 self.nav_stock, self.nav_clientes]):
+                                 self.nav_stock, self.nav_clientes,
+                                 self.nav_programacion]):
             nav.setChecked(i == index)
-        names = ["Órdenes de Compra", "Producción", "Inventario", "Clientes"]
+        names = ["Órdenes de Compra", "Producción", "Inventario", "Clientes",
+                 "Programación"]
         if index < len(names):
             self.status_bar.showMessage(f"Módulo: {names[index]}")
 
@@ -409,6 +417,7 @@ class MainWindow(QMainWindow):
         self.nav_produccion.setVisible(tiene(self._permisos, "produccion", "ver"))
         self.nav_stock.setVisible(tiene(self._permisos, "inventario", "ver"))
         self.nav_clientes.setVisible(tiene(self._permisos, "clientes", "ver"))
+        self.nav_programacion.setVisible(tiene(self._permisos, "programacion", "ver"))
         self._config_action.setEnabled(
             tiene(self._permisos, "configuracion", "ver")
             or tiene(self._permisos, "usuarios", "ver"))
@@ -416,6 +425,7 @@ class MainWindow(QMainWindow):
         self._view_produccion.set_permisos(self._permisos)
         self._view_stock.set_permisos(self._permisos)
         self._view_clientes.set_permisos(self._permisos)
+        self._view_programacion.set_permisos(self._permisos)
 
     def _on_login(self, credentials: dict) -> None:
         user = AccesosController().autenticar(

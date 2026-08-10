@@ -151,6 +151,42 @@ class DatabaseManager:
             print(f"Migración omitida: {e}")
 
         try:
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(programacion_semana)").fetchall()]
+            if 'fecha_inicio' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_semana ADD COLUMN fecha_inicio TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+                print("Migración: columna fecha_inicio agregada a programacion_semana.")
+        except Exception as e:
+            print(f"Migración fecha_inicio omitida: {e}")
+
+        try:
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(programacion_lineas)").fetchall()]
+            if 'folio_pedido' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_lineas ADD COLUMN folio_pedido TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+                print("Migración: columna folio_pedido agregada a programacion_lineas.")
+        except Exception as e:
+            print(f"Migración folio_pedido omitida: {e}")
+
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(programacion_lineas)").fetchall()]
+            if 'pedido_id' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_lineas ADD COLUMN pedido_id INTEGER")
+                print("Migración: columna pedido_id agregada a programacion_lineas.")
+            if 'detalle_pedido_id' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_lineas ADD COLUMN detalle_pedido_id INTEGER")
+                print("Migración: columna detalle_pedido_id agregada a programacion_lineas.")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración pedido_id omitida: {e}")
+
+        try:
             conn.commit()
             cursor.execute("PRAGMA foreign_keys=OFF")
 

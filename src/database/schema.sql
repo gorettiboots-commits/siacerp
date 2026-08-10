@@ -217,6 +217,64 @@ CREATE TABLE IF NOT EXISTS movimiento_inventario (
 );
 
 -- -----------------------------------------------------------
+-- 2.2 PROGRAMACIÓN SEMANAL
+-- El folio_prog es el folio de programación asignado en el
+-- Excel (diferente al folio de pedido PED-XXXX).
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS programacion_semana (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL UNIQUE,
+    fecha_inicio TEXT NOT NULL DEFAULT '',
+    orden INTEGER NOT NULL DEFAULT 0,
+    activo INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS programacion_lineas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    semana_id INTEGER NOT NULL REFERENCES programacion_semana(id) ON DELETE CASCADE,
+    orden INTEGER NOT NULL DEFAULT 0,
+    folio_prog TEXT NOT NULL DEFAULT '',
+    folio_pedido TEXT NOT NULL DEFAULT '',
+    cliente TEXT NOT NULL,
+    modelo TEXT NOT NULL DEFAULT '',
+    piel TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    fecha_prog TEXT NOT NULL DEFAULT '',
+    tubo TEXT NOT NULL DEFAULT '',
+    chinela TEXT NOT NULL DEFAULT '',
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    estatus TEXT NOT NULL DEFAULT 'programado',
+    pedido_id INTEGER REFERENCES pedidos_cliente(id),
+    detalle_pedido_id INTEGER REFERENCES detalle_pedido_cliente(id),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (semana_id) REFERENCES programacion_semana(id)
+);
+
+CREATE TABLE IF NOT EXISTS programacion_linea_tallas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    linea_id INTEGER NOT NULL REFERENCES programacion_lineas(id) ON DELETE CASCADE,
+    talla TEXT NOT NULL,
+    orden REAL NOT NULL DEFAULT 0,
+    pares INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(linea_id, talla),
+    FOREIGN KEY (linea_id) REFERENCES programacion_lineas(id)
+);
+
+-- -----------------------------------------------------------
+-- 2.3 ETIQUETAS (impresión a etiquetadora)
+-- Reemplaza el diseño de Label Matrix (etiquetaa.qdf.qdf).
+-- Guarda el diseño de la etiqueta (tamaño y campos) en JSON.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS etiqueta_config (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- -----------------------------------------------------------
 -- 3. PLANIFICACIÓN DE PRODUCCIÓN
 -- -----------------------------------------------------------
 
@@ -379,7 +437,10 @@ INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) VALUES
     ('clientes', 'crear', 'Crear clientes y pedidos de cliente'),
     ('clientes', 'editar', 'Editar clientes y pedidos'),
     ('clientes', 'eliminar', 'Desactivar clientes y cancelar pedidos'),
-    ('clientes', 'exportar', 'Exportar e imprimir pedidos');
+    ('clientes', 'exportar', 'Exportar e imprimir pedidos'),
+    ('programacion', 'ver', 'Ver el módulo de Programación Semanal'),
+    ('programacion', 'editar', 'Cambiar el estatus de líneas programadas'),
+    ('programacion', 'exportar', 'Exportar e imprimir la programación');
 
 INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
     ('Pieza', 'pieza'),

@@ -11,6 +11,7 @@ MODULOS = [
     ("produccion", "Producción"),
     ("inventario", "Inventario"),
     ("clientes", "Clientes"),
+    ("programacion", "Programación Semanal"),
     ("configuracion", "Configuración"),
     ("usuarios", "Usuarios y Accesos"),
 ]

@@ -54,27 +54,35 @@ class PedidoClienteModel:
     def __init__(self) -> None:
         self.db = DatabaseManager()
 
-    def listar(self) -> list[dict]:
-        return self.db.fetch_all(
-            """SELECT pc.*, c.nombre as cliente_nombre
-               FROM pedidos_cliente pc
-               JOIN clientes c ON c.id = pc.cliente_id
-               ORDER BY pc.created_at DESC, pc.id DESC"""
+    def listar(self, cliente_id: int | None = None) -> list[dict]:
+        query = (
+            "SELECT pc.*, c.nombre as cliente_nombre "
+            "FROM pedidos_cliente pc "
+            "JOIN clientes c ON c.id = pc.cliente_id"
         )
+        params: list = []
+        if cliente_id:
+            query += " WHERE pc.cliente_id = ?"
+            params.append(cliente_id)
+        query += " ORDER BY pc.created_at DESC, pc.id DESC"
+        return self.db.fetch_all(query, tuple(params))
 
-    def buscar(self, termino: str) -> list[dict]:
+    def buscar(self, termino: str, cliente_id: int | None = None) -> list[dict]:
         q = "%" + termino + "%"
-        return self.db.fetch_all(
-            """SELECT pc.*, c.nombre as cliente_nombre
-               FROM pedidos_cliente pc
-               JOIN clientes c ON c.id = pc.cliente_id
-               WHERE pc.folio LIKE ? OR c.nombre LIKE ? OR EXISTS (
-                    SELECT 1 FROM detalle_pedido_cliente d
-                    WHERE d.pedido_id = pc.id AND d.modelo LIKE ?
-               )
-               ORDER BY pc.created_at DESC, pc.id DESC""",
-            (q, q, q),
+        query = (
+            "SELECT pc.*, c.nombre as cliente_nombre "
+            "FROM pedidos_cliente pc "
+            "JOIN clientes c ON c.id = pc.cliente_id "
+            "WHERE (pc.folio LIKE ? OR c.nombre LIKE ? OR EXISTS ("
+            "    SELECT 1 FROM detalle_pedido_cliente d "
+            "    WHERE d.pedido_id = pc.id AND d.modelo LIKE ?))"
         )
+        params: list = [q, q, q]
+        if cliente_id:
+            query += " AND pc.cliente_id = ?"
+            params.append(cliente_id)
+        query += " ORDER BY pc.created_at DESC, pc.id DESC"
+        return self.db.fetch_all(query, tuple(params))
 
     def obtener(self, pedido_id: int) -> Optional[dict]:
         return self.db.fetch_one(
