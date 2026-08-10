@@ -255,12 +255,13 @@ class NotificacionesFlotantes(QWidget):
         return pantalla.availableGeometry()
 
     def _reflotar(self, animar: bool = True) -> None:
-        if not self._cards:
+        activas = [c for c in self._cards if not c._cerrada]
+        if not activas:
             return
         geo = self._geo_base()
         w = self._ancho
-        altos = [c.height() for c in self._cards]
-        n = len(self._cards)
+        altos = [c.height() for c in activas]
+        n = len(activas)
         total = sum(altos) + self._separacion * (n - 1)
         m = self._margen
 
@@ -279,7 +280,7 @@ class NotificacionesFlotantes(QWidget):
         h0 = total + 2 * _PAD
         self.setGeometry(x0, y0, w0, h0)
 
-        for i, card in enumerate(self._cards):
+        for i, card in enumerate(activas):
             y = _PAD + sum(altos[:i]) + self._separacion * i
             destino = QRect(_PAD, y, w, altos[i])
             if animar and card.geometry() != destino:
