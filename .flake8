@@ -1,0 +1,3 @@
+[flake8]
+exclude = .git,.venv,__pycache__,.pytest_cache,site-packages,lib
+max-line-length = 127
