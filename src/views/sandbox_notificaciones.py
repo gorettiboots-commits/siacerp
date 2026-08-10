@@ -227,9 +227,13 @@ class NotificacionesFlotantes(QWidget):
         self._animaciones.extend([anim_pos, anim_op])
 
         # El conteo inicia después de la animación de entrada: el tiempo visible
-        # de la tarjeta es realmente `duracion`.
+        # de la tarjeta es realmente `duracion`. El timer es hijo de la tarjeta
+        # para que se destruya con ella y nunca dispare sobre una ya borrada.
         if duracion and duracion > 0:
-            QTimer.singleShot(int(duracion * 1000) + 240, card.cerrar)
+            timer = QTimer(card)
+            timer.setSingleShot(True)
+            timer.timeout.connect(card.cerrar)
+            timer.start(int(duracion * 1000) + 240)
 
     def cerrar_todas(self) -> None:
         for card in list(self._cards):
@@ -320,6 +324,11 @@ class NotificacionesFlotantes(QWidget):
         anim_pos.setEasingCurve(QEasingCurve.InCubic)
 
         def _limpiar():
+            # Detener las animaciones antes de borrar la tarjeta: si el efecto
+            # de opacidad aún está en vuelo al destruirla, Qt corrompe el heap
+            # y el proceso muere (segfault) en la siguiente creación de widget.
+            anim_op.stop()
+            anim_pos.stop()
             if card in self._cards:
                 self._cards.remove(card)
             card.deleteLater()
