@@ -1,4 +1,4 @@
-from src.models.catalogos_model import ColoresModel, PuntosModel
+from src.models.catalogos_model import ColoresModel, TallasModel
 from src.models.inventario_model import (
     InsumoModel, ListaMaterialesModel, MovimientoInventarioModel,
 )
@@ -11,32 +11,32 @@ class InventarioController:
         self.bom_model = ListaMaterialesModel()
         self.mov_model = MovimientoInventarioModel()
         self.unidades_model = UnidadesMedidaModel()
-        self.puntos_model = PuntosModel()
+        self.tallas_model = TallasModel()
         self.colores_model = ColoresModel()
 
     def existe_codigo_insumo(self, codigo: str) -> bool:
         return self.insumo_model.existe_codigo(codigo)
 
-    def listar_puntos(self, solo_activos: bool = True) -> list[dict]:
-        return self.puntos_model.listar(solo_activos)
+    def listar_tallas(self, solo_activos: bool = True) -> list[dict]:
+        return self.tallas_model.listar(solo_activos)
 
-    def crear_punto(self, punto: str, orden: int) -> int:
-        return self.puntos_model.crear(punto, orden)
+    def crear_talla(self, talla: str) -> int:
+        return self.tallas_model.crear(talla)
 
-    def actualizar_punto(self, punto_id: int, punto: str, orden: int) -> None:
-        self.puntos_model.actualizar(punto_id, punto, orden)
+    def actualizar_talla(self, talla_id: int, talla: str) -> None:
+        self.tallas_model.actualizar(talla_id, talla)
 
-    def desactivar_punto(self, punto_id: int) -> None:
-        self.puntos_model.desactivar(punto_id)
+    def desactivar_talla(self, talla_id: int) -> None:
+        self.tallas_model.desactivar(talla_id)
 
-    def activar_punto(self, punto_id: int) -> None:
-        self.puntos_model.activar(punto_id)
+    def activar_talla(self, talla_id: int) -> None:
+        self.tallas_model.activar(talla_id)
 
-    def vaciar_puntos(self) -> int:
-        return self.puntos_model.vaciar()
+    def vaciar_tallas(self) -> int:
+        return self.tallas_model.vaciar()
 
-    def generar_puntos(self, desde: float, hasta: float) -> int:
-        return self.puntos_model.generar(desde, hasta)
+    def generar_tallas(self, desde: float, hasta: float) -> int:
+        return self.tallas_model.generar(desde, hasta)
 
     def listar_colores(self, solo_activos: bool = True) -> list[dict]:
         return self.colores_model.listar(solo_activos)

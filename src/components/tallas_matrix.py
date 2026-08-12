@@ -1,6 +1,6 @@
 """Componente reutilizable del sistema: matriz de tallas por bloques.
 
-Aprobado desde el Sandbox. Muestra los puntos en bloques: cada bloque tiene
+Aprobado desde el Sandbox. Muestra las tallas en bloques: cada bloque tiene
 una fila de encabezado (fondo negro, texto blanco) y una fila de captura.
 La navegación entre celdas se hace con Enter o Tabulador y las celdas no
 usan controles de flechas numéricas.
@@ -9,9 +9,9 @@ Uso:
     from src.components import obtener_componente
 
     MatrizTallas = obtener_componente("matriz_tallas")
-    dlg = MatrizTallas(puntos)          # puntos: list[dict] con "id" y "punto"
+    dlg = MatrizTallas(tallas)          # tallas: list[dict] con "id" y "talla"
     if dlg.exec():
-        valores = dlg.obtener_valores()  # -> {"15": 42, "15.5": 0, ...}
+        valores = dlg.obtener_valores()  # -> {"22": 42, "22.5": 0, ...}
 """
 
 from functools import partial
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton, QTableWidget, QVBoxLayout, QWidget,
 )
 
-from src.models.catalogos_model import PuntosModel
+from src.models.catalogos_model import TallasModel
 
 
 class CeldaMatriz(QLineEdit):
@@ -58,29 +58,29 @@ class CeldaMatriz(QLineEdit):
 class MatrizTallasDialog(QDialog):
     """Matriz de tallas por bloques con encabezados negros y captura por celdas.
 
-    Propiedades públicas (referencia directa por punto):
-        puntos              list[dict]                          — datos usados.
+    Propiedades públicas (referencia directa por talla):
+        tallas              list[dict]                          — datos usados.
         encabezado_general  QLabel                              — encabezado general.
-        encabezados         dict[str, QLabel]                   — encabezado por punto.
-        celdas              dict[str, CeldaMatriz]              — celda de captura por punto.
+        encabezados         dict[str, QLabel]                   — encabezado por talla.
+        celdas              dict[str, CeldaMatriz]              — celda de captura por talla.
         bloques             list[list[tuple[dict, CeldaMatriz]]] — estructura por bloque.
 
     Métodos públicos:
-        obtener_valores() -> dict[str, int]  — valores capturados por punto.
-        establecer_valores(dict[str, int])   — precarga valores por punto.
+        obtener_valores() -> dict[str, int]  — valores capturados por talla.
+        establecer_valores(dict[str, int])   — precarga valores por talla.
     """
 
     NEGRO = "#111827"
     COLUMNAS = 11
 
-    def __init__(self, puntos: list[dict] | None = None, titulo: str = "TALLAS",
+    def __init__(self, tallas: list[dict] | None = None, titulo: str = "TALLAS",
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.titulo = titulo
         self.setWindowTitle("Controles de tallas")
         self.setModal(True)
         self.resize(720, 480)
-        self.puntos = list(puntos) if puntos is not None else PuntosModel().listar()
+        self.tallas = list(tallas) if tallas is not None else TallasModel().listar()
         self.bloques: list[list[tuple[dict, CeldaMatriz]]] = []
         self._celdas: list[CeldaMatriz] = []
         self.encabezado_general: QLabel | None = None
@@ -114,8 +114,8 @@ class MatrizTallasDialog(QDialog):
         )
         layout.addWidget(self.encabezado_general)
 
-        if not self.puntos:
-            layout.addWidget(QLabel("No hay puntos configurados en el sistema."))
+        if not self.tallas:
+            layout.addWidget(QLabel("No hay tallas configuradas en el sistema."))
         else:
             self.tabla = self._crear_matriz()
             layout.addWidget(self.tabla, 1)
@@ -152,13 +152,13 @@ class MatrizTallasDialog(QDialog):
         return lbl
 
     def _crear_matriz(self) -> QTableWidget:
-        bloques_puntos = [
-            self.puntos[i:i + self.COLUMNAS]
-            for i in range(0, len(self.puntos), self.COLUMNAS)
+        bloques_tallas = [
+            self.tallas[i:i + self.COLUMNAS]
+            for i in range(0, len(self.tallas), self.COLUMNAS)
         ]
 
         tabla = QTableWidget()
-        tabla.setRowCount(len(bloques_puntos) * 2)
+        tabla.setRowCount(len(bloques_tallas) * 2)
         tabla.setColumnCount(self.COLUMNAS)
         tabla.verticalHeader().setVisible(False)
         tabla.horizontalHeader().setVisible(False)
@@ -170,18 +170,18 @@ class MatrizTallasDialog(QDialog):
             tabla.setColumnWidth(c, 60)
         tabla.setFixedHeight(tabla.rowCount() * 38 + 6)
 
-        for b, puntos_bloque in enumerate(bloques_puntos):
+        for b, tallas_bloque in enumerate(bloques_tallas):
             fila_encabezado = b * 2
             fila_captura = b * 2 + 1
             bloque: list[tuple[dict, CeldaMatriz]] = []
-            for c, p in enumerate(puntos_bloque):
-                etiqueta = self._etiqueta_encabezado(p["punto"])
+            for c, p in enumerate(tallas_bloque):
+                etiqueta = self._etiqueta_encabezado(p["talla"])
                 tabla.setCellWidget(fila_encabezado, c, etiqueta)
-                self.encabezados[p["punto"]] = etiqueta
+                self.encabezados[p["talla"]] = etiqueta
 
                 celda = CeldaMatriz()
                 tabla.setCellWidget(fila_captura, c, celda)
-                self.celdas[p["punto"]] = celda
+                self.celdas[p["talla"]] = celda
                 self._celdas.append(celda)
                 bloque.append((p, celda))
             self.bloques.append(bloque)
@@ -198,16 +198,16 @@ class MatrizTallasDialog(QDialog):
         siguiente.selectAll()
 
     def obtener_valores(self) -> dict[str, int]:
-        """Devuelve los valores capturados por punto (los vacíos como 0)."""
+        """Devuelve los valores capturados por talla (los vacíos como 0)."""
         return {
-            punto: int(celda.text().strip() or 0)
-            for punto, celda in self.celdas.items()
+            talla: int(celda.text().strip() or 0)
+            for talla, celda in self.celdas.items()
         }
 
     def establecer_valores(self, valores: dict[str, int]) -> None:
-        """Precarga valores por punto (acepta clave str o int)."""
-        for punto, valor in valores.items():
-            celda = self.celdas.get(str(punto))
+        """Precarga valores por talla (acepta clave str o int)."""
+        for talla, valor in valores.items():
+            celda = self.celdas.get(str(talla))
             if celda is not None:
                 celda.setText(str(int(valor)))
 

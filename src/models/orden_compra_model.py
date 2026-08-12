@@ -193,33 +193,35 @@ class OrdenCompraModel:
                ORDER BY d.id""",
             (oc_id,),
         )
-        return self._con_puntos(detalle)
+        return self._con_tallas(detalle)
 
-    def _con_puntos(self, detalle: list[dict]) -> list[dict]:
+    def _con_tallas(self, detalle: list[dict]) -> list[dict]:
         if not detalle:
             return detalle
         ids = ",".join(str(d["id"]) for d in detalle)
         rows = self.db.fetch_all(
-            f"""SELECT dt.detalle_id, dt.pares, pc.punto, pc.id as punto_id, pc.orden
+            f"""SELECT dt.detalle_id, dt.pares, tc.talla, tc.id as talla_id
                 FROM detalle_orden_compra_puntos dt
-                JOIN puntos_catalogo pc ON pc.id = dt.punto_id
+                JOIN tallas_catalogo tc ON tc.id = dt.talla_id
                 WHERE dt.detalle_id IN ({ids})
-                ORDER BY pc.orden"""
+                ORDER BY CAST(tc.talla AS REAL)"""
         )
         por_detalle: dict[int, list[dict]] = {}
         for r in rows:
             por_detalle.setdefault(r["detalle_id"], []).append({
-                "punto_id": r["punto_id"],
-                "punto": r["punto"],
+                "talla_id": r["talla_id"],
+                "talla": r["talla"],
                 "pares": r["pares"],
-                "orden": r["orden"],
             })
         for d in detalle:
-            d["puntos"] = por_detalle.get(d["id"], [])
+            d["tallas"] = por_detalle.get(d["id"], [])
         return detalle
 
-    def listar_puntos(self) -> list[dict]:
-        return self.db.fetch_all("SELECT * FROM puntos_catalogo WHERE activo = 1 ORDER BY orden")
+    def listar_tallas(self) -> list[dict]:
+        return self.db.fetch_all(
+            "SELECT * FROM tallas_catalogo WHERE activo = 1 "
+            "ORDER BY CAST(talla AS REAL)")
+
 
     def crear(self, folio: str, observaciones: str = "", proveedor_id: int | None = None,
               metodo_pago: str = "Transferencia bancaria", solo_remision: bool = False,
@@ -241,8 +243,8 @@ class OrdenCompraModel:
         for p in (puntos or []):
             if p.get("pares", 0) > 0:
                 self.db.execute(
-                    "INSERT OR REPLACE INTO detalle_orden_compra_puntos (detalle_id, punto_id, pares) VALUES (?, ?, ?)",
-                    (detalle_id, p["punto_id"], p["pares"]),
+                    "INSERT OR REPLACE INTO detalle_orden_compra_puntos (detalle_id, talla_id, pares) VALUES (?, ?, ?)",
+                    (detalle_id, p["talla_id"], p["pares"]),
                 )
         return detalle_id
 

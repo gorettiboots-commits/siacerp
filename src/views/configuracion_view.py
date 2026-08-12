@@ -20,8 +20,8 @@ _SECCIONES = [
      "Catálogo de unidades usadas en insumos y órdenes de compra."),
     ("areas", "Áreas de Producción",
      "Estaciones del taller por las que avanza la producción."),
-    ("puntos", "Puntos de Variante",
-     "Catálogo de puntos, con generación en serie."),
+    ("tallas", "Tallas de Variante",
+     "Catálogo unificado de tallas/puntos, con generación en serie (corrida)."),
     ("colores", "Colores de Variante",
      "Colores y códigos cortos para variantes de insumo."),
     ("usuarios", "Usuarios y Accesos",
@@ -125,7 +125,7 @@ class DialogConfiguracion(QDialog):
         secciones = list(_SECCIONES)
         if not tiene(self.permisos, "configuracion", "ver"):
             secciones = [s for s in secciones if s[0] != "unidades"
-                         and s[0] != "areas" and s[0] != "puntos"
+                         and s[0] != "areas" and s[0] != "tallas"
                          and s[0] != "colores"]
         if not tiene(self.permisos, "usuarios", "ver"):
             secciones = [s for s in secciones if s[0] != "usuarios"]
@@ -191,8 +191,8 @@ class DialogConfiguracion(QDialog):
             return _TabUnidades(self.controller, self.permisos)
         if key == "areas":
             return _TabEstaciones(self.prod_controller, self.permisos)
-        if key == "puntos":
-            return _TabPuntos(self.inv_controller, self.permisos)
+        if key == "tallas":
+            return _TabTallas(self.inv_controller, self.permisos)
         if key == "colores":
             return _TabColores(self.inv_controller, self.permisos)
         if key == "usuarios":
@@ -563,7 +563,7 @@ class _DialogEstacion(QDialog):
         self.accept()
 
 
-class _TabPuntos(QWidget):
+class _TabTallas(QWidget):
     def __init__(self, controller: InventarioController, permisos=None) -> None:
         super().__init__()
         self.controller = controller
@@ -575,33 +575,34 @@ class _TabPuntos(QWidget):
         layout.setSpacing(12)
 
         hint = QLabel(
-            "Catálogo de puntos disponibles para generar variantes de insumo "
-            "(se usan en los selectores 'desde' y 'hasta' de la captura y "
-            "como tallas/puntos en las órdenes de compra)."
+            "Catálogo unificado de tallas/puntos (RD-1). Configure la corrida "
+            "que necesita: genere en serie 'de X a Y talla' (pasos de medio "
+            "punto). El orden se deriva del valor numérico (ya no existe el "
+            "campo 'orden'). Las tallas activas se usan en compras y producción."
         )
         hint.setStyleSheet("color: #64748b; font-size: 12px;")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        serie_box = QGroupBox("Generar puntos en serie")
+        serie_box = QGroupBox("Generar tallas en serie (corrida)")
         serie_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
         serie_layout = QHBoxLayout(serie_box)
         serie_layout.setSpacing(8)
 
-        serie_layout.addWidget(QLabel("Desde:"))
+        serie_layout.addWidget(QLabel("De talla:"))
         self.spn_serie_desde = QDoubleSpinBox()
         self.spn_serie_desde.setRange(0, 99)
         self.spn_serie_desde.setSingleStep(0.5)
         self.spn_serie_desde.setDecimals(1)
-        self.spn_serie_desde.setValue(15)
+        self.spn_serie_desde.setValue(22)
         serie_layout.addWidget(self.spn_serie_desde)
 
-        serie_layout.addWidget(QLabel("hasta:"))
+        serie_layout.addWidget(QLabel("a talla:"))
         self.spn_serie_hasta = QDoubleSpinBox()
         self.spn_serie_hasta.setRange(0, 99)
         self.spn_serie_hasta.setSingleStep(0.5)
         self.spn_serie_hasta.setDecimals(1)
-        self.spn_serie_hasta.setValue(17)
+        self.spn_serie_hasta.setValue(31)
         serie_layout.addWidget(self.spn_serie_hasta)
 
         btn_generar = QPushButton("Generar")
@@ -612,8 +613,8 @@ class _TabPuntos(QWidget):
         layout.addWidget(serie_box)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["ID", "Punto", "Orden"])
+        self.table.setColumnCount(2)
+        self.table.setHorizontalHeaderLabels(["ID", "Talla"])
         self.table.setColumnHidden(0, True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         configurar_tabla_excel(self.table)
@@ -622,7 +623,7 @@ class _TabPuntos(QWidget):
         self.table.doubleClicked.connect(self._editar)
         layout.addWidget(self.table)
 
-        self.btn_add = QPushButton("+ Nuevo Punto")
+        self.btn_add = QPushButton("+ Nueva Talla")
         self.btn_add.setObjectName("btnPrimary")
         self.btn_add.clicked.connect(self._crear)
         self.btn_edit = QPushButton("Editar")
@@ -654,12 +655,11 @@ class _TabPuntos(QWidget):
         layout.addLayout(toolbar)
 
     def recargar(self) -> None:
-        puntos = self.controller.listar_puntos(solo_activos=False)
-        self.table.setRowCount(len(puntos))
-        for i, p in enumerate(puntos):
+        tallas = self.controller.listar_tallas(solo_activos=False)
+        self.table.setRowCount(len(tallas))
+        for i, p in enumerate(tallas):
             self.table.setItem(i, 0, QTableWidgetItem(str(p["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(p["punto"]))
-            self.table.setItem(i, 2, QTableWidgetItem(str(p["orden"])))
+            self.table.setItem(i, 1, QTableWidgetItem(p["talla"]))
             if not p["activo"]:
                 for col in range(self.table.columnCount()):
                     item = self.table.item(i, col)
@@ -671,34 +671,34 @@ class _TabPuntos(QWidget):
         hasta = self.spn_serie_hasta.value()
         if desde > hasta:
             desde, hasta = hasta, desde
-        creados = self.controller.generar_puntos(desde, hasta)
-        total = len(self.controller.listar_puntos(solo_activos=False))
+        creados = self.controller.generar_tallas(desde, hasta)
+        total = len(self.controller.listar_tallas(solo_activos=False))
         QMessageBox.information(
-            self, "Puntos generados",
-            f"Puntos {desde:g} a {hasta:g} listos.\n"
-            f"{creados} nuevos; el resto ya existía (se reactivaron).\n"
+            self, "Tallas generadas",
+            f"Corrida de talla {desde:g} a {hasta:g} lista.\n"
+            f"{creados} nuevas; el resto ya existía (se reactivaron).\n"
             f"Total en catálogo: {total}.",
         )
         self.recargar()
 
     def _crear(self) -> None:
-        dlg = _DialogPunto(self.controller)
+        dlg = _DialogTalla(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _editar(self) -> None:
         row = self.table.currentRow()
         if row < 0:
-            QMessageBox.information(self, "Seleccione", "Seleccione un punto de la lista.")
+            QMessageBox.information(self, "Seleccione", "Seleccione una talla de la lista.")
             return
-        dlg = _DialogPunto(self.controller, int(self.table.item(row, 0).text()))
+        dlg = _DialogTalla(self.controller, int(self.table.item(row, 0).text()))
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _filas_seleccionadas(self) -> list[int]:
         filas = sorted({i.row() for i in self.table.selectedIndexes()})
         if not filas:
-            QMessageBox.information(self, "Seleccione", "Seleccione al menos un punto de la lista.")
+            QMessageBox.information(self, "Seleccione", "Seleccione al menos una talla de la lista.")
         return filas
 
     def _desactivar(self) -> None:
@@ -708,12 +708,12 @@ class _TabPuntos(QWidget):
         nombres = ", ".join(self.table.item(r, 1).text() for r in filas)
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar los puntos seleccionados?\n{nombres}",
+            f"¿Desactivar las tallas seleccionadas?\n{nombres}",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
             for r in filas:
-                self.controller.desactivar_punto(int(self.table.item(r, 0).text()))
+                self.controller.desactivar_talla(int(self.table.item(r, 0).text()))
             self.recargar()
 
     def _activar(self) -> None:
@@ -721,43 +721,44 @@ class _TabPuntos(QWidget):
         if not filas:
             return
         for r in filas:
-            self.controller.activar_punto(int(self.table.item(r, 0).text()))
+            self.controller.activar_talla(int(self.table.item(r, 0).text()))
         self.recargar()
 
     def _vaciar(self) -> None:
-        total = len(self.controller.listar_puntos(solo_activos=False))
+        total = len(self.controller.listar_tallas(solo_activos=False))
         if total == 0:
-            QMessageBox.information(self, "Lista vacía", "El catálogo de puntos ya está vacío.")
+            QMessageBox.information(self, "Lista vacía", "El catálogo de tallas ya está vacío.")
             return
         resp = QMessageBox.warning(
             self, "Vaciar lista",
-            f"Esto eliminará TODOS los puntos del catálogo ({total}).\n"
-            "Los puntos usados en órdenes de compra no se podrán eliminar.\n\n¿Continuar?",
+            f"Esto eliminará TODAS las tallas del catálogo ({total}).\n"
+            "Las tallas usadas en órdenes de compra o producción no se podrán "
+            "eliminar.\n\n¿Continuar?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
             try:
-                eliminados = self.controller.vaciar_puntos()
+                eliminados = self.controller.vaciar_tallas()
             except Exception as e:
                 QMessageBox.warning(self, "Error",
                     f"No se pudo vaciar la lista:\n{e}\n\n"
-                    "Verifique que ningún punto esté en uso en órdenes de compra.")
+                    "Verifique que ninguna talla esté en uso en órdenes.")
                 return
             QMessageBox.information(self, "Lista vaciada",
-                f"Se eliminaron {eliminados} puntos del catálogo.")
+                f"Se eliminaron {eliminados} tallas del catálogo.")
             self.recargar()
 
 
-class _DialogPunto(QDialog):
-    def __init__(self, controller: InventarioController, punto_id: int | None = None) -> None:
+class _DialogTalla(QDialog):
+    def __init__(self, controller: InventarioController, talla_id: int | None = None) -> None:
         super().__init__()
         self.controller = controller
-        self.punto_id = punto_id
-        self.setWindowTitle("Nuevo Punto" if punto_id is None else "Editar Punto")
+        self.talla_id = talla_id
+        self.setWindowTitle("Nueva Talla" if talla_id is None else "Editar Talla")
         self.setMinimumWidth(380)
         self.setModal(True)
         self._setup_ui()
-        if punto_id:
+        if talla_id:
             self._load_data()
 
     def _setup_ui(self) -> None:
@@ -766,12 +767,9 @@ class _DialogPunto(QDialog):
 
         form = QFormLayout()
         form.setSpacing(10)
-        self.txt_punto = QLineEdit()
-        self.txt_punto.setPlaceholderText("Ej: 00, 13")
-        self.spn_orden = QSpinBox()
-        self.spn_orden.setRange(0, 999)
-        form.addRow("Punto:", self.txt_punto)
-        form.addRow("Orden:", self.spn_orden)
+        self.txt_talla = QLineEdit()
+        self.txt_talla.setPlaceholderText("Ej: 22, 22.5, 00")
+        form.addRow("Talla:", self.txt_talla)
         layout.addLayout(form)
 
         btns = QHBoxLayout()
@@ -787,22 +785,21 @@ class _DialogPunto(QDialog):
         layout.addLayout(btns)
 
     def _load_data(self) -> None:
-        for p in self.controller.listar_puntos(solo_activos=False):
-            if p["id"] == self.punto_id:
-                self.txt_punto.setText(p["punto"])
-                self.spn_orden.setValue(p["orden"])
+        for p in self.controller.listar_tallas(solo_activos=False):
+            if p["id"] == self.talla_id:
+                self.txt_talla.setText(p["talla"])
                 break
 
     def _save(self) -> None:
-        punto = self.txt_punto.text().strip()
-        if not punto:
-            QMessageBox.warning(self, "Campo requerido", "El punto es obligatorio.")
+        talla = self.txt_talla.text().strip()
+        if not talla:
+            QMessageBox.warning(self, "Campo requerido", "La talla es obligatoria.")
             return
         try:
-            if self.punto_id:
-                self.controller.actualizar_punto(self.punto_id, punto, self.spn_orden.value())
+            if self.talla_id:
+                self.controller.actualizar_talla(self.talla_id, talla)
             else:
-                self.controller.crear_punto(punto, self.spn_orden.value())
+                self.controller.crear_talla(talla)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
             return

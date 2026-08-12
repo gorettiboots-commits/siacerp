@@ -89,7 +89,7 @@ class ProduccionController:
         self.variante_model.desactivar(variante_id)
 
     def listar_tallas(self) -> list[dict]:
-        return self.op_model.listar_tallas_corrida()
+        return self.op_model.listar_tallas()
 
     # -- BOM (Lista de Materiales) --
     def obtener_bom(self, modelo_id: int) -> list[dict]:

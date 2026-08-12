@@ -16,7 +16,7 @@ _TILES = {
           <path d="M46 21h5v11h-5z" fill="#ffffff"/>
           <path d="M13 34l6-11 6 11 8-11 6 11h4v12H13z" fill="#ffffff"/>
         </svg>""",
-    "puntos": """
+    "tallas": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <rect x="4" y="4" width="56" height="56" rx="14" fill="#0d9488"/>
           <circle cx="23" cy="24" r="4.5" fill="#ffffff"/>

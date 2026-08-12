@@ -72,8 +72,8 @@ class OrdenesCompraController:
     def obtener_detalle_orden(self, oc_id: int) -> list[dict]:
         return self.oc_model.obtener_detalle(oc_id)
 
-    def listar_puntos(self) -> list[dict]:
-        return self.oc_model.listar_puntos()
+    def listar_tallas(self) -> list[dict]:
+        return self.oc_model.listar_tallas()
 
     def crear_orden(self, folio: str, detalle: list[dict] | None = None,
                     observaciones: str = "", proveedor_id: int | None = None,
@@ -86,7 +86,7 @@ class OrdenesCompraController:
                 self.oc_model.agregar_detalle(
                     oc_id, d["insumo_id"], d["cantidad"], d["precio"],
                     d.get("proveedor_id", proveedor_id),
-                    d.get("puntos"),
+                    d.get("tallas"),
                 )
         total = sum(d["cantidad"] * d["precio"] for d in (detalle or []))
         self.oc_model.db.execute(
