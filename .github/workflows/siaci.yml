@@ -2,9 +2,9 @@ name: SIAC
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "productivo1", "main" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "productivo1", "main" ]
 
 permissions:
   contents: read

@@ -65,7 +65,7 @@ requieren tarea aprobada y migración.
 | **RD-1** | **Unificar puntos y tallas** en un solo catálogo de medida configurable. Son la misma cosa; en calzado se avanza de medio en medio punto. Se configura con generación en serie "de X a Y punto". Se **elimina el campo `orden`** (con valores numéricos el orden es obvio). Caso particular: la **compra de suela** se maneja por **puntos cerrados** (justifica que el catálogo sea configurable). | ⏳ Pendiente (migración + vistas) |
 | **RD-2** | **Módulo Clientes y Pedidos** (próxima versión): pedidos de clientes que pueden **programarse** e integrarse en una **programación semanal**; la programación semanal alimentará las **órdenes de producción**. Alcance aún por definir con el cliente. Traerá sus propios estatus. | 🚧 Próximamente |
 | **RD-3** | **Diseñador e impresor de etiquetas**: herramienta existente en otra terminal de trabajo (fuera de este repositorio por ahora). | 🔧 Externo |
-| **RD-4** | **Git**: se hará merge de `productivo1` → `main`; `main` = versión oficial hasta el primer release. Después: **rama por tarea** + PR hacia `productivo1` y `main`. CI se actualiza para escuchar ambas ramas. | ⏳ Pendiente (acción git) |
+| **RD-4** | **Git**: se hizo merge de `productivo1` → `main`; `main` = versión oficial hasta el primer release. Después: **rama por tarea** + PR hacia `productivo1` y `main`. El CI escucha ambas ramas. | ✅ Aplicada (commit e1341c0) |
 | **RD-5** | **Motor BD**: **PostgreSQL** como motor de producción; **SQLite** se conserva para desarrollo/local (se mantiene compatibilidad dual). Futuro: **Supabase** para sincronización de datos entre estaciones de trabajo. | 🎯 PostgreSQL ahora; Supabase futuro |
 | **RD-6** | **Pruebas**: todo control/componente aprobado desde el Sandbox **DEBE** incluir su prueba `pytest` antes de registrarse en el catálogo. | ✅ Vigente (regla C-07) |
 | **RD-7** | **Archivos de raíz** (`sitio web/`, `video.mp4`, `default.jpg`, `logo.png`) son **parte del proyecto** y se documentan (sección 3.1). `opencode.json` contiene **credenciales** y NO se sube a git. | ✅ Documentado |
@@ -433,11 +433,10 @@ lo apruebe.
 
 ## 11. Git y repositorio
 
-- **[REGLAS G-01]** **Flujo git (decisión RD-4):** se hará merge de
-  `productivo1` → `main`; `main` será la **versión oficial** hasta el primer
+- **[REGLAS G-01]** **Flujo git (decisión RD-4):** se hizo merge de
+  `productivo1` → `main`; `main` es la **versión oficial** hasta el primer
   release. Después del release: **rama por tarea** (`feature/nombre`) + PR
-  hacia `productivo1` y `main`. El CI se actualizará para escuchar
-  `productivo1` y `main` (hoy escucha solo `main`).
+  hacia `productivo1` y `main`. El CI escucha `productivo1` y `main`.
 - **[REGLAS G-02]** **PROHIBIDO** subir `config.ini` (puede contener
   credenciales), `goretti_erp.db` o datos de producción.
 - **[REGLAS G-03]** Mensajes de commit en español, descriptivos del cambio
