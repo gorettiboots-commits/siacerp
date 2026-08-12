@@ -24,6 +24,9 @@ Ordenes_Compra.xlsx
 Movimientos_Inventario.xlsx
 *.pdf
 
+# Capturas de preview (pruebas de UI)
+ui_preview/
+
 # Entorno / editor
 .vscode/
 .idea/

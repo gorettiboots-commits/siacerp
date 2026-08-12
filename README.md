@@ -66,8 +66,8 @@ erDiagram
     modelos ||--o{ variantes : "modelo_id"
     modelos ||--o{ lista_materiales : "modelo_id"
     insumos ||--o{ lista_materiales : "insumo_id"
-    tallas_corrida ||--o{ matriz_tallas_op : "talla_id"
-    tallas_corrida ||--o{ inventario_pt : "talla_id"
+    tallas_catalogo ||--o{ matriz_tallas_op : "talla_id"
+    tallas_catalogo ||--o{ inventario_pt : "talla_id"
     variantes ||--o{ ordenes_produccion : "variante_id"
     variantes ||--o{ inventario_pt : "variante_id"
     proveedores ||--o{ proveedor_insumos : "proveedor_id"
@@ -77,7 +77,7 @@ erDiagram
     insumos ||--o{ detalle_orden_compra : "insumo_id"
     proveedores ||--o{ detalle_orden_compra : "proveedor_id"
     detalle_orden_compra ||--o{ detalle_orden_compra_puntos : "detalle_id"
-    puntos_catalogo ||--o{ detalle_orden_compra_puntos : "punto_id"
+    tallas_catalogo ||--o{ detalle_orden_compra_puntos : "talla_id"
     insumos ||--o{ movimiento_inventario : "insumo_id"
     ordenes_produccion ||--o{ matriz_tallas_op : "orden_produccion_id"
     ordenes_produccion ||--o{ seguimiento_produccion : "orden_produccion_id"
@@ -143,13 +143,12 @@ erDiagram
     detalle_orden_compra_puntos {
         int id PK
         int detalle_id FK
-        int punto_id FK
+        int talla_id FK
         int pares
     }
-    puntos_catalogo {
+    tallas_catalogo {
         int id PK
-        string punto UK
-        int orden
+        string talla UK
         int activo
     }
     colores_catalogo {
@@ -158,11 +157,6 @@ erDiagram
         string codigo UK
         int orden
         int activo
-    }
-    tallas_corrida {
-        int id PK
-        string talla UK
-        int orden
     }
     movimiento_inventario {
         int id PK
@@ -251,9 +245,9 @@ flowchart LR
     cfg --> c1
     cfg --> c3
 
-    c1 --> m1["OrdenCompraModel / PuntosModel"]
+    c1 --> m1["OrdenCompraModel / TallasModel"]
     c2 --> m2["ProduccionModel"]
-    c3 --> m3["InsumoModel / PuntosModel"]
+    c3 --> m3["InsumoModel / TallasModel"]
 
     m1 --> db
     m2 --> db

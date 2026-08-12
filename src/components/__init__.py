@@ -69,3 +69,13 @@ registrar_componente(
     "lista/iconos/tabla, acciones por registro y exportación "
     "Excel/PDF/Imprimir.",
 )
+
+from src.components.preview_impresion import PreviewImpresion  # noqa: E402
+
+registrar_componente(
+    "preview_impresion",
+    PreviewImpresion,
+    "Vista previa de impresión WYSIWYG para reportes HTML: hoja simulada con "
+    "proporción real de página, zoom, tamaño de página, orientación, "
+    "impresión y exportación a PDF por la misma vía que los reportes.",
+)

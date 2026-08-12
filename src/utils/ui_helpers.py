@@ -19,18 +19,12 @@ def load_styles() -> str:
 def crear_tarjeta(titulo: str, valor: str, color: str = "#4f46e5") -> QFrame:
     card = QFrame()
     card.setObjectName("card")
-    card.setStyleSheet(f"""
-        QFrame#card {{
-            background-color: #ffffff;
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            padding: 16px;
-        }}
-    """)
+    # El fondo/borde/radio lo define styles.qss (QFrame#card): aquí solo
+    # se mantienen los estilos tipográficos de los textos.
 
     layout = QVBoxLayout(card)
-    layout.setContentsMargins(16, 16, 16, 16)
-    layout.setSpacing(8)
+    layout.setContentsMargins(18, 18, 18, 18)
+    layout.setSpacing(10)
 
     lbl_titulo = QLabel(titulo)
     lbl_titulo.setObjectName("cardTitle")
@@ -77,15 +71,9 @@ def crear_seccion(titulo: str, subtitulo: str = "") -> QWidget:
 def crear_header(titulo: str, parent: QWidget | None = None) -> QFrame:
     header = QFrame(parent)
     header.setObjectName("headerBar")
-    header.setStyleSheet("""
-        QFrame#headerBar {
-            background-color: #ffffff;
-            border-bottom: 1px solid #e2e8f0;
-            padding: 16px 24px;
-        }
-    """)
+    # El fondo/borde lo define styles.qss (QFrame#headerBar).
     layout = QHBoxLayout(header)
-    layout.setContentsMargins(24, 16, 24, 16)
+    layout.setContentsMargins(24, 18, 24, 18)
 
     lbl = QLabel(titulo)
     lbl.setStyleSheet("font-size: 22px; font-weight: bold; color: #1e293b;")

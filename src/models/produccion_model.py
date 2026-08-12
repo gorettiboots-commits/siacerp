@@ -170,9 +170,9 @@ class OrdenProduccionModel:
                ORDER BY op.created_at DESC"""
         )
 
-    def listar_tallas_corrida(self) -> list[dict]:
+    def listar_tallas(self) -> list[dict]:
         return self.db.fetch_all(
-            "SELECT * FROM tallas_corrida ORDER BY orden, id")
+            "SELECT * FROM tallas_catalogo ORDER BY CAST(talla AS REAL), id")
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
@@ -200,9 +200,9 @@ class OrdenProduccionModel:
         return self.db.fetch_all(
             """SELECT mto.*, tc.talla
                FROM matriz_tallas_op mto
-               JOIN tallas_corrida tc ON tc.id = mto.talla_id
+               JOIN tallas_catalogo tc ON tc.id = mto.talla_id
                WHERE mto.orden_produccion_id = ?
-               ORDER BY tc.orden""",
+               ORDER BY CAST(tc.talla AS REAL)""",
             (op_id,),
         )
 
@@ -435,6 +435,6 @@ class InventarioPTModel:
                FROM inventario_pt ipt
                JOIN variantes v ON v.id = ipt.variante_id
                JOIN modelos m ON m.id = v.modelo_id
-               JOIN tallas_corrida tc ON tc.id = ipt.talla_id
-               ORDER BY m.nombre, v.codigo_variante, tc.orden"""
+               JOIN tallas_catalogo tc ON tc.id = ipt.talla_id
+               ORDER BY m.nombre, v.codigo_variante, CAST(tc.talla AS REAL)"""
         )

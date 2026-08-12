@@ -1,6 +1,6 @@
 """Componente reutilizable del sistema: matriz de tallas por bloques.
 
-Aprobado desde el Sandbox. Muestra los puntos en bloques: cada bloque tiene
+Aprobado desde el Sandbox. Muestra las tallas en bloques: cada bloque tiene
 una fila de encabezado (fondo negro, texto blanco) y una fila de captura.
 La navegación entre celdas se hace con Enter o Tabulador y las celdas no
 usan controles de flechas numéricas.
@@ -9,9 +9,9 @@ Uso:
     from src.components import obtener_componente
 
     MatrizTallas = obtener_componente("matriz_tallas")
-    dlg = MatrizTallas(puntos)          # puntos: list[dict] con "id" y "punto"
+    dlg = MatrizTallas(tallas)          # tallas: list[dict] con "id" y "talla"
     if dlg.exec():
-        valores = dlg.obtener_valores()  # -> {"15": 42, "15.5": 0, ...}
+        valores = dlg.obtener_valores()  # -> {"3": 42, "4": 0, ...} por talla_id
 """
 
 from functools import partial
@@ -19,11 +19,11 @@ from functools import partial
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
-    QDialog, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QVBoxLayout, QWidget,
+    QComboBox, QDialog, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QSpinBox, QTableWidget, QVBoxLayout, QWidget,
 )
 
-from src.models.catalogos_model import PuntosModel
+from src.models.catalogos_model import TallasModel
 
 
 class CeldaMatriz(QLineEdit):
@@ -36,7 +36,7 @@ class CeldaMatriz(QLineEdit):
         super().__init__(parent)
         self.setValidator(QIntValidator(0, 100000, self))
         self.setAlignment(Qt.AlignCenter)
-        self.setMinimumHeight(34)
+        self.setMinimumHeight(30)
         self.setMaximumWidth(80)
         self.setStyleSheet(
             "QLineEdit { border: none; background: transparent; padding: 0px;"
@@ -58,29 +58,29 @@ class CeldaMatriz(QLineEdit):
 class MatrizTallasDialog(QDialog):
     """Matriz de tallas por bloques con encabezados negros y captura por celdas.
 
-    Propiedades públicas (referencia directa por punto):
-        puntos              list[dict]                          — datos usados.
+    Propiedades públicas (referencia directa por talla):
+        tallas              list[dict]                          — datos usados.
         encabezado_general  QLabel                              — encabezado general.
-        encabezados         dict[str, QLabel]                   — encabezado por punto.
-        celdas              dict[str, CeldaMatriz]              — celda de captura por punto.
+        encabezados         dict[str, QLabel]                   — encabezado por talla.
+        celdas              dict[str, CeldaMatriz]              — celda de captura por talla.
         bloques             list[list[tuple[dict, CeldaMatriz]]] — estructura por bloque.
 
     Métodos públicos:
-        obtener_valores() -> dict[str, int]  — valores capturados por punto.
-        establecer_valores(dict[str, int])   — precarga valores por punto.
+        obtener_valores() -> dict[str, int]  — valores capturados por talla_id.
+        establecer_valores(dict[str, int])   — precarga valores por talla_id.
     """
 
     NEGRO = "#111827"
     COLUMNAS = 11
 
-    def __init__(self, puntos: list[dict] | None = None, titulo: str = "TALLAS",
+    def __init__(self, tallas: list[dict] | None = None, titulo: str = "TALLAS",
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.titulo = titulo
         self.setWindowTitle("Controles de tallas")
         self.setModal(True)
         self.resize(720, 480)
-        self.puntos = list(puntos) if puntos is not None else PuntosModel().listar()
+        self.tallas = list(tallas) if tallas is not None else TallasModel().listar()
         self.bloques: list[list[tuple[dict, CeldaMatriz]]] = []
         self._celdas: list[CeldaMatriz] = []
         self.encabezado_general: QLabel | None = None
@@ -107,15 +107,15 @@ class MatrizTallasDialog(QDialog):
 
         self.encabezado_general = QLabel(self.titulo)
         self.encabezado_general.setAlignment(Qt.AlignCenter)
-        self.encabezado_general.setMinimumHeight(38)
+        self.encabezado_general.setMinimumHeight(32)
         self.encabezado_general.setStyleSheet(
             f"background-color: {self.NEGRO}; color: #ffffff; font-weight: bold;"
             " font-size: 14px; padding: 0px; border: none;"
         )
         layout.addWidget(self.encabezado_general)
 
-        if not self.puntos:
-            layout.addWidget(QLabel("No hay puntos configurados en el sistema."))
+        if not self.tallas:
+            layout.addWidget(QLabel("No hay tallas configuradas en el sistema."))
         else:
             self.tabla = self._crear_matriz()
             layout.addWidget(self.tabla, 1)
@@ -125,6 +125,8 @@ class MatrizTallasDialog(QDialog):
                 "con el teclado.")
             hint.setStyleSheet("color: #64748b; font-size: 11px;")
             layout.addWidget(hint)
+
+        self._crear_corrida(layout)
 
         bar = QHBoxLayout()
         bar.addStretch()
@@ -138,13 +140,84 @@ class MatrizTallasDialog(QDialog):
         bar.addWidget(btn_cerrar)
         layout.addLayout(bar)
 
+        self._actualizar_total()
+
         if self._celdas:
             self._celdas[0].setFocus()
+
+    def _crear_corrida(self, layout: QVBoxLayout) -> None:
+        """Corrida rápida de tallas: aplica el mismo valor a un rango."""
+        if not self.tallas:
+            return
+        corrida_box = QGroupBox("Corrida rápida de tallas")
+        corrida_layout = QHBoxLayout(corrida_box)
+        corrida_layout.setSpacing(8)
+
+        corrida_layout.addWidget(QLabel("De talla:"))
+        self.cmb_talla_desde = QComboBox()
+        self.cmb_talla_hasta = QComboBox()
+        for t in self.tallas:
+            self.cmb_talla_desde.addItem(str(t["talla"]), t["id"])
+            self.cmb_talla_hasta.addItem(str(t["talla"]), t["id"])
+        if self.cmb_talla_hasta.count() > 0:
+            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
+        corrida_layout.addWidget(self.cmb_talla_desde)
+        corrida_layout.addWidget(QLabel("a talla:"))
+        corrida_layout.addWidget(self.cmb_talla_hasta)
+        corrida_layout.addWidget(QLabel("con"))
+        self.spn_corrida = QSpinBox()
+        self.spn_corrida.setRange(0, 9999)
+        self.spn_corrida.setValue(10)
+        self.spn_corrida.setMinimumWidth(80)
+        corrida_layout.addWidget(self.spn_corrida)
+        corrida_layout.addWidget(QLabel("pares por talla"))
+
+        btn_corrida = QPushButton("Aplicar Corrida")
+        btn_corrida.setObjectName("btnPrimary")
+        btn_corrida.clicked.connect(self._aplicar_corrida)
+        corrida_layout.addWidget(btn_corrida)
+
+        btn_limpiar = QPushButton("Limpiar")
+        btn_limpiar.setObjectName("btnSecondary")
+        btn_limpiar.clicked.connect(self._limpiar_tallas)
+        corrida_layout.addWidget(btn_limpiar)
+
+        layout.addWidget(corrida_box)
+
+        self.lbl_total = QLabel("Total de pares: 0")
+        self.lbl_total.setStyleSheet(
+            "font-weight: bold; font-size: 13px; color: #4f46e5;")
+        layout.addWidget(self.lbl_total)
+
+    def _aplicar_corrida(self) -> None:
+        idx_desde = self.cmb_talla_desde.currentIndex()
+        idx_hasta = self.cmb_talla_hasta.currentIndex()
+        if idx_desde > idx_hasta:
+            idx_desde, idx_hasta = idx_hasta, idx_desde
+        pares = self.spn_corrida.value()
+        for i, t in enumerate(self.tallas):
+            if idx_desde <= i <= idx_hasta:
+                celda = self.celdas.get(str(t["id"]))
+                if celda is not None:
+                    celda.setText(str(pares))
+        self._actualizar_total()
+
+    def _limpiar_tallas(self) -> None:
+        for celda in self.celdas.values():
+            celda.setText("0")
+        self._actualizar_total()
+
+    def _actualizar_total(self) -> None:
+        if not hasattr(self, "lbl_total"):
+            return
+        total = sum(int(celda.text().strip() or 0)
+                    for celda in self.celdas.values())
+        self.lbl_total.setText(f"Total de pares: {total}")
 
     def _etiqueta_encabezado(self, texto: str) -> QLabel:
         lbl = QLabel(texto)
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setMinimumSize(60, 38)
+        lbl.setMinimumSize(60, 32)
         lbl.setStyleSheet(
             f"background-color: {self.NEGRO}; color: #ffffff; font-weight: bold;"
             " font-size: 12px; padding: 0px; border: none;"
@@ -152,36 +225,37 @@ class MatrizTallasDialog(QDialog):
         return lbl
 
     def _crear_matriz(self) -> QTableWidget:
-        bloques_puntos = [
-            self.puntos[i:i + self.COLUMNAS]
-            for i in range(0, len(self.puntos), self.COLUMNAS)
+        bloques_tallas = [
+            self.tallas[i:i + self.COLUMNAS]
+            for i in range(0, len(self.tallas), self.COLUMNAS)
         ]
 
         tabla = QTableWidget()
-        tabla.setRowCount(len(bloques_puntos) * 2)
+        tabla.setRowCount(len(bloques_tallas) * 2)
         tabla.setColumnCount(self.COLUMNAS)
         tabla.verticalHeader().setVisible(False)
         tabla.horizontalHeader().setVisible(False)
         tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         tabla.setSelectionMode(QTableWidget.NoSelection)
-        tabla.verticalHeader().setDefaultSectionSize(38)
+        tabla.verticalHeader().setDefaultSectionSize(32)
         tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
         for c in range(self.COLUMNAS):
             tabla.setColumnWidth(c, 60)
-        tabla.setFixedHeight(tabla.rowCount() * 38 + 6)
+        tabla.setFixedHeight(tabla.rowCount() * 32 + 6)
 
-        for b, puntos_bloque in enumerate(bloques_puntos):
+        for b, tallas_bloque in enumerate(bloques_tallas):
             fila_encabezado = b * 2
             fila_captura = b * 2 + 1
             bloque: list[tuple[dict, CeldaMatriz]] = []
-            for c, p in enumerate(puntos_bloque):
-                etiqueta = self._etiqueta_encabezado(p["punto"])
+            for c, p in enumerate(tallas_bloque):
+                etiqueta = self._etiqueta_encabezado(p["talla"])
                 tabla.setCellWidget(fila_encabezado, c, etiqueta)
-                self.encabezados[p["punto"]] = etiqueta
+                self.encabezados[p["talla"]] = etiqueta
 
                 celda = CeldaMatriz()
                 tabla.setCellWidget(fila_captura, c, celda)
-                self.celdas[p["punto"]] = celda
+                self.celdas[str(p["id"])] = celda
+                celda.textChanged.connect(self._actualizar_total)
                 self._celdas.append(celda)
                 bloque.append((p, celda))
             self.bloques.append(bloque)
@@ -198,16 +272,16 @@ class MatrizTallasDialog(QDialog):
         siguiente.selectAll()
 
     def obtener_valores(self) -> dict[str, int]:
-        """Devuelve los valores capturados por punto (los vacíos como 0)."""
+        """Devuelve los valores capturados por talla_id (los vacíos como 0)."""
         return {
-            punto: int(celda.text().strip() or 0)
-            for punto, celda in self.celdas.items()
+            talla_id: int(celda.text().strip() or 0)
+            for talla_id, celda in self.celdas.items()
         }
 
     def establecer_valores(self, valores: dict[str, int]) -> None:
-        """Precarga valores por punto (acepta clave str o int)."""
-        for punto, valor in valores.items():
-            celda = self.celdas.get(str(punto))
+        """Precarga valores por talla_id (acepta clave str o int)."""
+        for talla_id, valor in valores.items():
+            celda = self.celdas.get(str(talla_id))
             if celda is not None:
                 celda.setText(str(int(valor)))
 

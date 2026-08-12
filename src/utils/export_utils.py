@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPainter, QTextDocument
+from PySide6.QtGui import QPageLayout, QPageSize, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QTableWidget, QWidget
 
@@ -57,8 +57,8 @@ def export_table_to_excel(table: QTableWidget, titulo: str, parent: QWidget) -> 
 
 def print_table(table: QTableWidget, titulo: str, parent: QWidget) -> None:
     printer = QPrinter(QPrinter.HighResolution)
-    printer.setPageSize(QPrinter.Letter)
-    printer.setOrientation(QPrinter.Landscape)
+    printer.setPageSize(QPageSize.Letter)
+    printer.setPageOrientation(QPageLayout.Landscape)
 
     dlg = QFileDialog()
     path, _ = QFileDialog.getSaveFileName(parent, f"Guardar PDF - {titulo}", f"{titulo}.pdf",
@@ -154,17 +154,23 @@ def _esc(texto: str) -> str:
             .replace('"', "&quot;"))
 
 
-def _oc_columnas_puntos(detalle: list[dict]) -> list[dict]:
+def _clave_numerica_talla(texto: str) -> float:
+    try:
+        return float(texto)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _oc_columnas_tallas(detalle: list[dict]) -> list[dict]:
     cols: list[dict] = []
     vistos: set[int] = set()
     for d in detalle:
-        for t in d.get("puntos", []):
-            pid = t["punto_id"]
-            if pid not in vistos:
-                vistos.add(pid)
-                cols.append({"punto_id": pid, "punto": t.get("punto", ""),
-                             "orden": t.get("orden", 0)})
-    cols.sort(key=lambda t: t.get("orden", 0) or 0)
+        for t in d.get("tallas", []):
+            tid = t["talla_id"]
+            if tid not in vistos:
+                vistos.add(tid)
+                cols.append({"talla_id": tid, "talla": t.get("talla", "")})
+    cols.sort(key=lambda t: _clave_numerica_talla(t.get("talla", "")))
     return cols
 
 
@@ -186,7 +192,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     titulo = "REMI-SIÓN - ORDEN DE COMPRA" if solo_remision else \
         "RECIBO DE COMPRA - ORDEN DE COMPRA"
     subtotal, iva, total = _oc_totales(detalle, solo_remision)
-    columnas = _oc_columnas_puntos(detalle)
+    columnas = _oc_columnas_tallas(detalle)
     logo_b64 = _logo_base64()
 
     estatus = str(datos.get("estatus", "") or "").replace("_", " ").capitalize()
@@ -202,14 +208,14 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
                      f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
 
     th_tallas = "".join(
-        f"<th>{_esc('#')}{_esc(c['punto'])}</th>" for c in columnas)
+        f"<th>{_esc('#')}{_esc(c['talla'])}</th>" for c in columnas)
 
     rows = ""
     for d in detalle:
-        por_talla = {int(t["punto_id"]): int(t.get("pares", 0) or 0)
-                     for t in d.get("puntos", [])}
+        por_talla = {int(t["talla_id"]): int(t.get("pares", 0) or 0)
+                     for t in d.get("tallas", [])}
         celdas = "".join(
-            f"<td class='td-num'>{por_talla.get(int(c['punto_id']), 0) or ''}</td>"
+            f"<td class='td-num'>{por_talla.get(int(c['talla_id']), 0) or ''}</td>"
             for c in columnas)
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
@@ -350,9 +356,10 @@ def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> Non
     doc = QTextDocument()
     doc.setHtml(_oc_receipt_html(datos, detalle))
     printer = QPrinter(QPrinter.HighResolution)
-    printer.setPageSize(QPrinter.Letter)
-    printer.setOrientation(QPrinter.Landscape if len(_oc_columnas_puntos(detalle)) > 6
-                           else QPrinter.Portrait)
+    printer.setPageSize(QPageSize.Letter)
+    printer.setPageOrientation(QPageLayout.Landscape
+                               if len(_oc_columnas_tallas(detalle)) > 6
+                               else QPageLayout.Portrait)
     printer.setOutputFormat(QPrinter.PdfFormat)
     printer.setOutputFileName(path)
     doc.print_(printer)
@@ -376,7 +383,7 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     solo_remision = bool(datos.get("solo_remision"))
     titulo = "REMI-SIÓN - ORDEN DE COMPRA" if solo_remision else \
         "RECIBO DE COMPRA - ORDEN DE COMPRA"
-    columnas = _oc_columnas_puntos(detalle)
+    columnas = _oc_columnas_tallas(detalle)
     subtotal, iva, total = _oc_totales(detalle, solo_remision)
 
     n_tallas = len(columnas)
@@ -433,7 +440,7 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     header_fila = fila
     ws.cell(row=fila, column=1, value="NOMBRE")
     for i, col in enumerate(columnas):
-        ws.cell(row=fila, column=2 + i, value=f"#{col['punto']}")
+        ws.cell(row=fila, column=2 + i, value=f"#{col['talla']}")
     ws.cell(row=fila, column=1 + n_tallas + 1, value="TOTAL PARES")
     ws.cell(row=fila, column=1 + n_tallas + 2, value="VALOR UNITARIO")
     ws.cell(row=fila, column=1 + n_tallas + 3, value="TOTAL")
@@ -447,12 +454,12 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     fila += 1
 
     for d in detalle:
-        por_talla = {int(t["punto_id"]): int(t.get("pares", 0) or 0)
-                     for t in d.get("puntos", [])}
+        por_talla = {int(t["talla_id"]): int(t.get("pares", 0) or 0)
+                     for t in d.get("tallas", [])}
         ws.cell(row=fila, column=1, value=d.get("insumo_nombre", ""))
         for i, col in enumerate(columnas):
             ws.cell(row=fila, column=2 + i,
-                    value=por_talla.get(int(col["punto_id"]), 0) or "")
+                    value=por_talla.get(int(col["talla_id"]), 0) or "")
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
         ws.cell(row=fila, column=1 + n_tallas + 1, value=cant)

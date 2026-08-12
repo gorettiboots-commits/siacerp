@@ -62,7 +62,7 @@ requieren tarea aprobada y migración.
 
 | ID | Decisión aprobada | Estado |
 |---|---|---|
-| **RD-1** | **Unificar puntos y tallas** en un solo catálogo de medida configurable. Son la misma cosa; en calzado se avanza de medio en medio punto. Se configura con generación en serie "de X a Y punto". Se **elimina el campo `orden`** (con valores numéricos el orden es obvio). Caso particular: la **compra de suela** se maneja por **puntos cerrados** (justifica que el catálogo sea configurable). | ⏳ Pendiente (migración + vistas) |
+| **RD-1** | **Unificar puntos y tallas** en un solo catálogo: **`tallas_catalogo`**. Son la misma cosa; en calzado se avanza de medio en medio punto. Se configura con generación en serie "de X a Y talla" (**corrida** = rango de tallas). **Sin campo `orden`**: el orden se deriva del valor numérico. Caso particular: la **compra de suela** se maneja por **puntos cerrados** (se capturan solo las tallas que apliquen en la matriz). | ✅ Aplicada (`tallas_catalogo`) |
 | **RD-2** | **Módulo Clientes y Pedidos** (próxima versión): pedidos de clientes que pueden **programarse** e integrarse en una **programación semanal**; la programación semanal alimentará las **órdenes de producción**. Alcance aún por definir con el cliente. Traerá sus propios estatus. | 🚧 Próximamente |
 | **RD-3** | **Diseñador e impresor de etiquetas**: herramienta existente en otra terminal de trabajo (fuera de este repositorio por ahora). | 🔧 Externo |
 | **RD-4** | **Git**: se hizo merge de `productivo1` → `main`; `main` = versión oficial hasta el primer release. Después: **rama por tarea** + PR hacia `productivo1` y `main`. El CI escucha ambas ramas. | ✅ Aplicada (commit e1341c0) |
@@ -79,7 +79,8 @@ IA que confunda estos términos producirá resultados incorrectos.
 
 | Término | Significado en SIAC | Dónde vive |
 |---|---|---|
-| **Punto / Talla** | **Son la misma cosa** (decisión RD-1, en unificación). Hoy coexisten: `puntos_catalogo` (`00`–`13`, usado en Órdenes de Compra) y `tallas_corrida` (`22`–`31`, usado en Producción y PT). Objetivo: **un solo catálogo configurable** "de X a Y punto" en pasos de medio punto, sin campo `orden`. Caso particular: compra de suela por **puntos cerrados**. | `puntos_catalogo`, `tallas_corrida` |
+| **Talla / Punto** | **Son la misma cosa**: catálogo único **`tallas_catalogo`** (RD-1, aplicado) con los valores históricos unificados (`00`–`13` y `22`–`31`), **sin campo `orden`**. Caso particular: suela por **tallas/puntos cerrados** (solo se capturan las tallas que apliquen en la matriz). | `tallas_catalogo` |
+| **Corrida** | **Rango de tallas** (de X a Y, en pasos de medio punto) usado en los procesos: p. ej. "corrida del punto 00 al 13" en un lote de compra. Se configura con la generación en serie. | concepto de proceso (no es tabla) |
 | **Insumo** | Materia prima (piel, suela, forro…). | `insumos` |
 | **Variante** | Un modelo × color × piel (× talla opcional). | `variantes` |
 | **Modelo** | Modelo de zapato con su lista de materiales (BOM). | `modelos`, `lista_materiales` |
@@ -104,11 +105,10 @@ IA que confunda estos términos producirá resultados incorrectos.
 | Movimientos de inventario | `movimiento_inventario.tipo_movimiento` | `entrada`, `salida`, `ajuste` |
 | Catálogos | `activo` | `1` (activo) / `0` (desactivado) |
 
-- **[REGLAS N-02]** Hoy en **compras** se habla de **puntos** y en
-  **producción** de **tallas**; son el **mismo concepto** (RD-1) y terminarán
-  unificados en un solo catálogo. Mientras tanto, **PROHIBIDO** implementar la
-  unificación por partes o renombrar `puntos_catalogo` / `tallas_corrida` sin
-  una tarea aprobada de migración.
+- **[REGLAS N-02]** **Puntos y tallas son la misma cosa** y están **unificados**
+  en el catálogo único `tallas_catalogo` (RD-1). Todo el sistema habla de
+  **tallas** ("corrida" = rango de X a Y). **PROHIBIDO** volver a crear
+  tablas/columnas `punto`/`puntos` o catálogos paralelos de medida.
 - **[REGLAS N-02b]** Los **estatus NO forman una lista cerrada única**: varían
   por catálogo (RD-2 traerá estatus de pedidos y programación). Reglas
   obligatorias: español, minúscula, `snake_case`; todo estatus **NUEVO** se
@@ -175,7 +175,7 @@ siacerp/
 
 | Rol | Sufijo | Ejemplo real |
 |---|---|---|
-| Modelo | `Model` | `ProveedorModel`, `OrdenCompraModel`, `PuntosModel` |
+| Modelo | `Model` | `ProveedorModel`, `OrdenCompraModel`, `TallasModel` |
 | Controller | `Controller` | `OrdenesCompraController`, `ProduccionController` |
 | Vista principal | `View` | `StockView`, `ProduccionView`, `LoginView` |
 | Diálogo | `Dialog` | `DialogOrdenCompra`, `DialogInsumo` |
@@ -254,7 +254,7 @@ cada capa tiene un **contrato**:
 - **[REGLAS D-02]** Nombres de tabla: **plural**, `snake_case`, español.
   - Tablas de detalle: prefijo `detalle_` (`detalle_orden_compra`,
     `detalle_orden_compra_puntos`).
-  - Catálogos configurables: sufijo `_catalogo` (`puntos_catalogo`,
+  - Catálogos configurables: sufijo `_catalogo` (`tallas_catalogo`,
     `colores_catalogo`).
   - Junturas N:M: `tabla_a_tabla_b` (`proveedor_insumos`, `usuario_permisos`).
   - Acrónimos de módulo: `_op` (órdenes de producción), `_pt` (producto
@@ -301,10 +301,10 @@ cada capa tiene un **contrato**:
   formato `PREFIJO-0001`. Prefijos del sistema: `OC-` (compras), `OP-`
   (producción). Las **facturas** capturan su folio **manualmente** (`FAC-...`).
   En insumos se usa `INS-` (código de insumo).
-- **[REGLAS D-09]** El campo `orden` de catálogos **numéricos** de medida
-  (`puntos_catalogo`, `tallas_corrida`) quedó **deprecado por decisión RD-1**
-  (el orden es obvio por ser numérico). No usarlo al crear catálogos nuevos;
-  su eliminación es parte de la migración RD-1 (pendiente).
+- **[REGLAS D-09]** El campo `orden` de catálogos numéricos de medida quedó
+  **eliminado** con la migración RD-1: `tallas_catalogo` no tiene `orden` y el
+  orden se deriva de `CAST(talla AS REAL)`. No reintroducir `orden` en
+  catálogos numéricos nuevos.
 - **[REGLAS D-10]** Los estatus son **por catálogo** (tabla de la sección 2):
   español, minúscula, `snake_case`. Crear un estatus nuevo **sin documentarlo**
   en esa tabla está **PROHIBIDO**.

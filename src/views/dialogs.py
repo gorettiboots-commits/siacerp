@@ -3,10 +3,11 @@ from PySide6.QtGui import QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDoubleSpinBox,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox,
-    QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QScrollArea,
+    QSpinBox, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
@@ -146,13 +147,13 @@ class DialogInsumo(QDialog):
 
         layout.addLayout(form)
 
-        self.chk_variantes = QCheckBox("Crear variantes por punto")
-        self.chk_variantes.toggled.connect(self._on_puntos_toggled)
+        self.chk_variantes = QCheckBox("Crear variantes por talla")
+        self.chk_variantes.toggled.connect(self._on_tallas_toggled)
         layout.addWidget(self.chk_variantes)
 
-        self.frame_puntos = QFrame()
-        self.frame_puntos.setObjectName("card")
-        fp = QVBoxLayout(self.frame_puntos)
+        self.frame_tallas = QFrame()
+        self.frame_tallas.setObjectName("card")
+        fp = QVBoxLayout(self.frame_tallas)
         fp.setContentsMargins(12, 12, 12, 12)
         fp.setSpacing(8)
 
@@ -160,9 +161,9 @@ class DialogInsumo(QDialog):
         sel.addWidget(QLabel("Desde:"))
         self.cmb_desde = QComboBox()
         self.cmb_hasta = QComboBox()
-        for p in self.controller.listar_puntos():
-            self.cmb_desde.addItem(p["punto"], p["punto"])
-            self.cmb_hasta.addItem(p["punto"], p["punto"])
+        for p in self.controller.listar_tallas():
+            self.cmb_desde.addItem(p["talla"], p["talla"])
+            self.cmb_hasta.addItem(p["talla"], p["talla"])
         self.cmb_hasta.setCurrentIndex(max(0, self.cmb_hasta.count() - 1))
         sel.addWidget(self.cmb_desde)
         sel.addWidget(QLabel("hasta:"))
@@ -179,8 +180,8 @@ class DialogInsumo(QDialog):
         sel.addStretch()
         fp.addLayout(sel)
 
-        layout.addWidget(self.frame_puntos)
-        self.frame_puntos.setVisible(False)
+        layout.addWidget(self.frame_tallas)
+        self.frame_tallas.setVisible(False)
 
         self.chk_colores = QCheckBox("Variantes de color")
         self.chk_colores.toggled.connect(self._on_colores_toggled)
@@ -235,8 +236,8 @@ class DialogInsumo(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _on_puntos_toggled(self, checked: bool) -> None:
-        self.frame_puntos.setVisible(checked)
+    def _on_tallas_toggled(self, checked: bool) -> None:
+        self.frame_tallas.setVisible(checked)
         if not checked:
             self._limpiar_variantes()
         self._update_preview_visibility()
@@ -251,7 +252,7 @@ class DialogInsumo(QDialog):
         visible = self.chk_variantes.isChecked() or self.chk_colores.isChecked()
         self.frame_preview.setVisible(visible)
 
-    def _puntos_seleccionados(self) -> list[str]:
+    def _tallas_seleccionadas(self) -> list[str]:
         if not self.chk_variantes.isChecked():
             return []
         idx_d = self.cmb_desde.currentIndex()
@@ -271,12 +272,12 @@ class DialogInsumo(QDialog):
         if not base:
             self._update_count()
             return
-        puntos = self._puntos_seleccionados()
-        colores = self._colores_seleccionados()
-        if puntos and colores:
-            codigos = [f"{base}-{p}-{c}" for p in puntos for c in colores]
-        elif puntos:
-            codigos = [f"{base}-{p}" for p in puntos]
+        tallas = self._tallas_seleccionadas()
+        colores = self._colores_seleccionadas()
+        if tallas and colores:
+            codigos = [f"{base}-{t}-{c}" for t in tallas for c in colores]
+        elif tallas:
+            codigos = [f"{base}-{t}" for t in tallas]
         elif colores:
             codigos = [f"{base}-{c}" for c in colores]
         else:
@@ -596,129 +597,27 @@ class DialogProveedor(QDialog):
         self.accept()
 
 
-class DialogMatrizTallas(QDialog):
+class DialogMatrizTallas(MatrizTallasDialog):
+    """Matriz de tallas de Órdenes de Compra.
+
+    Hereda del componente aprobado del sistema (MatrizTallasDialog) para
+    tener una sola apariencia de captura de tallas en toda la aplicación.
+    Mantiene la API previa (inicial / get_matriz) para no romper la orden.
+    """
+
     def __init__(self, controller: OrdenesCompraController,
                  inicial: dict[int, int] | None = None) -> None:
-        super().__init__()
-        self.controller = controller
+        tallas = controller.listar_tallas()
+        super().__init__(tallas=tallas, titulo="MATRIZ DE TALLAS")
         self.setWindowTitle("Matriz de Tallas")
-        self.setMinimumSize(560, 400)
-        self.setModal(True)
         self._matriz = dict(inicial or {})
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
-        self._puntos = self.controller.listar_puntos()
-        self.spn_puntos: dict[int, QSpinBox] = {}
-
-        filas: list[QWidget] = []
-        fila = QWidget()
-        fila_layout = QHBoxLayout(fila)
-        fila_layout.setContentsMargins(0, 0, 0, 0)
-        cols = 0
-        for t in self._puntos:
-            gb = QGroupBox(f"Punto {t['punto']}")
-            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
-            vb = QVBoxLayout(gb)
-            spn = QSpinBox()
-            spn.setRange(0, 9999)
-            spn.setValue(int(self._matriz.get(t["id"], 0)))
-            spn.setMinimumHeight(34)
-            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
-            spn.valueChanged.connect(self._actualizar_total)
-            self.spn_puntos[t["id"]] = spn
-            vb.addWidget(spn)
-            fila_layout.addWidget(gb)
-            cols += 1
-            if cols % 5 == 0:
-                filas.append(fila)
-                fila = QWidget()
-                fila_layout = QHBoxLayout(fila)
-                fila_layout.setContentsMargins(0, 0, 0, 0)
-        if cols % 5 != 0:
-            filas.append(fila)
-        for f in filas:
-            layout.addWidget(f)
-
-        corrida_box = QGroupBox("Corrida rápida de puntos")
-        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
-        corrida_layout = QHBoxLayout(corrida_box)
-        corrida_layout.setSpacing(8)
-
-        corrida_layout.addWidget(QLabel("De punto:"))
-        self.cmb_talla_desde = QComboBox()
-        self.cmb_talla_hasta = QComboBox()
-        for t in self._puntos:
-            self.cmb_talla_desde.addItem(t["punto"], t["id"])
-            self.cmb_talla_hasta.addItem(t["punto"], t["id"])
-        if self.cmb_talla_hasta.count() > 0:
-            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
-
-        corrida_layout.addWidget(self.cmb_talla_desde)
-        corrida_layout.addWidget(QLabel("a punto:"))
-        corrida_layout.addWidget(self.cmb_talla_hasta)
-        corrida_layout.addWidget(QLabel("con"))
-        self.spn_corrida = QSpinBox()
-        self.spn_corrida.setRange(0, 9999)
-        self.spn_corrida.setValue(10)
-        self.spn_corrida.setMinimumWidth(80)
-        corrida_layout.addWidget(self.spn_corrida)
-        corrida_layout.addWidget(QLabel("pares por punto"))
-
-        btn_corrida = QPushButton("Aplicar Corrida")
-        btn_corrida.setObjectName("btnPrimary")
-        btn_corrida.clicked.connect(self._aplicar_corrida)
-        corrida_layout.addWidget(btn_corrida)
-
-        btn_limpiar = QPushButton("Limpiar")
-        btn_limpiar.setObjectName("btnSecondary")
-        btn_limpiar.clicked.connect(self._limpiar_tallas)
-        corrida_layout.addWidget(btn_limpiar)
-
-        layout.addWidget(corrida_box)
-
-        self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
-        layout.addWidget(self.lbl_total)
-
+        self.establecer_valores(
+            {str(tid): pr for tid, pr in self._matriz.items()})
         self._actualizar_total()
 
-        btns = QHBoxLayout()
-        btns.addStretch()
-        btn_cancel = QPushButton("Cancelar")
-        btn_cancel.setObjectName("btnSecondary")
-        btn_cancel.clicked.connect(self.reject)
-        btn_aceptar = QPushButton("Aceptar")
-        btn_aceptar.setObjectName("btnSuccess")
-        btn_aceptar.clicked.connect(self.accept)
-        btns.addWidget(btn_cancel)
-        btns.addWidget(btn_aceptar)
-        layout.addLayout(btns)
-
-    def _aplicar_corrida(self) -> None:
-        idx_desde = self.cmb_talla_desde.currentIndex()
-        idx_hasta = self.cmb_talla_hasta.currentIndex()
-        if idx_desde > idx_hasta:
-            idx_desde, idx_hasta = idx_hasta, idx_desde
-        pares = self.spn_corrida.value()
-        for i, t in enumerate(self._puntos):
-            if idx_desde <= i <= idx_hasta:
-                self.spn_puntos[t["id"]].setValue(pares)
-
-    def _limpiar_tallas(self) -> None:
-        for spn in self.spn_puntos.values():
-            spn.setValue(0)
-
-    def _actualizar_total(self) -> None:
-        total = sum(spn.value() for spn in self.spn_puntos.values())
-        self.lbl_total.setText(f"Total de pares: {total}")
-
     def get_matriz(self) -> dict[int, int]:
-        return {punto_id: spn.value() for punto_id, spn in self.spn_puntos.items()
-                if spn.value() > 0}
+        valores = self.obtener_valores()  # dict[str, int] por talla_id
+        return {int(tid): pr for tid, pr in valores.items() if pr > 0}
 
 
 class DialogOrdenCompra(QDialog):
@@ -730,7 +629,7 @@ class DialogOrdenCompra(QDialog):
         self.setWindowTitle("Ingresar Factura" if es_factura else "Nueva Orden de Compra")
         self.setMinimumSize(820, 620)
         self.setModal(True)
-        self._puntos_fila: dict[int, dict[int, int]] = {}
+        self._tallas_fila: dict[int, dict[int, int]] = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -852,7 +751,7 @@ class DialogOrdenCompra(QDialog):
     def _set_fila(self, row: int, insumo: dict, proveedor_id: int | None) -> None:
         self.table_detalle.setItem(row, 0, QTableWidgetItem(insumo["nombre"]))
 
-        self._puntos_fila[row] = {}
+        self._tallas_fila[row] = {}
         btn_tallas = QPushButton("Configurar Tallas")
         btn_tallas.setObjectName("btnSecondary")
         btn_tallas.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
@@ -884,10 +783,10 @@ class DialogOrdenCompra(QDialog):
         self._recalcular()
 
     def _configurar_tallas(self, row: int) -> None:
-        dlg = DialogMatrizTallas(self.controller, self._puntos_fila.get(row))
+        dlg = DialogMatrizTallas(self.controller, self._tallas_fila.get(row))
         if dlg.exec() == QDialog.Accepted:
             matriz = dlg.get_matriz()
-            self._puntos_fila[row] = matriz
+            self._tallas_fila[row] = matriz
             total_pares = sum(matriz.values())
             btn = self.table_detalle.cellWidget(row, 1)
             if btn:
@@ -901,7 +800,7 @@ class DialogOrdenCompra(QDialog):
         row = self.table_detalle.currentRow()
         if row >= 0:
             self.table_detalle.removeRow(row)
-            self._puntos_fila.pop(row, None)
+            self._tallas_fila.pop(row, None)
             self._recalcular()
 
     def _recalcular(self, *_args) -> None:
@@ -930,15 +829,16 @@ class DialogOrdenCompra(QDialog):
             insumo_id = int(self.table_detalle.item(row, 5).text())
             spn_c = self.table_detalle.cellWidget(row, 2)
             spn_p = self.table_detalle.cellWidget(row, 3)
-            puntos = self._puntos_fila.get(row, {})
-            cantidad = sum(puntos.values()) if puntos else (spn_c.value() if spn_c else 0)
+            tallas = self._tallas_fila.get(row, {})
+            cantidad = sum(tallas.values()) if tallas else (spn_c.value() if spn_c else 0)
             precio = spn_p.value() if spn_p else 0
             if cantidad > 0:
                 detalle.append({
                     "insumo_id": insumo_id,
                     "cantidad": cantidad,
                     "precio": precio,
-                    "puntos": [{"punto_id": pid, "pares": pr} for pid, pr in puntos.items()],
+                    "tallas": [{"talla_id": tid, "pares": pr}
+                                for tid, pr in tallas.items()],
                 })
         if not detalle:
             QMessageBox.warning(self, "Detalle vacío", "Agregue al menos un insumo a la orden.")
@@ -1077,7 +977,7 @@ class DialogVerOrden(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["Insumo", "Proveedor", "Puntos", "Cantidad", "Precio Unit.", "Subtotal"])
+            ["Insumo", "Proveedor", "Tallas", "Cantidad", "Precio Unit.", "Subtotal"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setDefaultSectionSize(46)
@@ -1088,10 +988,10 @@ class DialogVerOrden(QDialog):
         for i, d in enumerate(detalle):
             self.table.setItem(i, 0, QTableWidgetItem(d.get("insumo_nombre", "")))
             self.table.setItem(i, 1, QTableWidgetItem(d.get("proveedor_nombre", "") or "—"))
-            puntos = d.get("puntos", [])
-            if puntos:
-                texto_puntos = ", ".join(f"P{t['punto']}: {t['pares']}" for t in puntos)
-                self.table.setItem(i, 2, QTableWidgetItem(texto_puntos))
+            tallas = d.get("tallas", [])
+            if tallas:
+                texto_tallas = ", ".join(f"T{t['talla']}: {t['pares']}" for t in tallas)
+                self.table.setItem(i, 2, QTableWidgetItem(texto_tallas))
             else:
                 self.table.setItem(i, 2, QTableWidgetItem("—"))
             self.table.setItem(i, 3, QTableWidgetItem(str(d.get("cantidad", 0))))
@@ -1772,88 +1672,19 @@ class DialogOrdenProduccion(QDialog):
         talla_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 8px;")
         layout.addWidget(talla_label)
 
-        from src.database.db_manager import DatabaseManager
-        db = DatabaseManager()
-        self._tallas = db.fetch_all("SELECT * FROM tallas_corrida ORDER BY orden")
-
-        self._tallas_container = QWidget()
-        tallas_container_layout = QVBoxLayout(self._tallas_container)
-        tallas_container_layout.setContentsMargins(0, 0, 0, 0)
-        tallas_container_layout.setSpacing(4)
-
-        self._tallas_filas: list[QWidget] = []
-        fila = QWidget()
-        fila_layout = QHBoxLayout(fila)
-        fila_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.spn_tallas: dict[int, QSpinBox] = {}
-        cols = 0
-        for t in self._tallas:
-            gb = QGroupBox(f"Talla {t['talla']}")
-            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
-            vb = QVBoxLayout(gb)
-            spn = QSpinBox()
-            spn.setRange(0, 9999)
-            spn.setValue(0)
-            spn.setMinimumHeight(36)
-            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
-            spn.valueChanged.connect(self._actualizar_total)
-            self.spn_tallas[t["id"]] = spn
-            vb.addWidget(spn)
-            fila_layout.addWidget(gb)
-            cols += 1
-            if cols % 5 == 0:
-                self._tallas_filas.append(fila)
-                fila = QWidget()
-                fila_layout = QHBoxLayout(fila)
-                fila_layout.setContentsMargins(0, 0, 0, 0)
-        if cols % 5 != 0:
-            self._tallas_filas.append(fila)
-        for f in self._tallas_filas:
-            tallas_container_layout.addWidget(f)
-
-        corrida_box = QGroupBox("Corrida rápida de tallas")
-        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
-        corrida_layout = QHBoxLayout(corrida_box)
-        corrida_layout.setSpacing(8)
-
-        corrida_layout.addWidget(QLabel("De talla:"))
-        self.cmb_talla_desde = QComboBox()
-        self.cmb_talla_hasta = QComboBox()
-        for t in self._tallas:
-            self.cmb_talla_desde.addItem(t["talla"], t["id"])
-            self.cmb_talla_hasta.addItem(t["talla"], t["id"])
-        if self.cmb_talla_hasta.count() > 0:
-            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
-
-        corrida_layout.addWidget(self.cmb_talla_desde)
-        corrida_layout.addWidget(QLabel("a talla:"))
-        corrida_layout.addWidget(self.cmb_talla_hasta)
-        corrida_layout.addWidget(QLabel("con"))
-        self.spn_corrida = QSpinBox()
-        self.spn_corrida.setRange(0, 9999)
-        self.spn_corrida.setValue(10)
-        self.spn_corrida.setMinimumWidth(80)
-        corrida_layout.addWidget(self.spn_corrida)
-        corrida_layout.addWidget(QLabel("pares por talla"))
-
-        btn_corrida = QPushButton("Aplicar Corrida")
-        btn_corrida.setObjectName("btnPrimary")
-        btn_corrida.clicked.connect(self._aplicar_corrida)
-        corrida_layout.addWidget(btn_corrida)
-
-        btn_limpiar = QPushButton("Limpiar")
-        btn_limpiar.setObjectName("btnSecondary")
-        btn_limpiar.clicked.connect(self._limpiar_tallas)
-        corrida_layout.addWidget(btn_limpiar)
-
-        tallas_container_layout.addWidget(corrida_box)
-
+        self._tallas = self.controller.listar_tallas()
+        self._matriz_tallas: dict[int, int] = {}
+        tallas_row = QHBoxLayout()
+        btn_tallas = QPushButton("Configurar Tallas")
+        btn_tallas.setObjectName("btnPrimary")
+        btn_tallas.clicked.connect(self._configurar_tallas)
+        tallas_row.addWidget(btn_tallas)
         self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
-        tallas_container_layout.addWidget(self.lbl_total)
-
-        layout.addWidget(self._tallas_container)
+        self.lbl_total.setStyleSheet(
+            "font-weight: bold; font-size: 13px; color: #4f46e5;")
+        tallas_row.addWidget(self.lbl_total)
+        tallas_row.addStretch()
+        layout.addLayout(tallas_row)
 
         btns = QHBoxLayout()
         btns.addStretch()
@@ -1867,23 +1698,19 @@ class DialogOrdenProduccion(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _aplicar_corrida(self) -> None:
-        idx_desde = self.cmb_talla_desde.currentIndex()
-        idx_hasta = self.cmb_talla_hasta.currentIndex()
-        if idx_desde > idx_hasta:
-            idx_desde, idx_hasta = idx_hasta, idx_desde
-        pares = self.spn_corrida.value()
-        for i, t in enumerate(self._tallas):
-            if idx_desde <= i <= idx_hasta:
-                self.spn_tallas[t["id"]].setValue(pares)
-
-    def _limpiar_tallas(self) -> None:
-        for spn in self.spn_tallas.values():
-            spn.setValue(0)
-
-    def _actualizar_total(self) -> None:
-        total = sum(spn.value() for spn in self.spn_tallas.values())
-        self.lbl_total.setText(f"Total de pares: {total}")
+    def _configurar_tallas(self) -> None:
+        """Abre el componente aprobado de tallas (misma apariencia en toda la app)."""
+        from src.components.tallas_matrix import MatrizTallasDialog
+        dlg = MatrizTallasDialog(
+            tallas=self._tallas, titulo="MATRIZ DE TALLAS", parent=self)
+        dlg.establecer_valores(
+            {str(tid): pr for tid, pr in self._matriz_tallas.items()})
+        if dlg.exec() == QDialog.Accepted:
+            valores = dlg.obtener_valores()  # dict[str, int] por talla_id
+            self._matriz_tallas = {
+                int(tid): pr for tid, pr in valores.items() if pr > 0}
+            self.lbl_total.setText(
+                f"Total de pares: {sum(self._matriz_tallas.values())}")
 
     def _save(self) -> None:
         folio = self.txt_folio.text().strip()
@@ -1895,9 +1722,9 @@ class DialogOrdenProduccion(QDialog):
             return
 
         matriz = []
-        for talla_id, spn in self.spn_tallas.items():
-            if spn.value() > 0:
-                matriz.append({"talla_id": talla_id, "pares": spn.value()})
+        for talla_id, pares in self._matriz_tallas.items():
+            if pares > 0:
+                matriz.append({"talla_id": talla_id, "pares": pares})
 
         if not matriz:
             QMessageBox.warning(self, "Matriz vacía", "Ingrese al menos un par en alguna talla.")
