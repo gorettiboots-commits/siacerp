@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPainter, QTextDocument
+from PySide6.QtGui import QPageLayout, QPageSize, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QTableWidget, QWidget
 
@@ -57,8 +57,8 @@ def export_table_to_excel(table: QTableWidget, titulo: str, parent: QWidget) -> 
 
 def print_table(table: QTableWidget, titulo: str, parent: QWidget) -> None:
     printer = QPrinter(QPrinter.HighResolution)
-    printer.setPageSize(QPrinter.Letter)
-    printer.setOrientation(QPrinter.Landscape)
+    printer.setPageSize(QPageSize.Letter)
+    printer.setPageOrientation(QPageLayout.Landscape)
 
     dlg = QFileDialog()
     path, _ = QFileDialog.getSaveFileName(parent, f"Guardar PDF - {titulo}", f"{titulo}.pdf",
@@ -356,9 +356,10 @@ def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> Non
     doc = QTextDocument()
     doc.setHtml(_oc_receipt_html(datos, detalle))
     printer = QPrinter(QPrinter.HighResolution)
-    printer.setPageSize(QPrinter.Letter)
-    printer.setOrientation(QPrinter.Landscape if len(_oc_columnas_tallas(detalle)) > 6
-                           else QPrinter.Portrait)
+    printer.setPageSize(QPageSize.Letter)
+    printer.setPageOrientation(QPageLayout.Landscape
+                               if len(_oc_columnas_tallas(detalle)) > 6
+                               else QPageLayout.Portrait)
     printer.setOutputFormat(QPrinter.PdfFormat)
     printer.setOutputFileName(path)
     doc.print_(printer)

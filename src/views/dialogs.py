@@ -3,10 +3,11 @@ from PySide6.QtGui import QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDoubleSpinBox,
     QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QSpinBox,
-    QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QScrollArea,
+    QSpinBox, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
@@ -596,129 +597,27 @@ class DialogProveedor(QDialog):
         self.accept()
 
 
-class DialogMatrizTallas(QDialog):
+class DialogMatrizTallas(MatrizTallasDialog):
+    """Matriz de tallas de Órdenes de Compra.
+
+    Hereda del componente aprobado del sistema (MatrizTallasDialog) para
+    tener una sola apariencia de captura de tallas en toda la aplicación.
+    Mantiene la API previa (inicial / get_matriz) para no romper la orden.
+    """
+
     def __init__(self, controller: OrdenesCompraController,
                  inicial: dict[int, int] | None = None) -> None:
-        super().__init__()
-        self.controller = controller
+        tallas = controller.listar_tallas()
+        super().__init__(tallas=tallas, titulo="MATRIZ DE TALLAS")
         self.setWindowTitle("Matriz de Tallas")
-        self.setMinimumSize(560, 400)
-        self.setModal(True)
         self._matriz = dict(inicial or {})
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
-        self._tallas = self.controller.listar_tallas()
-        self.spn_tallas: dict[int, QSpinBox] = {}
-
-        filas: list[QWidget] = []
-        fila = QWidget()
-        fila_layout = QHBoxLayout(fila)
-        fila_layout.setContentsMargins(0, 0, 0, 0)
-        cols = 0
-        for t in self._tallas:
-            gb = QGroupBox(f"Talla {t['talla']}")
-            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
-            vb = QVBoxLayout(gb)
-            spn = QSpinBox()
-            spn.setRange(0, 9999)
-            spn.setValue(int(self._matriz.get(t["id"], 0)))
-            spn.setMinimumHeight(34)
-            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
-            spn.valueChanged.connect(self._actualizar_total)
-            self.spn_tallas[t["id"]] = spn
-            vb.addWidget(spn)
-            fila_layout.addWidget(gb)
-            cols += 1
-            if cols % 5 == 0:
-                filas.append(fila)
-                fila = QWidget()
-                fila_layout = QHBoxLayout(fila)
-                fila_layout.setContentsMargins(0, 0, 0, 0)
-        if cols % 5 != 0:
-            filas.append(fila)
-        for f in filas:
-            layout.addWidget(f)
-
-        corrida_box = QGroupBox("Corrida de tallas")
-        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
-        corrida_layout = QHBoxLayout(corrida_box)
-        corrida_layout.setSpacing(8)
-
-        corrida_layout.addWidget(QLabel("De talla:"))
-        self.cmb_talla_desde = QComboBox()
-        self.cmb_talla_hasta = QComboBox()
-        for t in self._tallas:
-            self.cmb_talla_desde.addItem(t["talla"], t["id"])
-            self.cmb_talla_hasta.addItem(t["talla"], t["id"])
-        if self.cmb_talla_hasta.count() > 0:
-            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
-
-        corrida_layout.addWidget(self.cmb_talla_desde)
-        corrida_layout.addWidget(QLabel("a talla:"))
-        corrida_layout.addWidget(self.cmb_talla_hasta)
-        corrida_layout.addWidget(QLabel("con"))
-        self.spn_corrida = QSpinBox()
-        self.spn_corrida.setRange(0, 9999)
-        self.spn_corrida.setValue(10)
-        self.spn_corrida.setMinimumWidth(80)
-        corrida_layout.addWidget(self.spn_corrida)
-        corrida_layout.addWidget(QLabel("pares por talla"))
-
-        btn_corrida = QPushButton("Aplicar Corrida")
-        btn_corrida.setObjectName("btnPrimary")
-        btn_corrida.clicked.connect(self._aplicar_corrida)
-        corrida_layout.addWidget(btn_corrida)
-
-        btn_limpiar = QPushButton("Limpiar")
-        btn_limpiar.setObjectName("btnSecondary")
-        btn_limpiar.clicked.connect(self._limpiar_tallas)
-        corrida_layout.addWidget(btn_limpiar)
-
-        layout.addWidget(corrida_box)
-
-        self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
-        layout.addWidget(self.lbl_total)
-
+        self.establecer_valores(
+            {str(tid): pr for tid, pr in self._matriz.items()})
         self._actualizar_total()
 
-        btns = QHBoxLayout()
-        btns.addStretch()
-        btn_cancel = QPushButton("Cancelar")
-        btn_cancel.setObjectName("btnSecondary")
-        btn_cancel.clicked.connect(self.reject)
-        btn_aceptar = QPushButton("Aceptar")
-        btn_aceptar.setObjectName("btnSuccess")
-        btn_aceptar.clicked.connect(self.accept)
-        btns.addWidget(btn_cancel)
-        btns.addWidget(btn_aceptar)
-        layout.addLayout(btns)
-
-    def _aplicar_corrida(self) -> None:
-        idx_desde = self.cmb_talla_desde.currentIndex()
-        idx_hasta = self.cmb_talla_hasta.currentIndex()
-        if idx_desde > idx_hasta:
-            idx_desde, idx_hasta = idx_hasta, idx_desde
-        pares = self.spn_corrida.value()
-        for i, t in enumerate(self._tallas):
-            if idx_desde <= i <= idx_hasta:
-                self.spn_tallas[t["id"]].setValue(pares)
-
-    def _limpiar_tallas(self) -> None:
-        for spn in self.spn_tallas.values():
-            spn.setValue(0)
-
-    def _actualizar_total(self) -> None:
-        total = sum(spn.value() for spn in self.spn_tallas.values())
-        self.lbl_total.setText(f"Total de pares: {total}")
-
     def get_matriz(self) -> dict[int, int]:
-        return {talla_id: spn.value() for talla_id, spn in self.spn_tallas.items()
-                if spn.value() > 0}
+        valores = self.obtener_valores()  # dict[str, int] por talla_id
+        return {int(tid): pr for tid, pr in valores.items() if pr > 0}
 
 
 class DialogOrdenCompra(QDialog):
@@ -1078,7 +977,7 @@ class DialogVerOrden(QDialog):
         self.table = QTableWidget()
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(
-            ["Insumo", "Proveedor", "Puntos", "Cantidad", "Precio Unit.", "Subtotal"])
+            ["Insumo", "Proveedor", "Tallas", "Cantidad", "Precio Unit.", "Subtotal"])
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setDefaultSectionSize(46)
@@ -1774,85 +1673,18 @@ class DialogOrdenProduccion(QDialog):
         layout.addWidget(talla_label)
 
         self._tallas = self.controller.listar_tallas()
-
-        self._tallas_container = QWidget()
-        tallas_container_layout = QVBoxLayout(self._tallas_container)
-        tallas_container_layout.setContentsMargins(0, 0, 0, 0)
-        tallas_container_layout.setSpacing(4)
-
-        self._tallas_filas: list[QWidget] = []
-        fila = QWidget()
-        fila_layout = QHBoxLayout(fila)
-        fila_layout.setContentsMargins(0, 0, 0, 0)
-
-        self.spn_tallas: dict[int, QSpinBox] = {}
-        cols = 0
-        for t in self._tallas:
-            gb = QGroupBox(f"Talla {t['talla']}")
-            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
-            vb = QVBoxLayout(gb)
-            spn = QSpinBox()
-            spn.setRange(0, 9999)
-            spn.setValue(0)
-            spn.setMinimumHeight(36)
-            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
-            spn.valueChanged.connect(self._actualizar_total)
-            self.spn_tallas[t["id"]] = spn
-            vb.addWidget(spn)
-            fila_layout.addWidget(gb)
-            cols += 1
-            if cols % 5 == 0:
-                self._tallas_filas.append(fila)
-                fila = QWidget()
-                fila_layout = QHBoxLayout(fila)
-                fila_layout.setContentsMargins(0, 0, 0, 0)
-        if cols % 5 != 0:
-            self._tallas_filas.append(fila)
-        for f in self._tallas_filas:
-            tallas_container_layout.addWidget(f)
-
-        corrida_box = QGroupBox("Corrida rápida de tallas")
-        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
-        corrida_layout = QHBoxLayout(corrida_box)
-        corrida_layout.setSpacing(8)
-
-        corrida_layout.addWidget(QLabel("De talla:"))
-        self.cmb_talla_desde = QComboBox()
-        self.cmb_talla_hasta = QComboBox()
-        for t in self._tallas:
-            self.cmb_talla_desde.addItem(t["talla"], t["id"])
-            self.cmb_talla_hasta.addItem(t["talla"], t["id"])
-        if self.cmb_talla_hasta.count() > 0:
-            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
-
-        corrida_layout.addWidget(self.cmb_talla_desde)
-        corrida_layout.addWidget(QLabel("a talla:"))
-        corrida_layout.addWidget(self.cmb_talla_hasta)
-        corrida_layout.addWidget(QLabel("con"))
-        self.spn_corrida = QSpinBox()
-        self.spn_corrida.setRange(0, 9999)
-        self.spn_corrida.setValue(10)
-        self.spn_corrida.setMinimumWidth(80)
-        corrida_layout.addWidget(self.spn_corrida)
-        corrida_layout.addWidget(QLabel("pares por talla"))
-
-        btn_corrida = QPushButton("Aplicar Corrida")
-        btn_corrida.setObjectName("btnPrimary")
-        btn_corrida.clicked.connect(self._aplicar_corrida)
-        corrida_layout.addWidget(btn_corrida)
-
-        btn_limpiar = QPushButton("Limpiar")
-        btn_limpiar.setObjectName("btnSecondary")
-        btn_limpiar.clicked.connect(self._limpiar_tallas)
-        corrida_layout.addWidget(btn_limpiar)
-
-        tallas_container_layout.addWidget(corrida_box)
-
+        self._matriz_tallas: dict[int, int] = {}
+        tallas_row = QHBoxLayout()
+        btn_tallas = QPushButton("Configurar Tallas")
+        btn_tallas.setObjectName("btnPrimary")
+        btn_tallas.clicked.connect(self._configurar_tallas)
+        tallas_row.addWidget(btn_tallas)
         self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
-        tallas_container_layout.addWidget(self.lbl_total)
-
-        layout.addWidget(self._tallas_container)
+        self.lbl_total.setStyleSheet(
+            "font-weight: bold; font-size: 13px; color: #4f46e5;")
+        tallas_row.addWidget(self.lbl_total)
+        tallas_row.addStretch()
+        layout.addLayout(tallas_row)
 
         btns = QHBoxLayout()
         btns.addStretch()
@@ -1866,23 +1698,19 @@ class DialogOrdenProduccion(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _aplicar_corrida(self) -> None:
-        idx_desde = self.cmb_talla_desde.currentIndex()
-        idx_hasta = self.cmb_talla_hasta.currentIndex()
-        if idx_desde > idx_hasta:
-            idx_desde, idx_hasta = idx_hasta, idx_desde
-        pares = self.spn_corrida.value()
-        for i, t in enumerate(self._tallas):
-            if idx_desde <= i <= idx_hasta:
-                self.spn_tallas[t["id"]].setValue(pares)
-
-    def _limpiar_tallas(self) -> None:
-        for spn in self.spn_tallas.values():
-            spn.setValue(0)
-
-    def _actualizar_total(self) -> None:
-        total = sum(spn.value() for spn in self.spn_tallas.values())
-        self.lbl_total.setText(f"Total de pares: {total}")
+    def _configurar_tallas(self) -> None:
+        """Abre el componente aprobado de tallas (misma apariencia en toda la app)."""
+        from src.components.tallas_matrix import MatrizTallasDialog
+        dlg = MatrizTallasDialog(
+            tallas=self._tallas, titulo="MATRIZ DE TALLAS", parent=self)
+        dlg.establecer_valores(
+            {str(tid): pr for tid, pr in self._matriz_tallas.items()})
+        if dlg.exec() == QDialog.Accepted:
+            valores = dlg.obtener_valores()  # dict[str, int] por talla_id
+            self._matriz_tallas = {
+                int(tid): pr for tid, pr in valores.items() if pr > 0}
+            self.lbl_total.setText(
+                f"Total de pares: {sum(self._matriz_tallas.values())}")
 
     def _save(self) -> None:
         folio = self.txt_folio.text().strip()
@@ -1894,9 +1722,9 @@ class DialogOrdenProduccion(QDialog):
             return
 
         matriz = []
-        for talla_id, spn in self.spn_tallas.items():
-            if spn.value() > 0:
-                matriz.append({"talla_id": talla_id, "pares": spn.value()})
+        for talla_id, pares in self._matriz_tallas.items():
+            if pares > 0:
+                matriz.append({"talla_id": talla_id, "pares": pares})
 
         if not matriz:
             QMessageBox.warning(self, "Matriz vacía", "Ingrese al menos un par en alguna talla.")

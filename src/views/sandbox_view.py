@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 from src.components.tallas_matrix import MatrizTallasDialog
 from src.views.sandbox_complex_grid import ComplexGridDemo
 from src.views.sandbox_notificaciones import NotificacionesDemo
+from src.views.sandbox_preview_impresion import PreviewImpresionDemo
 
 
 class SandboxView(QWidget):
@@ -52,6 +53,13 @@ class SandboxView(QWidget):
         btn_notif.clicked.connect(self._abrir_notificaciones)
         layout.addWidget(btn_notif, 0, Qt.AlignLeft)
 
+        btn_preview = QPushButton("Preview de impresión")
+        btn_preview.setObjectName("btnPrimary")
+        btn_preview.setMinimumHeight(42)
+        btn_preview.setCursor(Qt.PointingHandCursor)
+        btn_preview.clicked.connect(self._abrir_preview)
+        layout.addWidget(btn_preview, 0, Qt.AlignLeft)
+
         layout.addStretch()
 
     def _abrir_tallas(self) -> None:
@@ -64,4 +72,8 @@ class SandboxView(QWidget):
 
     def _abrir_notificaciones(self) -> None:
         dlg = NotificacionesDemo(parent=self)
+        dlg.exec()
+
+    def _abrir_preview(self) -> None:
+        dlg = PreviewImpresionDemo(parent=self)
         dlg.exec()
