@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS detalle_orden_compra_puntos (
     detalle_id INTEGER NOT NULL REFERENCES detalle_orden_compra(id) ON DELETE CASCADE,
     talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
     pares INTEGER NOT NULL DEFAULT 0,
+    precio_unitario REAL NOT NULL DEFAULT 0,
     UNIQUE(detalle_id, talla_id),
     FOREIGN KEY (detalle_id) REFERENCES detalle_orden_compra(id),
     FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
@@ -271,6 +272,31 @@ CREATE TABLE IF NOT EXISTS usuario_permisos (
 );
 
 -- -----------------------------------------------------------
+-- 7. LOGS TÉCNICOS DEL SISTEMA
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS logs_sistema (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL DEFAULT (datetime('now')),
+    usuario_id INTEGER,
+    usuario TEXT,
+    modulo TEXT NOT NULL,
+    accion TEXT NOT NULL,
+    entidad TEXT,
+    entidad_id INTEGER,
+    nivel TEXT NOT NULL DEFAULT 'info',
+    detalle TEXT,
+    datos TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_logs_fecha ON logs_sistema (fecha);
+CREATE INDEX IF NOT EXISTS idx_logs_modulo ON logs_sistema (modulo);
+CREATE INDEX IF NOT EXISTS idx_logs_entidad ON logs_sistema (entidad, entidad_id);
+
+-- -----------------------------------------------------------
 -- DATOS INICIALES
 -- -----------------------------------------------------------
 
@@ -328,6 +354,10 @@ INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
     ('Par', 'par'),
     ('Rollo', 'rollo'),
     ('Caja', 'caja');
+
+INSERT OR IGNORE INTO tallas_catalogo (talla) VALUES
+    ('15'), ('15.5'), ('16'), ('16.5'), ('17'),
+    ('18'), ('19'), ('20'), ('21');
 
 INSERT OR IGNORE INTO colores_catalogo (nombre, codigo, orden) VALUES
     ('Negro', 'NEG', 1),

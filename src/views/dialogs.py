@@ -1,17 +1,53 @@
 from PySide6.QtCore import QBuffer, Qt
-from PySide6.QtGui import QGuiApplication, QImage, QPixmap
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QScrollArea,
-    QSpinBox, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+    QAbstractItemView, QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
+    QDateEdit, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
+    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
+    QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
-from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.utils.table_utils import configurar_tabla_excel
+from src.utils.ui_helpers import SearchableComboBox
+from src.views.table_widget import GorettiTable
+
+
+def _etiqueta_proveedor(p: dict) -> str:
+    """Etiqueta para selectores de proveedor: razón social + nombre comercial."""
+    nombre = (p.get("nombre") or "").strip()
+    comercial = (p.get("nombre_comercial") or "").strip()
+    if comercial and comercial.lower() != nombre.lower():
+        return f"{nombre} ({comercial})"
+    return nombre
+
+
+def _subtotal_detalle(d: dict) -> float:
+    """Subtotal del renglón: Σ(pares × precio) por talla si hay precios por talla;
+    si no, cantidad × precio_unitario."""
+    tallas = d.get("tallas", []) or []
+    con_precio = [t for t in tallas if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        return sum(float(t.get("pares", 0) or 0) * float(t.get("precio", 0) or 0)
+                   for t in con_precio)
+    return float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
+
+
+def _subtotal_recibido(d: dict, recibido: float) -> float:
+    """Subtotal del renglón al recibir: prorratea el importe por talla según la
+    proporción recibida; si no hay precios por talla, recibido × precio_unitario."""
+    tallas = d.get("tallas", []) or []
+    con_precio = [t for t in tallas if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        solicitado = float(d.get("cantidad", 0) or 0)
+        total_tallas = _subtotal_detalle(d)
+        if solicitado > 0:
+            return total_tallas * (recibido / solicitado)
+        return 0.0
+    return float(recibido) * float(d.get("precio_unitario", 0) or 0)
 
 
 class WidgetImagen(QFrame):
@@ -124,8 +160,17 @@ class DialogInsumo(QDialog):
         self.txt_codigo.setReadOnly(True)
         self.txt_nombre = QLineEdit()
         self.txt_nombre.setPlaceholderText("Nombre del insumo")
-        self.txt_categoria = QLineEdit()
-        self.txt_categoria.setPlaceholderText("Ej: Piel, Suela, Forro, etc.")
+        self.txt_nombre.editingFinished.connect(self._verificar_nombre)
+
+        self.lbl_nombre_aviso = QLabel("")
+        self.lbl_nombre_aviso.setStyleSheet("color: #b45309; font-size: 12px;")
+        self.lbl_nombre_aviso.setWordWrap(True)
+        self.lbl_nombre_aviso.setVisible(False)
+
+        self.cmb_categoria = SearchableComboBox(
+            placeholder="Seleccione o escriba una categoría…")
+        self._cargar_categorias()
+
         self.cmb_unidad = QComboBox()
         self._cargar_unidades()
         self.spn_minimo = QDoubleSpinBox()
@@ -136,11 +181,12 @@ class DialogInsumo(QDialog):
         for w, lbl in [
             (self.txt_codigo, "Código:"),
             (self.txt_nombre, "Nombre:"),
-            (self.txt_categoria, "Categoría:"),
+            (self.cmb_categoria, "Categoría:"),
             (self.cmb_unidad, "Unidad de medida:"),
             (self.spn_minimo, "Stock mínimo:"),
         ]:
             form.addRow(QLabel(lbl), w)
+        form.addRow(self.lbl_nombre_aviso)
 
         self.img_widget = WidgetImagen()
         form.addRow(QLabel("Imagen:"), self.img_widget)
@@ -300,12 +346,46 @@ class DialogInsumo(QDialog):
         for u in self.controller.listar_unidades():
             self.cmb_unidad.addItem(u["abreviatura"], u["nombre"])
 
+    def _cargar_categorias(self) -> None:
+        self.cmb_categoria.clear()
+        for cat in self.controller.listar_categorias():
+            self.cmb_categoria.addItem(cat, cat)
+
+    def _verificar_nombre(self) -> None:
+        nombre = self.txt_nombre.text().strip()
+        if not nombre:
+            self.lbl_nombre_aviso.setVisible(False)
+            return
+        coincidencias = self.controller.buscar_insumos_por_nombre(
+            nombre, excluir_id=self.insumo_id)
+        if not coincidencias:
+            self.lbl_nombre_aviso.setVisible(False)
+            return
+        exactos = [c for c in coincidencias
+                   if c.get("nombre", "").strip().lower() == nombre.lower()]
+        if exactos:
+            msg = ("Ya existe un insumo con el nombre "
+                   f"\"{exactos[0]['nombre']}\" (código {exactos[0]['codigo']}).")
+        else:
+            nombres = ", ".join(f"\"{c['nombre']}\" (código {c['codigo']})"
+                                for c in coincidencias[:3])
+            msg = f"Posible insumo duplicado. Ya existen nombres similares: {nombres}."
+        self.lbl_nombre_aviso.setText(msg)
+        self.lbl_nombre_aviso.setVisible(True)
+
     def _load_data(self) -> None:
         ins = self.controller.obtener_insumo(self.insumo_id)
         if ins:
             self.txt_codigo.setText(ins.get("codigo", ""))
             self.txt_nombre.setText(ins.get("nombre", ""))
-            self.txt_categoria.setText(ins.get("categoria", ""))
+            self.cmb_categoria.clear()
+            for cat in self.controller.listar_categorias(excluir_id=self.insumo_id):
+                self.cmb_categoria.addItem(cat, cat)
+            idx = self.cmb_categoria.findText(ins.get("categoria", ""))
+            if idx >= 0:
+                self.cmb_categoria.setCurrentIndex(idx)
+            else:
+                self.cmb_categoria.setEditText(ins.get("categoria", ""))
             idx = self.cmb_unidad.findText(ins.get("unidad_medida", "pieza"))
             if idx >= 0:
                 self.cmb_unidad.setCurrentIndex(idx)
@@ -316,7 +396,7 @@ class DialogInsumo(QDialog):
     def _save(self) -> None:
         codigo = self.txt_codigo.text().strip()
         nombre = self.txt_nombre.text().strip()
-        categoria = self.txt_categoria.text().strip()
+        categoria = self.cmb_categoria.currentText().strip()
         if not codigo or not nombre or not categoria:
             QMessageBox.warning(self, "Campos requeridos", "Código, nombre y categoría son obligatorios.")
             return
@@ -462,16 +542,17 @@ class DialogProveedor(QDialog):
         prov_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 6px;")
         layout.addWidget(prov_label)
 
-        self.table_prov = QTableWidget()
-        self.table_prov.setColumnCount(6)
-        self.table_prov.setHorizontalHeaderLabels(
-            ["Material", "Color", "Unidad", "Precio", "Comentario", "InsumoID"]
+        self.table_prov = GorettiTable(
+            columns=[
+                {"key": "material", "label": "Material", "stretch": True},
+                {"key": "color", "label": "Color"},
+                {"key": "unidad", "label": "Unidad", "widget": self._factory_unidad},
+                {"key": "precio", "label": "Precio", "widget": self._factory_precio},
+                {"key": "comentario", "label": "Comentario", "stretch": True},
+                {"key": "id", "label": "InsumoID", "hidden": True},
+            ],
+            sortable=False,
         )
-        self.table_prov.setColumnHidden(5, True)
-        self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_prov.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table_prov)
         self.table_prov.setMinimumHeight(220)
 
         btn_add_prov = QPushButton("+ Agregar Producto")
@@ -504,51 +585,51 @@ class DialogProveedor(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _cargar_insumos_proveedor(self) -> None:
-        items = self.controller.listar_insumos_proveedor(self.proveedor_id)
-        self.table_prov.setRowCount(len(items))
-        for i, it in enumerate(items):
-            self._set_fila(i, it["insumo_nombre"], it.get("color", ""),
-                           it.get("unidad_medida", "pieza"), it.get("precio", 0),
-                           it.get("comentario", ""), it["insumo_id"])
-
-    def _set_fila(self, row: int, material: str, color: str, unidad: str,
-                  precio: float, comentario: str, insumo_id: int) -> None:
-        self.table_prov.setItem(row, 0, QTableWidgetItem(material))
-        self.table_prov.setItem(row, 1, QTableWidgetItem(color))
+    def _factory_unidad(self, record: dict, row: int) -> QComboBox:
         cmb = QComboBox()
         for u in self.controller.listar_unidades():
             cmb.addItem(u["abreviatura"], u["nombre"])
-        idx = cmb.findText(unidad)
+        idx = cmb.findText(record.get("unidad", "pieza"))
         if idx >= 0:
             cmb.setCurrentIndex(idx)
-        self.table_prov.setCellWidget(row, 2, cmb)
+        return cmb
+
+    def _factory_precio(self, record: dict, row: int) -> QDoubleSpinBox:
         spn = QDoubleSpinBox()
         spn.setRange(0, 99999999)
         spn.setDecimals(2)
-        spn.setValue(precio)
-        self.table_prov.setCellWidget(row, 3, spn)
-        self.table_prov.setItem(row, 4, QTableWidgetItem(comentario))
-        self.table_prov.setItem(row, 5, QTableWidgetItem(str(insumo_id)))
+        spn.setValue(float(record.get("precio", 0) or 0))
+        return spn
+
+    def _cargar_insumos_proveedor(self) -> None:
+        items = self.controller.listar_insumos_proveedor(self.proveedor_id)
+        self.table_prov.set_records([
+            {"material": it.get("insumo_nombre", ""), "color": it.get("color", ""),
+             "unidad": it.get("unidad_medida", "") or "pieza",
+             "precio": it.get("precio", 0), "comentario": it.get("comentario", ""),
+             "id": it["insumo_id"]}
+            for it in items
+        ])
 
     def _agregar_producto(self) -> None:
         dlg = DialogSeleccionarInsumo(self)
         if dlg.exec() == QDialog.Accepted:
             ins = dlg.get_seleccion()
             if ins:
-                for row in range(self.table_prov.rowCount()):
-                    if self.table_prov.item(row, 5) and self.table_prov.item(row, 5).text() == str(ins["id"]):
+                for row in range(self.table_prov.row_count()):
+                    if self.table_prov.cell_text(row, "id") == str(ins["id"]):
                         QMessageBox.information(self, "Ya agregado",
                             f"'{ins['nombre']}' ya está en la lista.")
                         return
-                row = self.table_prov.rowCount()
-                self.table_prov.insertRow(row)
-                self._set_fila(row, ins["nombre"], "", "pieza", 0, "", ins["id"])
+                self.table_prov.add_row({
+                    "material": ins["nombre"], "color": "", "unidad": "pieza",
+                    "precio": 0, "comentario": "", "id": ins["id"],
+                })
 
     def _quitar_producto(self) -> None:
-        row = self.table_prov.currentRow()
+        row = self.table_prov.current_row()
         if row >= 0:
-            self.table_prov.removeRow(row)
+            self.table_prov.remove_row(row)
 
     def _load_data(self) -> None:
         prov = self.controller.obtener_proveedor(self.proveedor_id)
@@ -583,41 +664,179 @@ class DialogProveedor(QDialog):
             )
 
         items = []
-        for row in range(self.table_prov.rowCount()):
-            cmb = self.table_prov.cellWidget(row, 2)
-            spn = self.table_prov.cellWidget(row, 3)
+        for row in range(self.table_prov.row_count()):
+            cmb = self.table_prov.cell_widget(row, "unidad")
+            spn = self.table_prov.cell_widget(row, "precio")
             items.append({
-                "insumo_id": int(self.table_prov.item(row, 5).text()),
-                "color": self.table_prov.item(row, 1).text().strip(),
+                "insumo_id": int(self.table_prov.cell_text(row, "id")),
+                "color": self.table_prov.cell_text(row, "color").strip(),
                 "unidad": cmb.currentText() if cmb else "pieza",
                 "precio": spn.value() if spn else 0,
-                "comentario": self.table_prov.item(row, 4).text().strip(),
+                "comentario": self.table_prov.cell_text(row, "comentario").strip(),
             })
         self.controller.guardar_insumos_proveedor(proveedor_id, items)
         self.accept()
 
 
-class DialogMatrizTallas(MatrizTallasDialog):
-    """Matriz de tallas de Órdenes de Compra.
+class DialogMatrizTallas(QDialog):
+    """Matriz de tallas de Órdenes de Compra con pares y precio por talla.
 
-    Hereda del componente aprobado del sistema (MatrizTallasDialog) para
-    tener una sola apariencia de captura de tallas en toda la aplicación.
-    Mantiene la API previa (inicial / get_matriz) para no romper la orden.
+    Adaptación de la matriz de Goretti_prep (pares + precio por talla) al
+    catálogo unificado tallas_catalogo (RD-1). Es un diálogo independiente:
+    no extiende el componente aprobado MatrizTallasDialog (que no maneja
+    precios) para no alterarlo; el componente sigue usándose en Producción.
     """
 
     def __init__(self, controller: OrdenesCompraController,
-                 inicial: dict[int, int] | None = None) -> None:
-        tallas = controller.listar_tallas()
-        super().__init__(tallas=tallas, titulo="MATRIZ DE TALLAS")
+                 inicial: dict[int, int] | None = None,
+                 precios_iniciales: dict[int, float] | None = None) -> None:
+        super().__init__()
+        self.controller = controller
         self.setWindowTitle("Matriz de Tallas")
+        self.setMinimumSize(620, 420)
+        self.setModal(True)
         self._matriz = dict(inicial or {})
-        self.establecer_valores(
-            {str(tid): pr for tid, pr in self._matriz.items()})
+        self._precios = dict(precios_iniciales or {})
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        self._tallas = self.controller.listar_tallas()
+        self.spn_pares: dict[int, QSpinBox] = {}
+        self.spn_precios: dict[int, QDoubleSpinBox] = {}
+
+        filas: list[QWidget] = []
+        fila = QWidget()
+        fila_layout = QHBoxLayout(fila)
+        fila_layout.setContentsMargins(0, 0, 0, 0)
+        cols = 0
+        for t in self._tallas:
+            gb = QGroupBox(f"Talla {t['talla']}")
+            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
+            vb = QHBoxLayout(gb)
+            spn = QSpinBox()
+            spn.setRange(0, 9999)
+            spn.setValue(int(self._matriz.get(t["id"], 0)))
+            spn.setMinimumHeight(30)
+            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
+            spn.valueChanged.connect(self._actualizar_total)
+            self.spn_pares[t["id"]] = spn
+            vb.addWidget(spn)
+            spn_p = QDoubleSpinBox()
+            spn_p.setRange(0, 99999999)
+            spn_p.setDecimals(2)
+            spn_p.setPrefix("$")
+            spn_p.setValue(float(self._precios.get(t["id"], 0) or 0))
+            spn_p.setMinimumHeight(30)
+            spn_p.setButtonSymbols(QAbstractSpinBox.NoButtons)
+            spn_p.setStyleSheet("font-size: 13px;")
+            spn_p.valueChanged.connect(self._actualizar_total)
+            self.spn_precios[t["id"]] = spn_p
+            vb.addWidget(spn_p)
+            fila_layout.addWidget(gb)
+            cols += 1
+            if cols % 2 == 0:
+                filas.append(fila)
+                fila = QWidget()
+                fila_layout = QHBoxLayout(fila)
+                fila_layout.setContentsMargins(0, 0, 0, 0)
+        if cols % 2 != 0:
+            filas.append(fila)
+        for f in filas:
+            layout.addWidget(f)
+
+        corrida_box = QGroupBox("Corrida rápida de tallas")
+        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
+        corrida_layout = QHBoxLayout(corrida_box)
+        corrida_layout.setSpacing(8)
+
+        corrida_layout.addWidget(QLabel("De talla:"))
+        self.cmb_talla_desde = QComboBox()
+        self.cmb_talla_hasta = QComboBox()
+        for t in self._tallas:
+            self.cmb_talla_desde.addItem(t["talla"], t["id"])
+            self.cmb_talla_hasta.addItem(t["talla"], t["id"])
+        if self.cmb_talla_hasta.count() > 0:
+            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
+
+        corrida_layout.addWidget(self.cmb_talla_desde)
+        corrida_layout.addWidget(QLabel("a talla:"))
+        corrida_layout.addWidget(self.cmb_talla_hasta)
+        corrida_layout.addWidget(QLabel("con"))
+        self.spn_corrida = QSpinBox()
+        self.spn_corrida.setRange(0, 9999)
+        self.spn_corrida.setValue(10)
+        self.spn_corrida.setMinimumWidth(80)
+        corrida_layout.addWidget(self.spn_corrida)
+        corrida_layout.addWidget(QLabel("pares por talla"))
+
+        btn_corrida = QPushButton("Aplicar Corrida")
+        btn_corrida.setObjectName("btnPrimary")
+        btn_corrida.clicked.connect(self._aplicar_corrida)
+        corrida_layout.addWidget(btn_corrida)
+
+        btn_limpiar = QPushButton("Limpiar")
+        btn_limpiar.setObjectName("btnSecondary")
+        btn_limpiar.clicked.connect(self._limpiar_tallas)
+        corrida_layout.addWidget(btn_limpiar)
+
+        layout.addWidget(corrida_box)
+
+        self.lbl_total = QLabel("Total de pares: 0")
+        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
+        layout.addWidget(self.lbl_total)
+
         self._actualizar_total()
 
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_aceptar = QPushButton("Aceptar")
+        btn_aceptar.setObjectName("btnSuccess")
+        btn_aceptar.clicked.connect(self.accept)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_aceptar)
+        layout.addLayout(btns)
+
+    def _aplicar_corrida(self) -> None:
+        idx_desde = self.cmb_talla_desde.currentIndex()
+        idx_hasta = self.cmb_talla_hasta.currentIndex()
+        if idx_desde > idx_hasta:
+            idx_desde, idx_hasta = idx_hasta, idx_desde
+        pares = self.spn_corrida.value()
+        for i, t in enumerate(self._puntos):
+            if idx_desde <= i <= idx_hasta:
+                self.spn_pares[t["id"]].setValue(pares)
+
+    def _limpiar_tallas(self) -> None:
+        for spn in self.spn_pares.values():
+            spn.setValue(0)
+
+    def _actualizar_total(self) -> None:
+        total = sum(spn.value() for spn in self.spn_pares.values())
+        importe = sum(self.spn_pares[pid].value() * self.spn_precios[pid].value()
+                      for pid in self.spn_pares)
+        self.lbl_total.setText(f"Total de pares: {total}    |    Importe: ${importe:,.2f}")
+
     def get_matriz(self) -> dict[int, int]:
-        valores = self.obtener_valores()  # dict[str, int] por talla_id
-        return {int(tid): pr for tid, pr in valores.items() if pr > 0}
+        return {talla_id: spn.value() for talla_id, spn in self.spn_pares.items()
+                if spn.value() > 0}
+
+    def get_precios(self) -> dict[int, float]:
+        return {talla_id: spn.value() for talla_id, spn in self.spn_precios.items()
+                if spn.value() > 0}
+
+
+def _tipo_documento(tipo: str) -> str:
+    if tipo == "factura":
+        return "Factura"
+    if tipo == "remision":
+        return "Remisión"
+    return "Orden de Compra"
 
 
 class DialogOrdenCompra(QDialog):
@@ -625,11 +844,12 @@ class DialogOrdenCompra(QDialog):
         super().__init__()
         self.controller = controller
         self.tipo = tipo
-        es_factura = tipo == "factura"
-        self.setWindowTitle("Ingresar Factura" if es_factura else "Nueva Orden de Compra")
+        titulos = {"factura": "Ingresar Factura", "remision": "Ingresar Remisión"}
+        self.setWindowTitle(titulos.get(tipo, "Nueva Orden de Compra"))
         self.setMinimumSize(820, 620)
         self.setModal(True)
-        self._tallas_fila: dict[int, dict[int, int]] = {}
+        # Por fila: talla_id -> {"pares": int, "precio": float}
+        self._tallas_fila: dict[int, dict[int, dict]] = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -641,15 +861,15 @@ class DialogOrdenCompra(QDialog):
         form = QFormLayout()
         form.setSpacing(10)
 
-        self.cmb_proveedor = QComboBox()
+        self.cmb_proveedor = SearchableComboBox(placeholder="Buscar proveedor…")
         self.cmb_proveedor.addItem("Compra a inventario", None)
         for p in self.controller.listar_proveedores():
-            self.cmb_proveedor.addItem(p["nombre"], p["id"])
+            self.cmb_proveedor.addItem(_etiqueta_proveedor(p), p["id"])
 
         self.txt_folio = QLineEdit()
-        prefijo = "FAC" if self.tipo == "factura" else "OC"
+        prefijo = {"factura": "FAC", "remision": "REM"}.get(self.tipo, "OC")
         self.txt_folio.setPlaceholderText(f"Ej: {prefijo}-0001")
-        if self.tipo == "factura":
+        if self.tipo in ("factura", "remision"):
             self.txt_folio.setReadOnly(False)
         else:
             self.txt_folio.setText(siguiente_folio("ordenes_compra", "folio", prefijo))
@@ -665,6 +885,8 @@ class DialogOrdenCompra(QDialog):
         ])
 
         self.chk_remision = QCheckBox("Solo remisión (sin impuestos)")
+        if self.tipo == "remision":
+            self.chk_remision.setChecked(True)
 
         form.addRow(QLabel("Proveedor:"), self.cmb_proveedor)
         form.addRow(QLabel("Folio:"), self.txt_folio)
@@ -675,8 +897,8 @@ class DialogOrdenCompra(QDialog):
         layout.addWidget(self.chk_remision)
 
         hint = QLabel(
-            "Seleccione un proveedor para comprar solo los insumos de su catálogo, "
-            "o use 'Compra a inventario' para registrar insumos que no tienen proveedor asignado."
+            "Puede agregar cualquier insumo del catálogo; el precio sugerido se toma "
+            "del proveedor seleccionado cuando lo tenga registrado."
         )
         hint.setStyleSheet("color: #64748b; font-size: 12px;")
         hint.setWordWrap(True)
@@ -686,17 +908,18 @@ class DialogOrdenCompra(QDialog):
         det_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(det_label)
 
-        self.table_detalle = QTableWidget()
-        self.table_detalle.setColumnCount(6)
-        self.table_detalle.setHorizontalHeaderLabels(
-            ["Insumo", "Tallas", "Cantidad", "Precio Unit.", "Subtotal", "InsumoID"]
+        self.table_detalle = GorettiTable(
+            columns=[
+                {"key": "nombre", "label": "Insumo", "stretch": True},
+                {"key": "tallas", "label": "Tallas", "widget": self._factory_tallas},
+                {"key": "cantidad", "label": "Cantidad", "widget": self._factory_cantidad},
+                {"key": "precio", "label": "Precio Unit.", "widget": self._factory_precio_oc},
+                {"key": "subtotal", "label": "Subtotal", "align": "right"},
+                {"key": "id", "label": "InsumoID", "hidden": True},
+            ],
+            sortable=False,
+            row_height=50,
         )
-        self.table_detalle.setColumnHidden(5, True)
-        self.table_detalle.horizontalHeader().setStretchLastSection(True)
-        self.table_detalle.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_detalle.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_detalle.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table_detalle)
         self.table_detalle.setMinimumHeight(200)
 
         btn_add = QPushButton("+ Agregar Insumo")
@@ -724,94 +947,107 @@ class DialogOrdenCompra(QDialog):
         btn_cancel = QPushButton("Cancelar")
         btn_cancel.setObjectName("btnSecondary")
         btn_cancel.clicked.connect(self.reject)
-        btn_save = QPushButton("Guardar Factura" if self.tipo == "factura" else "Crear Orden")
+        btn_save = QPushButton(
+            {"factura": "Guardar Factura", "remision": "Guardar Remisión"}.get(self.tipo, "Crear Orden"))
         btn_save.setObjectName("btnSuccess")
         btn_save.clicked.connect(self._save)
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
+    def _factory_tallas(self, record: dict, row: int) -> QPushButton:
+        btn = QPushButton("Configurar Tallas")
+        btn.setObjectName("btnSecondary")
+        btn.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
+        return btn
+
+    def _factory_cantidad(self, record: dict, row: int) -> QDoubleSpinBox:
+        spn = QDoubleSpinBox()
+        spn.setRange(0, 999999)
+        spn.setDecimals(2)
+        spn.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        spn.setValue(float(record.get("cantidad", 1) or 0))
+        spn.valueChanged.connect(self._recalcular)
+        return spn
+
+    def _factory_precio_oc(self, record: dict, row: int) -> QDoubleSpinBox:
+        spn = QDoubleSpinBox()
+        spn.setRange(0, 99999999)
+        spn.setDecimals(2)
+        spn.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        spn.setValue(float(record.get("precio", 0) or 0))
+        spn.valueChanged.connect(self._recalcular)
+        return spn
+
     def _agregar_insumo(self) -> None:
         proveedor_id = self.cmb_proveedor.currentData()
-        dlg = DialogSeleccionarInsumo(
-            self, proveedor_id=proveedor_id, sin_proveedor=(proveedor_id is None)
-        )
+        dlg = DialogSeleccionarInsumo(self)
         if dlg.exec() == QDialog.Accepted:
             insumo = dlg.get_seleccion()
             if insumo:
-                for row in range(self.table_detalle.rowCount()):
-                    if self.table_detalle.item(row, 5) and self.table_detalle.item(row, 5).text() == str(insumo["id"]):
+                for row in range(self.table_detalle.row_count()):
+                    if self.table_detalle.cell_text(row, "id") == str(insumo["id"]):
                         QMessageBox.information(self, "Ya agregado",
                             f"'{insumo['nombre']}' ya está en la orden.")
                         return
-                row = self.table_detalle.rowCount()
-                self.table_detalle.insertRow(row)
-                self._set_fila(row, insumo, proveedor_id)
-
-    def _set_fila(self, row: int, insumo: dict, proveedor_id: int | None) -> None:
-        self.table_detalle.setItem(row, 0, QTableWidgetItem(insumo["nombre"]))
-
-        self._tallas_fila[row] = {}
-        btn_tallas = QPushButton("Configurar Tallas")
-        btn_tallas.setObjectName("btnSecondary")
-        btn_tallas.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
-        self.table_detalle.setCellWidget(row, 1, btn_tallas)
-
-        precio_default = 0.0
-        if proveedor_id:
-            for pi in self.controller.listar_insumos_proveedor_por_insumo(insumo["id"]):
-                if pi["proveedor_id"] == proveedor_id:
-                    precio_default = float(pi.get("precio", 0) or 0)
-                    break
-
-        spn_c = QDoubleSpinBox()
-        spn_c.setRange(0, 999999)
-        spn_c.setDecimals(2)
-        spn_c.setValue(1)
-        spn_c.valueChanged.connect(self._recalcular)
-        self.table_detalle.setCellWidget(row, 2, spn_c)
-
-        spn_p = QDoubleSpinBox()
-        spn_p.setRange(0, 99999999)
-        spn_p.setDecimals(2)
-        spn_p.setValue(precio_default)
-        spn_p.valueChanged.connect(self._recalcular)
-        self.table_detalle.setCellWidget(row, 3, spn_p)
-
-        self.table_detalle.setItem(row, 4, QTableWidgetItem(f"{precio_default:.2f}"))
-        self.table_detalle.setItem(row, 5, QTableWidgetItem(str(insumo["id"])))
-        self._recalcular()
+                precio_default = 0.0
+                if proveedor_id:
+                    for pi in self.controller.listar_insumos_proveedor_por_insumo(insumo["id"]):
+                        if pi["proveedor_id"] == proveedor_id:
+                            precio_default = float(pi.get("precio", 0) or 0)
+                            break
+                row = self.table_detalle.row_count()
+                self.table_detalle.add_row({
+                    "nombre": insumo["nombre"], "tallas": None, "cantidad": 1,
+                    "precio": precio_default, "subtotal": "0.00", "id": insumo["id"],
+                })
+                self._tallas_fila[row] = {}
+                self._recalcular()
 
     def _configurar_tallas(self, row: int) -> None:
-        dlg = DialogMatrizTallas(self.controller, self._tallas_fila.get(row))
+        prev = self._tallas_fila.get(row, {})
+        dlg = DialogMatrizTallas(
+            self.controller,
+            inicial={tid: v["pares"] for tid, v in prev.items()},
+            precios_iniciales={tid: v["precio"] for tid, v in prev.items()},
+        )
         if dlg.exec() == QDialog.Accepted:
             matriz = dlg.get_matriz()
-            self._tallas_fila[row] = matriz
+            precios = dlg.get_precios()
+            self._tallas_fila[row] = {
+                tid: {"pares": matriz[tid], "precio": precios.get(tid, 0.0)}
+                for tid in matriz
+            }
             total_pares = sum(matriz.values())
-            btn = self.table_detalle.cellWidget(row, 1)
+            btn = self.table_detalle.cell_widget(row, "tallas")
             if btn:
                 btn.setText(f"Editar Tallas ({total_pares} pr)")
-            spn_c = self.table_detalle.cellWidget(row, 2)
+            spn_c = self.table_detalle.cell_widget(row, "cantidad")
             if spn_c:
                 spn_c.setValue(total_pares)
             self._recalcular()
 
     def _quitar_insumo(self) -> None:
-        row = self.table_detalle.currentRow()
+        row = self.table_detalle.current_row()
         if row >= 0:
-            self.table_detalle.removeRow(row)
+            self.table_detalle.remove_row(row)
             self._tallas_fila.pop(row, None)
             self._recalcular()
 
     def _recalcular(self, *_args) -> None:
         total = 0.0
-        for row in range(self.table_detalle.rowCount()):
-            spn_c = self.table_detalle.cellWidget(row, 2)
-            spn_p = self.table_detalle.cellWidget(row, 3)
-            if spn_c and spn_p:
+        for row in range(self.table_detalle.row_count()):
+            spn_c = self.table_detalle.cell_widget(row, "cantidad")
+            spn_p = self.table_detalle.cell_widget(row, "precio")
+            puntos = self._tallas_fila.get(row, {})
+            if puntos:
+                sub = sum(v["pares"] * v["precio"] for v in puntos.values())
+            elif spn_c and spn_p:
                 sub = spn_c.value() * spn_p.value()
-                self.table_detalle.item(row, 4).setText(f"{sub:.2f}")
-                total += sub
+            else:
+                sub = 0.0
+            self.table_detalle.set_cell_text(row, "subtotal", f"{sub:.2f}")
+            total += sub
         self.lbl_total.setText(f"Total: ${total:.2f}")
 
     def _save(self) -> None:
@@ -825,31 +1061,35 @@ class DialogOrdenCompra(QDialog):
             return
         proveedor_id = self.cmb_proveedor.currentData()
         detalle = []
-        for row in range(self.table_detalle.rowCount()):
-            insumo_id = int(self.table_detalle.item(row, 5).text())
-            spn_c = self.table_detalle.cellWidget(row, 2)
-            spn_p = self.table_detalle.cellWidget(row, 3)
-            tallas = self._tallas_fila.get(row, {})
-            cantidad = sum(tallas.values()) if tallas else (spn_c.value() if spn_c else 0)
+        for row in range(self.table_detalle.row_count()):
+            insumo_id = int(self.table_detalle.cell_text(row, "id"))
+            spn_c = self.table_detalle.cell_widget(row, "cantidad")
+            spn_p = self.table_detalle.cell_widget(row, "precio")
+            puntos = self._tallas_fila.get(row, {})
+            cantidad = sum(v["pares"] for v in puntos.values()) if puntos else (spn_c.value() if spn_c else 0)
             precio = spn_p.value() if spn_p else 0
             if cantidad > 0:
                 detalle.append({
                     "insumo_id": insumo_id,
                     "cantidad": cantidad,
                     "precio": precio,
-                    "tallas": [{"talla_id": tid, "pares": pr}
-                                for tid, pr in tallas.items()],
+                    "tallas": [
+                        {"talla_id": tid, "pares": v["pares"], "precio": v["precio"]}
+                        for tid, v in puntos.items()
+                    ],
                 })
         if not detalle:
             QMessageBox.warning(self, "Detalle vacío", "Agregue al menos un insumo a la orden.")
             return
-        self.controller.crear_orden(
+        oc_id = self.controller.crear_orden(
             folio, detalle, self.txt_obs.toPlainText().strip(),
             proveedor_id=proveedor_id,
             metodo_pago=self.cmb_metodo_pago.currentText().strip(),
             solo_remision=self.chk_remision.isChecked(),
             tipo=self.tipo,
         )
+        if self.tipo in ("factura", "remision"):
+            self.controller.recibir_orden(oc_id)
         self.accept()
 
 
@@ -858,12 +1098,37 @@ class DialogSeleccionarInsumo(QDialog):
                  sin_proveedor: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("Seleccionar Insumo")
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(700, 400)
         self.setModal(True)
         self._selected = None
         self._proveedor_id = proveedor_id
         self._sin_proveedor = sin_proveedor
         self._setup_ui()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        ancho = self._ancho_ventana_principal()
+        self.resize(ancho, self.height())
+        self._centrar_en_pantalla()
+
+    def _centrar_en_pantalla(self) -> None:
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        geo = screen.availableGeometry()
+        frame = self.frameGeometry()
+        self.move(geo.center().x() - frame.width() // 2,
+                  geo.center().y() - frame.height() // 2)
+
+    def _ancho_ventana_principal(self) -> int:
+        app = QApplication.instance()
+        ancho = 1400
+        if app is not None:
+            for w in app.topLevelWidgets():
+                if w is self or not w.isVisible():
+                    continue
+                ancho = max(ancho, w.width())
+        return ancho
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -872,15 +1137,15 @@ class DialogSeleccionarInsumo(QDialog):
         self.txt_buscar.setPlaceholderText("Buscar insumo...")
         layout.addWidget(self.txt_buscar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Código", "Nombre", "Categoría", "Stock"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._accept)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "codigo", "label": "Código"},
+                {"key": "nombre", "label": "Nombre", "stretch": True},
+                {"key": "categoria", "label": "Categoría"},
+                {"key": "stock_actual", "label": "Stock", "align": "right"},
+            ],
+        )
+        self.table.recordDoubleClicked.connect(self._accept)
 
         ctrl = InventarioController()
         if self._proveedor_id is not None:
@@ -890,13 +1155,7 @@ class DialogSeleccionarInsumo(QDialog):
         else:
             insumos = ctrl.listar_insumos()
         self._insumos = insumos
-        self.table.setRowCount(len(insumos))
-        for i, ins in enumerate(insumos):
-            self.table.setItem(i, 0, QTableWidgetItem(ins["codigo"]))
-            self.table.setItem(i, 1, QTableWidgetItem(ins["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(ins["categoria"]))
-            self.table.setItem(i, 3, QTableWidgetItem(str(ins["stock_actual"])))
-            self.table.item(i, 0).setData(Qt.UserRole, ins["id"])
+        self._mostrar(insumos)
 
         self.txt_buscar.textChanged.connect(self._filtrar)
         layout.addWidget(self.table)
@@ -913,24 +1172,27 @@ class DialogSeleccionarInsumo(QDialog):
         btns.addWidget(btn_sel)
         layout.addLayout(btns)
 
+    def _mostrar(self, insumos: list[dict]) -> None:
+        self.table.set_records(list(insumos))
+
     def _filtrar(self, texto: str) -> None:
-        for row in range(self.table.rowCount()):
-            match = False
-            for col in range(self.table.columnCount()):
-                item = self.table.item(row, col)
-                if item and texto.lower() in item.text().lower():
-                    match = True
-                    break
-            self.table.setRowHidden(row, not match)
+        texto = texto.strip().lower()
+        if not texto:
+            self._mostrar(self._insumos)
+            return
+        filtrados = [
+            ins for ins in self._insumos
+            if texto in str(ins.get("codigo", "")).lower()
+            or texto in str(ins.get("nombre", "")).lower()
+            or texto in str(ins.get("categoria", "")).lower()
+        ]
+        self._mostrar(filtrados)
 
     def _accept(self) -> None:
-        row = self.table.currentRow()
-        if row >= 0:
-            insumo_id = self.table.item(row, 0).data(Qt.UserRole)
-            ins = next((x for x in self._insumos if x["id"] == insumo_id), None)
-            if ins:
-                self._selected = ins
-                self.accept()
+        rec = self.table.current_record()
+        if rec is not None:
+            self._selected = rec
+            self.accept()
 
     def get_seleccion(self) -> dict | None:
         return self._selected
@@ -957,8 +1219,7 @@ class DialogVerOrden(QDialog):
 
         info = QFormLayout()
         info.addRow("Folio:", QLabel(oc.get("folio", "")))
-        info.addRow("Tipo:", QLabel(
-            "Factura" if oc.get("tipo") == "factura" else "Orden de Compra"))
+        info.addRow("Tipo:", QLabel(_tipo_documento(oc.get("tipo", "orden"))))
         info.addRow("Proveedor:", QLabel(oc.get("proveedor_nombre") or "Compra a inventario"))
         info.addRow("Fecha:", QLabel(oc.get("fecha_emision", "")))
         info.addRow("Estatus:", QLabel(oc.get("estatus", "").capitalize()))
@@ -990,13 +1251,17 @@ class DialogVerOrden(QDialog):
             self.table.setItem(i, 1, QTableWidgetItem(d.get("proveedor_nombre", "") or "—"))
             tallas = d.get("tallas", [])
             if tallas:
-                texto_tallas = ", ".join(f"T{t['talla']}: {t['pares']}" for t in tallas)
+                texto_tallas = ", ".join(
+                    f"T{t['talla']}: {t['pares']}"
+                    + (f" (${float(t['precio']):,.2f})"
+                       if float(t.get('precio', 0) or 0) > 0 else "")
+                    for t in tallas)
                 self.table.setItem(i, 2, QTableWidgetItem(texto_tallas))
             else:
                 self.table.setItem(i, 2, QTableWidgetItem("—"))
             self.table.setItem(i, 3, QTableWidgetItem(str(d.get("cantidad", 0))))
             self.table.setItem(i, 4, QTableWidgetItem(f"${d.get('precio_unitario', 0):.2f}"))
-            sub = d.get("cantidad", 0) * d.get("precio_unitario", 0)
+            sub = _subtotal_detalle(d)
             self.table.setItem(i, 5, QTableWidgetItem(f"${sub:.2f}"))
 
         layout.addWidget(self.table)
@@ -1043,8 +1308,7 @@ class DialogRecibirOrden(QDialog):
 
         info = QFormLayout()
         info.addRow("Folio:", QLabel(f"<b>{oc.get('folio', '')}</b>"))
-        info.addRow("Tipo:", QLabel(
-            "Factura" if oc.get("tipo") == "factura" else "Orden de Compra"))
+        info.addRow("Tipo:", QLabel(_tipo_documento(oc.get("tipo", "orden"))))
         info.addRow("Proveedor:", QLabel(oc.get("proveedor_nombre") or "Compra a inventario"))
         info.addRow("Fecha:", QLabel(oc.get("fecha_emision", "")))
         layout.addLayout(info)
@@ -1053,41 +1317,31 @@ class DialogRecibirOrden(QDialog):
         instruccion.setStyleSheet("font-weight: bold; color: #475569; margin-top: 8px;")
         layout.addWidget(instruccion)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Insumo", "Proveedor", "Cant. Solicitada", "Cant. Recibida",
-            "Precio Unit.", "Subtotal", "DetalleID"
-        ])
-        self.table.setColumnHidden(6, True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "insumo_nombre", "label": "Insumo", "stretch": True},
+                {"key": "proveedor_nombre", "label": "Proveedor", "stretch": True},
+                {"key": "cantidad", "label": "Cant. Solicitada", "align": "right"},
+                {"key": "recibida", "label": "Cant. Recibida", "widget": self._factory_recibida},
+                {"key": "precio", "label": "Precio Unit.", "align": "right"},
+                {"key": "subtotal", "label": "Subtotal", "align": "right"},
+                {"key": "id", "label": "DetalleID", "hidden": True},
+            ],
+            sortable=False,
+        )
 
         detalle = self.controller.obtener_detalle_orden(self.oc_id)
-        self._spins: list[QDoubleSpinBox] = []
-        self._detalle_ids: list[int] = []
-        self.table.setRowCount(len(detalle))
-        for i, d in enumerate(detalle):
-            cant = d.get("cantidad", 0)
-            precio = d.get("precio_unitario", 0)
-            self.table.setItem(i, 0, QTableWidgetItem(d.get("insumo_nombre", "")))
-            self.table.setItem(i, 1, QTableWidgetItem(d.get("proveedor_nombre", "") or "—"))
-            self.table.setItem(i, 2, QTableWidgetItem(str(cant)))
-            spn = QDoubleSpinBox()
-            spn.setRange(0, cant * 10)
-            spn.setDecimals(2)
-            spn.setValue(cant)
-            spn.valueChanged.connect(self._on_cantidad_changed)
-            self._spins.append(spn)
-            self.table.setCellWidget(i, 3, spn)
-            self.table.setItem(i, 4, QTableWidgetItem(f"${precio:.2f}"))
-            sub_item = QTableWidgetItem(f"${cant * precio:.2f}")
-            self.table.setItem(i, 5, sub_item)
-            self.table.setItem(i, 6, QTableWidgetItem(str(d.get("id", ""))))
-            self._detalle_ids.append(d.get("id", 0))
+        self._detalle = detalle
+        self.table.set_records([
+            {"insumo_nombre": d.get("insumo_nombre", ""),
+             "proveedor_nombre": d.get("proveedor_nombre", "") or "—",
+             "cantidad": d.get("cantidad", 0),
+             "recibida": d.get("cantidad", 0),
+             "precio": f"${d.get('precio_unitario', 0):.2f}",
+             "subtotal": f"${_subtotal_detalle(d):.2f}",
+             "id": d.get("id", "")}
+            for d in detalle
+        ])
 
         layout.addWidget(self.table)
 
@@ -1107,16 +1361,24 @@ class DialogRecibirOrden(QDialog):
         btns.addWidget(btn_recibir)
         layout.addLayout(btns)
 
+    def _factory_recibida(self, record: dict, row: int) -> QDoubleSpinBox:
+        cant = float(record.get("cantidad", 0) or 0)
+        spn = QDoubleSpinBox()
+        spn.setRange(0, cant * 10)
+        spn.setDecimals(2)
+        spn.setValue(cant)
+        spn.valueChanged.connect(self._on_cantidad_changed)
+        return spn
+
     def _on_cantidad_changed(self) -> None:
-        detalle = self.controller.obtener_detalle_orden(self.oc_id)
         diferencias = False
         total = 0
-        for i, d in enumerate(detalle):
-            recibido = self._spins[i].value()
+        for i, d in enumerate(self._detalle):
+            spn = self.table.cell_widget(i, "recibida")
+            recibido = spn.value() if spn else d.get("cantidad", 0)
             solicitado = d.get("cantidad", 0)
-            precio = d.get("precio_unitario", 0)
-            sub = recibido * precio
-            self.table.item(i, 5).setText(f"${sub:.2f}")
+            sub = _subtotal_recibido(d, recibido)
+            self.table.set_cell_text(i, "subtotal", f"${sub:.2f}")
             total += sub
             if abs(recibido - solicitado) > 0.01:
                 diferencias = True
@@ -1128,9 +1390,10 @@ class DialogRecibirOrden(QDialog):
             self.lbl_diferencia.setText("✓ Cantidades coinciden. Orden se marcará como 'recibida'.")
 
     def _save(self) -> None:
-        detalle = self.controller.obtener_detalle_orden(self.oc_id)
-        for i, d in enumerate(detalle):
-            recibido = self._spins[i].value()
+        recibidos = []
+        for i, d in enumerate(self._detalle):
+            spn = self.table.cell_widget(i, "recibida")
+            recibido = spn.value() if spn else 0
             if recibido > 0:
                 from src.database.db_manager import DatabaseManager
                 db = DatabaseManager()
@@ -1143,11 +1406,14 @@ class DialogRecibirOrden(QDialog):
                     (d["insumo_id"], recibido, self.oc_id,
                      f"OC {d['orden_compra_id']} - Recibido: {recibido}/{d['cantidad']}"),
                 )
+            recibidos.append({"insumo_id": d["insumo_id"], "solicitado": d["cantidad"],
+                              "recibido": recibido})
 
         estatus = "recibida_con_diferencias" if self._diferencias else "recibida"
         total = sum(
-            self._spins[i].value() * d.get("precio_unitario", 0)
-            for i, d in enumerate(detalle)
+            _subtotal_recibido(d, self.table.cell_widget(i, "recibida").value()
+                               if self.table.cell_widget(i, "recibida") else 0)
+            for i, d in enumerate(self._detalle)
         )
         from src.database.db_manager import DatabaseManager
         db = DatabaseManager()
@@ -1155,6 +1421,10 @@ class DialogRecibirOrden(QDialog):
             "UPDATE ordenes_compra SET estatus=?, fecha_recibido=datetime('now'), total=? WHERE id=?",
             (estatus, total, self.oc_id),
         )
+        from src.utils.logs import registrar_log
+        registrar_log("ordenes_compra", "recibir", "orden", self.oc_id,
+                      datos={"estatus": estatus, "total": total,
+                             "diferencias": self._diferencias, "detalle_recibido": recibidos})
         self.accept()
 
 
@@ -1522,23 +1792,17 @@ class DialogBOM(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Insumo", "Cantidad por Par", "Unidad", "InsumoID"])
-        self.table.setColumnHidden(3, True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "insumo_nombre", "label": "Insumo", "stretch": True},
+                {"key": "cantidad_por_par", "label": "Cantidad por Par", "widget": self._factory_cantidad_bom},
+                {"key": "unidad", "label": "Unidad", "widget": self._factory_unidad_bom},
+                {"key": "id", "label": "InsumoID", "hidden": True},
+            ],
+            sortable=False,
+        )
 
-        bom = self.controller.obtener_bom(self.modelo_id)
-        self.table.setRowCount(len(bom))
-        for i, b in enumerate(bom):
-            self.table.setItem(i, 0, QTableWidgetItem(b.get("insumo_nombre", "")))
-            self._set_widgets_fila(i, b.get("cantidad_por_par", 0),
-                                   b.get("unidad_medida", "") or "pieza",
-                                   b.get("insumo_id", ""))
+        self._cargar_bom()
 
         layout.addWidget(self.table)
 
@@ -1568,43 +1832,54 @@ class DialogBOM(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _set_widgets_fila(self, row: int, cantidad: float, unidad: str, insumo_id) -> None:
+    def _factory_cantidad_bom(self, record: dict, row: int) -> QDoubleSpinBox:
         spn = QDoubleSpinBox()
         spn.setRange(0, 999999)
         spn.setDecimals(2)
-        spn.setValue(cantidad)
-        self.table.setCellWidget(row, 1, spn)
+        spn.setValue(float(record.get("cantidad_por_par", 0) or 0))
+        return spn
+
+    def _factory_unidad_bom(self, record: dict, row: int) -> QComboBox:
         cmb = QComboBox()
         for u in self.controller.listar_unidades():
             cmb.addItem(u["abreviatura"], u["nombre"])
-        idx = cmb.findText(unidad)
+        idx = cmb.findText(record.get("unidad", "pieza"))
         if idx >= 0:
             cmb.setCurrentIndex(idx)
-        self.table.setCellWidget(row, 2, cmb)
-        self.table.setItem(row, 3, QTableWidgetItem(str(insumo_id)))
+        return cmb
+
+    def _cargar_bom(self) -> None:
+        bom = self.controller.obtener_bom(self.modelo_id)
+        self.table.set_records([
+            {"insumo_nombre": b.get("insumo_nombre", ""),
+             "cantidad_por_par": b.get("cantidad_por_par", 0),
+             "unidad": b.get("unidad_medida", "") or "pieza",
+             "id": b.get("insumo_id", "")}
+            for b in bom
+        ])
 
     def _agregar(self) -> None:
         dlg = DialogSeleccionarInsumo(self)
         if dlg.exec() == QDialog.Accepted:
             ins = dlg.get_seleccion()
             if ins:
-                row = self.table.rowCount()
-                self.table.insertRow(row)
-                self.table.setItem(row, 0, QTableWidgetItem(ins["nombre"]))
-                self._set_widgets_fila(row, 1, "pieza", ins["id"])
+                self.table.add_row({
+                    "insumo_nombre": ins["nombre"], "cantidad_por_par": 1,
+                    "unidad": "pieza", "id": ins["id"],
+                })
 
     def _quitar(self) -> None:
-        row = self.table.currentRow()
+        row = self.table.current_row()
         if row >= 0:
-            self.table.removeRow(row)
+            self.table.remove_row(row)
 
     def _save(self) -> None:
         insumos = []
-        for row in range(self.table.rowCount()):
-            spn = self.table.cellWidget(row, 1)
-            cmb = self.table.cellWidget(row, 2)
+        for row in range(self.table.row_count()):
+            spn = self.table.cell_widget(row, "cantidad_por_par")
+            cmb = self.table.cell_widget(row, "unidad")
             insumos.append({
-                "insumo_id": int(self.table.item(row, 3).text()),
+                "insumo_id": int(self.table.cell_text(row, "id")),
                 "cantidad": spn.value() if spn else 0,
                 "unidad": cmb.currentText() if cmb else "pieza",
             })
@@ -1796,28 +2071,17 @@ class DialogSeguimientoOP(QDialog):
             layout.addWidget(t_label)
 
         layout.addWidget(QLabel("Avance en línea de producción:"))
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Estación", "Entrada", "Salida", "Procesados", "Estatus"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-
-        seguimiento = self.controller.obtener_seguimiento(self.op_id)
-        self.table.setRowCount(len(seguimiento))
-        for i, s in enumerate(seguimiento):
-            self.table.setItem(i, 0, QTableWidgetItem(s.get("estacion_nombre", "")))
-            self.table.setItem(i, 1, QTableWidgetItem(s.get("fecha_entrada", "") or "-"))
-            self.table.setItem(i, 2, QTableWidgetItem(s.get("fecha_salida", "") or "-"))
-            self.table.setItem(i, 3, QTableWidgetItem(str(s.get("pares_procesados", 0) or 0)))
-            est_item = QTableWidgetItem(s.get("estatus", "").capitalize())
-            if s.get("estatus") == "completado":
-                est_item.setForeground(Qt.darkGreen)
-            elif s.get("estatus") == "en_proceso":
-                est_item.setForeground(Qt.darkYellow)
-            self.table.setItem(i, 4, est_item)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "estacion_nombre", "label": "Estación", "stretch": True},
+                {"key": "fecha_entrada", "label": "Entrada"},
+                {"key": "fecha_salida", "label": "Salida"},
+                {"key": "pares_procesados", "label": "Procesados", "align": "right"},
+                {"key": "estatus", "label": "Estatus"},
+            ],
+            foreground_fn=self._color_estatus,
+        )
+        self._cargar_seguimiento()
 
         layout.addWidget(self.table)
 
@@ -1832,6 +2096,26 @@ class DialogSeguimientoOP(QDialog):
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close, 0, Qt.AlignRight)
 
+    def _color_estatus(self, record: dict, key: str) -> QColor | None:
+        if key == "estatus":
+            if record.get("estatus_raw") == "completado":
+                return QColor("#15803d")
+            if record.get("estatus_raw") == "en_proceso":
+                return QColor("#ca8a04")
+        return None
+
+    def _cargar_seguimiento(self) -> None:
+        seguimiento = self.controller.obtener_seguimiento(self.op_id)
+        self.table.set_records([
+            {"estacion_nombre": s.get("estacion_nombre", ""),
+             "fecha_entrada": s.get("fecha_entrada", "") or "-",
+             "fecha_salida": s.get("fecha_salida", "") or "-",
+             "pares_procesados": s.get("pares_procesados", 0) or 0,
+             "estatus": s.get("estatus", "").capitalize(),
+             "estatus_raw": s.get("estatus", "")}
+            for s in seguimiento
+        ])
+
     def _avanzar(self, op: dict) -> None:
         seg = self.controller.obtener_seguimiento(self.op_id)
         siguiente = None
@@ -1845,23 +2129,7 @@ class DialogSeguimientoOP(QDialog):
 
         dlg = DialogAvanceEstacion(self.controller, self.op_id, siguiente)
         if dlg.exec() == QDialog.Accepted:
-            self._refresh()
-
-    def _refresh(self) -> None:
-        op = self.controller.obtener_op(self.op_id)
-        seguimiento = self.controller.obtener_seguimiento(self.op_id)
-        self.table.setRowCount(len(seguimiento))
-        for i, s in enumerate(seguimiento):
-            self.table.setItem(i, 0, QTableWidgetItem(s.get("estacion_nombre", "")))
-            self.table.setItem(i, 1, QTableWidgetItem(s.get("fecha_entrada", "") or "-"))
-            self.table.setItem(i, 2, QTableWidgetItem(s.get("fecha_salida", "") or "-"))
-            self.table.setItem(i, 3, QTableWidgetItem(str(s.get("pares_procesados", 0) or 0)))
-            est_item = QTableWidgetItem(s.get("estatus", "").capitalize())
-            if s.get("estatus") == "completado":
-                est_item.setForeground(Qt.darkGreen)
-            elif s.get("estatus") == "en_proceso":
-                est_item.setForeground(Qt.darkYellow)
-            self.table.setItem(i, 4, est_item)
+            self._cargar_seguimiento()
 
 
 class DialogAvanceEstacion(QDialog):

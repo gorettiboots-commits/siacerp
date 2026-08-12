@@ -174,9 +174,19 @@ def _oc_columnas_tallas(detalle: list[dict]) -> list[dict]:
     return cols
 
 
+def _oc_subtotal_detalle(d: dict) -> float:
+    """Subtotal del renglón: Σ(pares × precio) por talla si hay precios por talla;
+    si no, cantidad × precio_unitario."""
+    tallas = d.get("tallas", []) or []
+    con_precio = [t for t in tallas if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        return sum(float(t.get("pares", 0) or 0) * float(t.get("precio", 0) or 0)
+                   for t in con_precio)
+    return float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
+
+
 def _oc_totales(detalle: list[dict], solo_remision: bool) -> tuple[float, float, float]:
-    subtotal = sum(float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
-                   for d in detalle)
+    subtotal = sum(_oc_subtotal_detalle(d) for d in detalle)
     if solo_remision:
         iva = 0.0
     else:
@@ -219,7 +229,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
             for c in columnas)
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
-        sub = cant * precio
+        sub = _oc_subtotal_detalle(d)
         rows += f"""<tr>
             <td style='text-align:left'>{_esc(d.get('insumo_nombre', ''))}</td>
             {celdas}
@@ -464,7 +474,7 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
         precio = float(d.get("precio_unitario", 0) or 0)
         ws.cell(row=fila, column=1 + n_tallas + 1, value=cant)
         ws.cell(row=fila, column=1 + n_tallas + 2, value=precio)
-        ws.cell(row=fila, column=1 + n_tallas + 3, value=round(cant * precio, 2))
+        ws.cell(row=fila, column=1 + n_tallas + 3, value=round(_oc_subtotal_detalle(d), 2))
         for col in range(1, last + 1):
             cc = ws.cell(row=fila, column=col)
             cc.border = borde

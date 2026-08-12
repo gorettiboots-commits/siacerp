@@ -23,6 +23,30 @@ class InsumoModel:
             (q, q, q),
         )
 
+    def listar_categorias(self, excluir_id: Optional[int] = None) -> list[str]:
+        query = "SELECT DISTINCT categoria FROM insumos WHERE activo = 1 AND categoria IS NOT NULL AND TRIM(categoria) != ''"
+        params: tuple = ()
+        if excluir_id is not None:
+            query += " AND id != ?"
+            params = (excluir_id,)
+        query += " ORDER BY categoria"
+        rows = self.db.fetch_all(query, params)
+        return [r["categoria"] for r in rows]
+
+    def buscar_por_nombre(self, nombre: str, excluir_id: Optional[int] = None) -> list[dict]:
+        q = "%" + nombre + "%"
+        query = (
+            f"SELECT {', '.join(self._COLUMNAS)} FROM insumos "
+            "WHERE activo = 1 AND nombre LIKE ?"
+        )
+        params: list = [q]
+        if excluir_id is not None:
+            query += " AND id != ?"
+            params.append(excluir_id)
+        query += " ORDER BY CASE WHEN nombre = ? THEN 0 ELSE 1 END, nombre LIMIT 10"
+        params.append(nombre)
+        return self.db.fetch_all(query, tuple(params))
+
     def obtener(self, insumo_id: int) -> Optional[dict]:
         return self.db.fetch_one("SELECT * FROM insumos WHERE id = ?", (insumo_id,))
 
@@ -99,14 +123,22 @@ class MovimientoInventarioModel:
         self.db = DatabaseManager()
 
     def listar(self, insumo_id: Optional[int] = None) -> list[dict]:
+        base = """
+            SELECT m.*, i.nombre as insumo_nombre,
+                   COALESCE(oc.folio, op.folio, m.observaciones) AS referencia_folio
+            FROM movimiento_inventario m
+            JOIN insumos i ON i.id = m.insumo_id
+            LEFT JOIN ordenes_compra oc
+              ON m.referencia_tipo = 'orden_compra' AND oc.id = m.referencia_id
+            LEFT JOIN ordenes_produccion op
+              ON m.referencia_tipo = 'orden_produccion' AND op.id = m.referencia_id
+        """
         if insumo_id:
             return self.db.fetch_all(
-                "SELECT m.*, i.nombre as insumo_nombre FROM movimiento_inventario m JOIN insumos i ON i.id = m.insumo_id WHERE m.insumo_id = ? ORDER BY m.created_at DESC",
+                base + " WHERE m.insumo_id = ? ORDER BY m.created_at DESC",
                 (insumo_id,),
             )
-        return self.db.fetch_all(
-            "SELECT m.*, i.nombre as insumo_nombre FROM movimiento_inventario m JOIN insumos i ON i.id = m.insumo_id ORDER BY m.created_at DESC LIMIT 500"
-        )
+        return self.db.fetch_all(base + " ORDER BY m.created_at DESC LIMIT 500")
 
     def registrar(self, insumo_id: int, tipo: str, cantidad: float,
                   ref_tipo: Optional[str] = None, ref_id: Optional[int] = None,

@@ -64,6 +64,13 @@ _TILES = {
           <path d="M20 24l12-6 12 6v16l-12 6-12-6z" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
           <path d="M20 24l12 6 12-6M32 30v16" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
         </svg>""",
+    "logs": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#7c3aed"/>
+          <path d="M20 24l-6 8 6 8M44 24l6 8-6 8" fill="none"
+                stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M37 16l-8 32" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>""",
 }
 
 _GLIFOS = {
@@ -106,6 +113,11 @@ _GLIFOS = {
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M14 20h36M28 20v-6a4 4 0 0 1 4-4h0a4 4 0 0 1 4 4v6M22 20l2.5 32a4 4 0 0 0 4 3.6h7a4 4 0 0 0 4-3.6L42 20M27 28v16M37 28v16"
                 fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>""",
+    "filas": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="8" y="12" width="48" height="40" rx="5" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M8 23h48M24 12v40M40 12v40" fill="none" stroke="#COLOR" stroke-width="2.6"/>
         </svg>""",
     "lista": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
