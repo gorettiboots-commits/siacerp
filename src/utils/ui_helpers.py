@@ -3,7 +3,45 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox, QCompleter, QFrame, QHBoxLayout, QLabel, QPushButton,
+    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget,
+)
+
+
+class SearchableComboBox(QComboBox):
+    """ComboBox editable con búsqueda inline: filtra las opciones al escribir
+    y permite capturar un valor nuevo si ninguna opción coincide."""
+
+    def __init__(self, parent: QWidget | None = None,
+                 placeholder: str = "Buscar…") -> None:
+        super().__init__(parent)
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.NoInsert)
+        self.setMaxVisibleItems(12)
+        self.lineEdit().setPlaceholderText(placeholder)
+        self._completer = QCompleter(self)
+        self._completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchContains)
+        self._completer.setCompletionMode(QCompleter.PopupCompletion)
+        self._completer.setModel(self.model())
+        self.setCompleter(self._completer)
+        self._completer.activated.connect(self._on_completer_activated)
+
+    def _on_completer_activated(self, text: str) -> None:
+        idx = self.findText(text, Qt.MatchFixedString)
+        if idx >= 0:
+            self.setCurrentIndex(idx)
+
+    def set_items(self, items) -> None:
+        self.clear()
+        for it in items:
+            self.addItem(str(it))
+
+    def set_current_data(self, data) -> None:
+        idx = self.findData(data)
+        if idx >= 0:
+            self.setCurrentIndex(idx)
 
 
 def load_styles() -> str:
@@ -19,18 +57,12 @@ def load_styles() -> str:
 def crear_tarjeta(titulo: str, valor: str, color: str = "#4f46e5") -> QFrame:
     card = QFrame()
     card.setObjectName("card")
-    card.setStyleSheet(f"""
-        QFrame#card {{
-            background-color: #ffffff;
-            border-radius: 10px;
-            border: 1px solid #e2e8f0;
-            padding: 16px;
-        }}
-    """)
+    # El fondo/borde/radio lo define styles.qss (QFrame#card): aquí solo
+    # se mantienen los estilos tipográficos de los textos.
 
     layout = QVBoxLayout(card)
-    layout.setContentsMargins(16, 16, 16, 16)
-    layout.setSpacing(8)
+    layout.setContentsMargins(18, 18, 18, 18)
+    layout.setSpacing(10)
 
     lbl_titulo = QLabel(titulo)
     lbl_titulo.setObjectName("cardTitle")
@@ -77,15 +109,9 @@ def crear_seccion(titulo: str, subtitulo: str = "") -> QWidget:
 def crear_header(titulo: str, parent: QWidget | None = None) -> QFrame:
     header = QFrame(parent)
     header.setObjectName("headerBar")
-    header.setStyleSheet("""
-        QFrame#headerBar {
-            background-color: #ffffff;
-            border-bottom: 1px solid #e2e8f0;
-            padding: 16px 24px;
-        }
-    """)
+    # El fondo/borde lo define styles.qss (QFrame#headerBar).
     layout = QHBoxLayout(header)
-    layout.setContentsMargins(24, 16, 24, 16)
+    layout.setContentsMargins(24, 18, 24, 18)
 
     lbl = QLabel(titulo)
     lbl.setStyleSheet("font-size: 22px; font-weight: bold; color: #1e293b;")

@@ -105,6 +105,7 @@ class DatabaseManager:
 
     def _migrar(self) -> None:
         self._migrar_passwords()
+        self._migrar_logs()
         try:
             conn = self.connect()
             cursor = conn.cursor()
@@ -274,13 +275,20 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS detalle_orden_compra_puntos (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     detalle_id INTEGER NOT NULL REFERENCES detalle_orden_compra(id) ON DELETE CASCADE,
-                    punto_id INTEGER NOT NULL REFERENCES puntos_catalogo(id),
+                    talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
                     pares INTEGER NOT NULL DEFAULT 0,
-                    UNIQUE(detalle_id, punto_id),
+                    precio_unitario REAL NOT NULL DEFAULT 0,
+                    UNIQUE(detalle_id, talla_id),
                     FOREIGN KEY (detalle_id) REFERENCES detalle_orden_compra(id),
-                    FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
+                    FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
                 )
             """)
+
+            puntos_cols = [r[1] for r in cursor.execute("PRAGMA table_info(detalle_orden_compra_puntos)").fetchall()]
+            if 'precio_unitario' not in puntos_cols:
+                cursor.execute(
+                    "ALTER TABLE detalle_orden_compra_puntos ADD COLUMN precio_unitario REAL NOT NULL DEFAULT 0")
+                print("Migración: columna precio_unitario agregada a detalle_orden_compra_puntos.")
 
             prov_cols = [r[1] for r in cursor.execute("PRAGMA table_info(proveedores)").fetchall()]
             if 'nombre_comercial' not in prov_cols:
@@ -296,6 +304,287 @@ class DatabaseManager:
             except Exception:
                 pass
             print(f"Migración tallas/pago omitida: {e}")
+
+        self._migrar_tallas_unificadas()
+
+    def _migrar_tallas_unificadas(self) -> None:
+        """RD-1: fusiona `puntos_catalogo` + `tallas_corrida` en `tallas_catalogo`.
+
+        Crea el catálogo unificado (sin campo `orden`), fusiona los valores de
+        ambos catálogos históricos y remapea las tablas de detalle
+        (`detalle_orden_compra_puntos`, `matriz_tallas_op`, `inventario_pt`)
+        para que apunten a `tallas_catalogo`. Idempotente y no destructivo:
+        si los catálogos históricos ya no existen, no hace nada.
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+        try:
+            def tabla_existe(nombre: str) -> bool:
+                if self.engine == 'sqlite':
+                    row = cursor.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                        (nombre,),
+                    ).fetchone()
+                    return row is not None
+                row = cursor.execute(
+                    "SELECT 1 FROM information_schema.tables WHERE table_name=%s",
+                    (nombre,),
+                ).fetchone()
+                return row is not None
+
+            existe_puntos = tabla_existe('puntos_catalogo')
+            existe_corrida = tabla_existe('tallas_corrida')
+            if not existe_puntos and not existe_corrida:
+                return
+
+            if self.engine == 'sqlite':
+                cursor.execute(
+                    "CREATE TABLE IF NOT EXISTS tallas_catalogo ("
+                    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    " talla TEXT NOT NULL UNIQUE,"
+                    " activo INTEGER NOT NULL DEFAULT 1)")
+            else:
+                cursor.execute(
+                    "CREATE TABLE IF NOT EXISTS tallas_catalogo ("
+                    " id SERIAL PRIMARY KEY,"
+                    " talla TEXT NOT NULL UNIQUE,"
+                    " activo INTEGER NOT NULL DEFAULT 1)")
+
+            if self.engine == 'sqlite':
+                # SQLite no soporta ON CONFLICT con INSERT...SELECT:
+                # se usa INSERT OR IGNORE y luego se propaga el estado `activo`.
+                if existe_puntos:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO tallas_catalogo (talla, activo) "
+                        "SELECT punto, activo FROM puntos_catalogo")
+                    cursor.execute(
+                        "UPDATE tallas_catalogo SET activo = "
+                        "(SELECT p.activo FROM puntos_catalogo p "
+                        " WHERE p.punto = tallas_catalogo.talla) "
+                        "WHERE talla IN (SELECT punto FROM puntos_catalogo)")
+                if existe_corrida:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO tallas_catalogo (talla, activo) "
+                        "SELECT talla, 1 FROM tallas_corrida")
+            else:
+                # PostgreSQL: ON CONFLICT (talla) DO NOTHING es la sintaxis válida.
+                if existe_puntos:
+                    cursor.execute(
+                        "INSERT INTO tallas_catalogo (talla, activo) "
+                        "SELECT punto, activo FROM puntos_catalogo "
+                        "ON CONFLICT (talla) DO NOTHING")
+                    cursor.execute(
+                        "UPDATE tallas_catalogo SET activo = "
+                        "(SELECT p.activo FROM puntos_catalogo p "
+                        " WHERE p.punto = tallas_catalogo.talla) "
+                        "WHERE talla IN (SELECT punto FROM puntos_catalogo)")
+                if existe_corrida:
+                    cursor.execute(
+                        "INSERT INTO tallas_catalogo (talla, activo) "
+                        "SELECT talla, 1 FROM tallas_corrida "
+                        "ON CONFLICT (talla) DO NOTHING")
+            conn.commit()
+
+            # Reintento seguro: si una corrida anterior falló a mitad del
+            # remapeo, la tabla vieja quedó como *_old. En el siguiente
+            # arranque schema.sql pudo recrear la tabla principal vacía;
+            # se restaura la *_old (con sus datos) para volver a intentar.
+            if self.engine == 'sqlite':
+                for nombre, sufijo in (
+                    ("detalle_orden_compra_puntos", "detalle_orden_compra_puntos_old"),
+                    ("matriz_tallas_op", "matriz_tallas_op_old"),
+                    ("inventario_pt", "inventario_pt_old"),
+                ):
+                    if not tabla_existe(sufijo):
+                        continue
+                    if not tabla_existe(nombre):
+                        cursor.execute(
+                            f"ALTER TABLE {sufijo} RENAME TO {nombre}")
+                        print(f"Migración RD-1: restaurada {nombre} tras reintento.")
+                        continue
+                    filas = cursor.execute(
+                        f"SELECT COUNT(*) FROM {nombre}").fetchone()[0]
+                    if filas == 0:
+                        # La principal fue recreada vacía por schema.sql:
+                        # se reemplaza por la *_old para no perder datos.
+                        cursor.execute(f"DROP TABLE {nombre}")
+                        cursor.execute(
+                            f"ALTER TABLE {sufijo} RENAME TO {nombre}")
+                        print(f"Migración RD-1: restaurada {nombre} tras reintento.")
+                    else:
+                        # La principal ya tiene datos (migración completa
+                        # previa): la *_old es residuo y se descarta.
+                        cursor.execute(f"DROP TABLE {sufijo}")
+                conn.commit()
+
+            if self.engine == 'sqlite':
+                cursor.execute("PRAGMA foreign_keys=OFF")
+                if existe_puntos:
+                    cursor.execute(
+                        "ALTER TABLE detalle_orden_compra_puntos "
+                        "RENAME TO detalle_orden_compra_puntos_old")
+                    cursor.execute("""
+                        CREATE TABLE detalle_orden_compra_puntos (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            detalle_id INTEGER NOT NULL
+                                REFERENCES detalle_orden_compra(id) ON DELETE CASCADE,
+                            talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
+                            pares INTEGER NOT NULL DEFAULT 0,
+                            precio_unitario REAL NOT NULL DEFAULT 0,
+                            UNIQUE(detalle_id, talla_id),
+                            FOREIGN KEY (detalle_id) REFERENCES detalle_orden_compra(id),
+                            FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
+                        )
+                    """)
+                    cursor.execute("""
+                        INSERT INTO detalle_orden_compra_puntos
+                            (id, detalle_id, talla_id, pares, precio_unitario)
+                        SELECT d.id, d.detalle_id, t.id, d.pares, d.precio_unitario
+                        FROM detalle_orden_compra_puntos_old d
+                        JOIN puntos_catalogo p ON p.id = d.punto_id
+                        JOIN tallas_catalogo t ON t.talla = p.punto
+                    """)
+                    cursor.execute("DROP TABLE detalle_orden_compra_puntos_old")
+                    print("Migración RD-1: detalle_orden_compra_puntos -> talla_id.")
+
+                if existe_corrida:
+                    cursor.execute(
+                        "ALTER TABLE matriz_tallas_op RENAME TO matriz_tallas_op_old")
+                    cursor.execute("""
+                        CREATE TABLE matriz_tallas_op (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            orden_produccion_id INTEGER NOT NULL
+                                REFERENCES ordenes_produccion(id),
+                            talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
+                            pares INTEGER NOT NULL DEFAULT 0,
+                            FOREIGN KEY (orden_produccion_id)
+                                REFERENCES ordenes_produccion(id),
+                            FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
+                        )
+                    """)
+                    cursor.execute("""
+                        INSERT INTO matriz_tallas_op
+                            (id, orden_produccion_id, talla_id, pares)
+                        SELECT m.id, m.orden_produccion_id, t.id, m.pares
+                        FROM matriz_tallas_op_old m
+                        JOIN tallas_corrida tc ON tc.id = m.talla_id
+                        JOIN tallas_catalogo t ON t.talla = tc.talla
+                    """)
+                    cursor.execute("DROP TABLE matriz_tallas_op_old")
+
+                    cursor.execute(
+                        "ALTER TABLE inventario_pt RENAME TO inventario_pt_old")
+                    cursor.execute("""
+                        CREATE TABLE inventario_pt (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            variante_id INTEGER NOT NULL REFERENCES variantes(id),
+                            talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
+                            pares INTEGER NOT NULL DEFAULT 0,
+                            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            FOREIGN KEY (variante_id) REFERENCES variantes(id),
+                            FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
+                        )
+                    """)
+                    cursor.execute("""
+                        INSERT INTO inventario_pt
+                            (id, variante_id, talla_id, pares, updated_at)
+                        SELECT i.id, i.variante_id, t.id, i.pares, i.updated_at
+                        FROM inventario_pt_old i
+                        JOIN tallas_corrida tc ON tc.id = i.talla_id
+                        JOIN tallas_catalogo t ON t.talla = tc.talla
+                    """)
+                    cursor.execute("DROP TABLE inventario_pt_old")
+                    print("Migración RD-1: matriz_tallas_op/inventario_pt -> tallas_catalogo.")
+
+                cursor.execute("DROP TABLE IF EXISTS puntos_catalogo")
+                cursor.execute("DROP TABLE IF EXISTS tallas_corrida")
+                cursor.execute("PRAGMA foreign_keys=ON")
+                conn.commit()
+                print("Migración RD-1: catálogo unificado tallas_catalogo aplicado.")
+            else:
+                if existe_puntos:
+                    cursor.execute(
+                        "ALTER TABLE detalle_orden_compra_puntos "
+                        "RENAME COLUMN punto_id TO talla_id")
+                    cursor.execute("""
+                        UPDATE detalle_orden_compra_puntos d
+                        SET talla_id = t.id
+                        FROM puntos_catalogo p, tallas_catalogo t
+                        WHERE p.id = d.talla_id AND t.talla = p.punto
+                    """)
+                    cursor.execute(
+                        "ALTER TABLE detalle_orden_compra_puntos "
+                        "DROP CONSTRAINT IF EXISTS "
+                        "detalle_orden_compra_puntos_punto_id_fkey")
+                    cursor.execute(
+                        "ALTER TABLE detalle_orden_compra_puntos "
+                        "ADD CONSTRAINT detalle_orden_compra_puntos_talla_id_fkey "
+                        "FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)")
+                if existe_corrida:
+                    cursor.execute("""
+                        UPDATE matriz_tallas_op m
+                        SET talla_id = t.id
+                        FROM tallas_corrida tc, tallas_catalogo t
+                        WHERE tc.id = m.talla_id AND t.talla = tc.talla
+                    """)
+                    cursor.execute(
+                        "ALTER TABLE matriz_tallas_op "
+                        "DROP CONSTRAINT IF EXISTS matriz_tallas_op_talla_id_fkey")
+                    cursor.execute(
+                        "ALTER TABLE matriz_tallas_op "
+                        "ADD CONSTRAINT matriz_tallas_op_talla_id_fkey "
+                        "FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)")
+                    cursor.execute("""
+                        UPDATE inventario_pt i
+                        SET talla_id = t.id
+                        FROM tallas_corrida tc, tallas_catalogo t
+                        WHERE tc.id = i.talla_id AND t.talla = tc.talla
+                    """)
+                    cursor.execute(
+                        "ALTER TABLE inventario_pt "
+                        "DROP CONSTRAINT IF EXISTS inventario_pt_talla_id_fkey")
+                    cursor.execute(
+                        "ALTER TABLE inventario_pt "
+                        "ADD CONSTRAINT inventario_pt_talla_id_fkey "
+                        "FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)")
+                cursor.execute("DROP TABLE IF EXISTS puntos_catalogo")
+                cursor.execute("DROP TABLE IF EXISTS tallas_corrida")
+                conn.commit()
+                print("Migración RD-1: catálogo unificado tallas_catalogo aplicado (PG).")
+        except Exception as e:
+            try:
+                if self.engine == 'sqlite':
+                    cursor.execute("PRAGMA foreign_keys=ON")
+            except Exception:
+                pass
+            print(f"Migración RD-1 tallas_catalogo omitida: {e}")
+    def _migrar_logs(self) -> None:
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS logs_sistema (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fecha TEXT NOT NULL DEFAULT (datetime('now')),
+                    usuario_id INTEGER,
+                    usuario TEXT,
+                    modulo TEXT NOT NULL,
+                    accion TEXT NOT NULL,
+                    entidad TEXT,
+                    entidad_id INTEGER,
+                    nivel TEXT NOT NULL DEFAULT 'info',
+                    detalle TEXT,
+                    datos TEXT,
+                    metadata TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_fecha ON logs_sistema (fecha)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_modulo ON logs_sistema (modulo)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_entidad ON logs_sistema (entidad, entidad_id)")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración logs omitida: {e}")
 
     def _migrar_passwords(self) -> None:
         from src.utils.security import es_hash_bcrypt, hash_contrasena

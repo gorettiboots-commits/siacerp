@@ -15,12 +15,17 @@ env/
 
 # Configuración con credenciales
 config.ini
+# opencode.json contiene API key (Google Stitch MCP) — no subir
+opencode.json
 
 # Exportaciones generadas por la app
 OC_*.xlsx
 Ordenes_Compra.xlsx
 Movimientos_Inventario.xlsx
 *.pdf
+
+# Capturas de preview (pruebas de UI)
+ui_preview/
 
 # Entorno / editor
 .vscode/

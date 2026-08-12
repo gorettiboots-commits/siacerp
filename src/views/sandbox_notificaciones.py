@@ -162,6 +162,27 @@ class NotificacionesFlotantes(QWidget):
         self._timer.timeout.connect(self._seguir_ancla)
         self._timer.start()
 
+        # Limpieza: detiene timers y animaciones si el objeto se cierra o es
+        # destruido (p. ej. por el GC), evitando que Qt acceda a objetivos ya
+        # borrados y corrompa el heap.
+        self.destroyed.connect(self._detener_todo)
+
+    def _detener_todo(self) -> None:
+        try:
+            self._timer.stop()
+        except RuntimeError:
+            pass
+        for anim in list(self._animaciones):
+            try:
+                anim.stop()
+            except RuntimeError:
+                pass
+        self._animaciones.clear()
+
+    def closeEvent(self, event) -> None:
+        self._detener_todo()
+        super().closeEvent(event)
+
     # ------------------------------------------------------------- Anclaje
     def set_host(self, host: QWidget) -> None:
         """Fija el widget sobre el que se dibujan las notificaciones (overlay)."""
@@ -227,9 +248,13 @@ class NotificacionesFlotantes(QWidget):
         self._animaciones.extend([anim_pos, anim_op])
 
         # El conteo inicia después de la animación de entrada: el tiempo visible
-        # de la tarjeta es realmente `duracion`.
+        # de la tarjeta es realmente `duracion`. El timer es hijo de la tarjeta
+        # para que se destruya con ella y nunca dispare sobre una ya borrada.
         if duracion and duracion > 0:
-            QTimer.singleShot(int(duracion * 1000) + 240, card.cerrar)
+            timer = QTimer(card)
+            timer.setSingleShot(True)
+            timer.timeout.connect(card.cerrar)
+            timer.start(int(duracion * 1000) + 240)
 
     def cerrar_todas(self) -> None:
         for card in list(self._cards):
@@ -320,6 +345,11 @@ class NotificacionesFlotantes(QWidget):
         anim_pos.setEasingCurve(QEasingCurve.InCubic)
 
         def _limpiar():
+            # Detener las animaciones antes de borrar la tarjeta: si el efecto
+            # de opacidad aún está en vuelo al destruirla, Qt corrompe el heap
+            # y el proceso muere (segfault) en la siguiente creación de widget.
+            anim_op.stop()
+            anim_pos.stop()
             if card in self._cards:
                 self._cards.remove(card)
             card.deleteLater()

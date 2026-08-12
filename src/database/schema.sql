@@ -30,10 +30,10 @@ CREATE TABLE IF NOT EXISTS variantes (
     FOREIGN KEY (modelo_id) REFERENCES modelos(id)
 );
 
-CREATE TABLE IF NOT EXISTS tallas_corrida (
+CREATE TABLE IF NOT EXISTS tallas_catalogo (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     talla TEXT NOT NULL UNIQUE,
-    orden INTEGER NOT NULL DEFAULT 0
+    activo INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS insumos (
@@ -81,14 +81,6 @@ CREATE TABLE IF NOT EXISTS unidades_medida (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL UNIQUE,
     abreviatura TEXT NOT NULL UNIQUE,
-    activo INTEGER NOT NULL DEFAULT 1
-);
-
--- Catálogo de puntos para variantes de insumo
-CREATE TABLE IF NOT EXISTS puntos_catalogo (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    punto TEXT NOT NULL UNIQUE,
-    orden INTEGER NOT NULL DEFAULT 0,
     activo INTEGER NOT NULL DEFAULT 1
 );
 
@@ -148,11 +140,12 @@ CREATE TABLE IF NOT EXISTS detalle_orden_compra (
 CREATE TABLE IF NOT EXISTS detalle_orden_compra_puntos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     detalle_id INTEGER NOT NULL REFERENCES detalle_orden_compra(id) ON DELETE CASCADE,
-    punto_id INTEGER NOT NULL REFERENCES puntos_catalogo(id),
+    talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
     pares INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(detalle_id, punto_id),
+    precio_unitario REAL NOT NULL DEFAULT 0,
+    UNIQUE(detalle_id, talla_id),
     FOREIGN KEY (detalle_id) REFERENCES detalle_orden_compra(id),
-    FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
+    FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
 );
 
 -- -----------------------------------------------------------
@@ -296,10 +289,10 @@ CREATE TABLE IF NOT EXISTS ordenes_produccion (
 CREATE TABLE IF NOT EXISTS matriz_tallas_op (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     orden_produccion_id INTEGER NOT NULL REFERENCES ordenes_produccion(id),
-    talla_id INTEGER NOT NULL REFERENCES tallas_corrida(id),
+    talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
     pares INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (orden_produccion_id) REFERENCES ordenes_produccion(id),
-    FOREIGN KEY (talla_id) REFERENCES tallas_corrida(id)
+    FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
 );
 
 CREATE TABLE IF NOT EXISTS estaciones_produccion (
@@ -342,11 +335,11 @@ CREATE TABLE IF NOT EXISTS incidencias_produccion (
 CREATE TABLE IF NOT EXISTS inventario_pt (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     variante_id INTEGER NOT NULL REFERENCES variantes(id),
-    talla_id INTEGER NOT NULL REFERENCES tallas_corrida(id),
+    talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
     pares INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (variante_id) REFERENCES variantes(id),
-    FOREIGN KEY (talla_id) REFERENCES tallas_corrida(id)
+    FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
 );
 
 -- -----------------------------------------------------------
@@ -386,15 +379,40 @@ CREATE TABLE IF NOT EXISTS usuario_permisos (
 );
 
 -- -----------------------------------------------------------
+-- 7. LOGS TÉCNICOS DEL SISTEMA
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS logs_sistema (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL DEFAULT (datetime('now')),
+    usuario_id INTEGER,
+    usuario TEXT,
+    modulo TEXT NOT NULL,
+    accion TEXT NOT NULL,
+    entidad TEXT,
+    entidad_id INTEGER,
+    nivel TEXT NOT NULL DEFAULT 'info',
+    detalle TEXT,
+    datos TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_logs_fecha ON logs_sistema (fecha);
+CREATE INDEX IF NOT EXISTS idx_logs_modulo ON logs_sistema (modulo);
+CREATE INDEX IF NOT EXISTS idx_logs_entidad ON logs_sistema (entidad, entidad_id);
+
+-- -----------------------------------------------------------
 -- DATOS INICIALES
 -- -----------------------------------------------------------
 
-INSERT OR IGNORE INTO tallas_corrida (talla, orden) VALUES
-    ('22', 1), ('22.5', 2), ('23', 3), ('23.5', 4),
-    ('24', 5), ('24.5', 6), ('25', 7), ('25.5', 8),
-    ('26', 9), ('26.5', 10), ('27', 11), ('27.5', 12),
-    ('28', 13), ('28.5', 14), ('29', 15), ('29.5', 16),
-    ('30', 17), ('30.5', 18), ('31', 19);
+INSERT OR IGNORE INTO tallas_catalogo (talla) VALUES
+    ('00'), ('01'), ('02'), ('03'), ('04'), ('05'), ('06'), ('07'),
+    ('08'), ('09'), ('10'), ('11'), ('12'), ('13'),
+    ('22'), ('22.5'), ('23'), ('23.5'), ('24'), ('24.5'), ('25'),
+    ('25.5'), ('26'), ('26.5'), ('27'), ('27.5'), ('28'), ('28.5'),
+    ('29'), ('29.5'), ('30'), ('30.5'), ('31');
 
 INSERT OR IGNORE INTO estaciones_produccion (nombre, orden, descripcion) VALUES
     ('Corte', 1, 'Corte de piel y forro'),
@@ -452,10 +470,9 @@ INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
     ('Rollo', 'rollo'),
     ('Caja', 'caja');
 
-INSERT OR IGNORE INTO puntos_catalogo (punto, orden) VALUES
-    ('00', 1), ('01', 2), ('02', 3), ('03', 4), ('04', 5),
-    ('05', 6), ('06', 7), ('07', 8), ('08', 9), ('09', 10),
-    ('10', 11), ('11', 12), ('12', 13), ('13', 14);
+INSERT OR IGNORE INTO tallas_catalogo (talla) VALUES
+    ('15'), ('15.5'), ('16'), ('16.5'), ('17'),
+    ('18'), ('19'), ('20'), ('21');
 
 INSERT OR IGNORE INTO colores_catalogo (nombre, codigo, orden) VALUES
     ('Negro', 'NEG', 1),

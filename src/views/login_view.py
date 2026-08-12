@@ -20,23 +20,12 @@ class LoginView(QWidget):
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        self.setStyleSheet("""
-            QWidget#loginWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #1e293b, stop:1 #0f172a);
-            }
-        """)
-
+        # El fondo del widget y de la tarjeta los define styles.qss
+        # (QWidget#loginWidget y QFrame#loginCard): aquí solo se
+        # configura el tamaño fijo de la tarjeta.
         card = QFrame()
         card.setObjectName("loginCard")
         card.setFixedWidth(420)
-        card.setStyleSheet("""
-            QFrame#loginCard {
-                background-color: #ffffff;
-                border-radius: 16px;
-                padding: 40px;
-            }
-        """)
 
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(60)
@@ -75,47 +64,18 @@ class LoginView(QWidget):
         lbl_user.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
         self.txt_user = QLineEdit()
         self.txt_user.setPlaceholderText("Ingrese su usuario")
-        self.txt_user.setStyleSheet("""
-            QLineEdit {
-                padding: 12px 16px;
-                border: 1px solid #d1d5db;
-                border-radius: 8px;
-                font-size: 14px;
-                background-color: #f9fafb;
-            }
-            QLineEdit:focus {
-                border: 2px solid #4f46e5;
-                background-color: #ffffff;
-            }
-        """)
+        self.txt_user.setMinimumHeight(38)
 
         lbl_pass = QLabel("Contraseña")
         lbl_pass.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
         self.txt_pass = QLineEdit()
         self.txt_pass.setPlaceholderText("Ingrese su contraseña")
         self.txt_pass.setEchoMode(QLineEdit.Password)
-        self.txt_pass.setStyleSheet(self.txt_user.styleSheet())
+        self.txt_pass.setMinimumHeight(38)
 
         self.btn_login = QPushButton("Iniciar Sesión")
         self.btn_login.setObjectName("btnLogin")
-        self.btn_login.setMinimumHeight(48)
-        self.btn_login.setStyleSheet("""
-            QPushButton {
-                background-color: #4f46e5;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 14px;
-                font-size: 15px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #4338ca;
-            }
-            QPushButton:pressed {
-                background-color: #3730a3;
-            }
-        """)
+        self.btn_login.setMinimumHeight(40)
 
         self.lbl_error = QLabel("")
         self.lbl_error.setStyleSheet("color: #dc2626; font-size: 12px;")

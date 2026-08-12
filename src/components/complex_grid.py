@@ -581,13 +581,17 @@ class ComplexGrid(QWidget):
                 fila = self._fila_fn(rec) if self._fila_fn else self._fila_por_defecto(rec)
                 celdas = "".join(f"<td>{_esc(str(x))}</td>" for x in fila)
                 cuerpo += f"<tr>{celdas}</tr>"
+        celdas_cabecera = "".join(
+            f'<th style="background:#111827;color:#fff;text-align:left">'
+            f'{_esc(c)}</th>'
+            for c in cols
+        )
         return (
             "<html><head><meta charset='utf-8'></head><body>"
             f"<h1 style='margin:0'>{_esc(str(titulo))}</h1>"
             f"<p style='color:#64748b;margin:2px 0 12px'>{_esc(str(subtitulo))}</p>"
             f"<table border='1' cellspacing='0' cellpadding='5' "
             f"style='border-collapse:collapse;width:100%;font-size:11px'>"
-            f"<tr>{''.join(f'<th style='
-            f'\"background:#111827;color:#fff;text-align:left\">{_esc(c)}</th>' for c in cols)}</tr>"
+            f"<tr>{celdas_cabecera}</tr>"
             f"{cuerpo}</table></body></html>"
         )

@@ -154,23 +154,39 @@ def _esc(texto: str) -> str:
             .replace('"', "&quot;"))
 
 
-def _oc_columnas_puntos(detalle: list[dict]) -> list[dict]:
+def _clave_numerica_talla(texto: str) -> float:
+    try:
+        return float(texto)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _oc_columnas_tallas(detalle: list[dict]) -> list[dict]:
     cols: list[dict] = []
     vistos: set[int] = set()
     for d in detalle:
-        for t in d.get("puntos", []):
-            pid = t["punto_id"]
-            if pid not in vistos:
-                vistos.add(pid)
-                cols.append({"punto_id": pid, "punto": t.get("punto", ""),
-                             "orden": t.get("orden", 0)})
-    cols.sort(key=lambda t: t.get("orden", 0) or 0)
+        for t in d.get("tallas", []):
+            tid = t["talla_id"]
+            if tid not in vistos:
+                vistos.add(tid)
+                cols.append({"talla_id": tid, "talla": t.get("talla", "")})
+    cols.sort(key=lambda t: _clave_numerica_talla(t.get("talla", "")))
     return cols
 
 
+def _oc_subtotal_detalle(d: dict) -> float:
+    """Subtotal del renglón: Σ(pares × precio) por talla si hay precios por talla;
+    si no, cantidad × precio_unitario."""
+    tallas = d.get("tallas", []) or []
+    con_precio = [t for t in tallas if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        return sum(float(t.get("pares", 0) or 0) * float(t.get("precio", 0) or 0)
+                   for t in con_precio)
+    return float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
+
+
 def _oc_totales(detalle: list[dict], solo_remision: bool) -> tuple[float, float, float]:
-    subtotal = sum(float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
-                   for d in detalle)
+    subtotal = sum(_oc_subtotal_detalle(d) for d in detalle)
     if solo_remision:
         iva = 0.0
     else:
@@ -186,7 +202,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     titulo = "REMI-SIÃ“N - ORDEN DE COMPRA" if solo_remision else \
         "RECIBO DE COMPRA - ORDEN DE COMPRA"
     subtotal, iva, total = _oc_totales(detalle, solo_remision)
-    columnas = _oc_columnas_puntos(detalle)
+    columnas = _oc_columnas_tallas(detalle)
     logo_b64 = _logo_base64()
 
     estatus = str(datos.get("estatus", "") or "").replace("_", " ").capitalize()
@@ -202,18 +218,18 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
                      f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
 
     th_tallas = "".join(
-        f"<th>{_esc('#')}{_esc(c['punto'])}</th>" for c in columnas)
+        f"<th>{_esc('#')}{_esc(c['talla'])}</th>" for c in columnas)
 
     rows = ""
     for d in detalle:
-        por_talla = {int(t["punto_id"]): int(t.get("pares", 0) or 0)
-                     for t in d.get("puntos", [])}
+        por_talla = {int(t["talla_id"]): int(t.get("pares", 0) or 0)
+                     for t in d.get("tallas", [])}
         celdas = "".join(
-            f"<td class='td-num'>{por_talla.get(int(c['punto_id']), 0) or ''}</td>"
+            f"<td class='td-num'>{por_talla.get(int(c['talla_id']), 0) or ''}</td>"
             for c in columnas)
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
-        sub = cant * precio
+        sub = _oc_subtotal_detalle(d)
         rows += f"""<tr>
             <td style='text-align:left'>{_esc(d.get('insumo_nombre', ''))}</td>
             {celdas}
@@ -351,7 +367,7 @@ def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> Non
     doc.setHtml(_oc_receipt_html(datos, detalle))
     printer = QPrinter(QPrinter.PrinterMode.HighResolution)
     printer.setPageSize(QPageSize(QPageSize.Letter))
-    printer.setPageOrientation(QPageLayout.Orientation.Landscape if len(_oc_columnas_puntos(detalle)) > 6
+    printer.setPageOrientation(QPageLayout.Orientation.Landscape if len(_oc_columnas_tallas(detalle)) > 6
                            else QPageLayout.Orientation.Portrait)
     printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
     printer.setOutputFileName(path)
@@ -376,7 +392,7 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     solo_remision = bool(datos.get("solo_remision"))
     titulo = "REMI-SIÃ“N - ORDEN DE COMPRA" if solo_remision else \
         "RECIBO DE COMPRA - ORDEN DE COMPRA"
-    columnas = _oc_columnas_puntos(detalle)
+    columnas = _oc_columnas_tallas(detalle)
     subtotal, iva, total = _oc_totales(detalle, solo_remision)
 
     n_tallas = len(columnas)
@@ -433,7 +449,7 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     header_fila = fila
     ws.cell(row=fila, column=1, value="NOMBRE")
     for i, col in enumerate(columnas):
-        ws.cell(row=fila, column=2 + i, value=f"#{col['punto']}")
+        ws.cell(row=fila, column=2 + i, value=f"#{col['talla']}")
     ws.cell(row=fila, column=1 + n_tallas + 1, value="TOTAL PARES")
     ws.cell(row=fila, column=1 + n_tallas + 2, value="VALOR UNITARIO")
     ws.cell(row=fila, column=1 + n_tallas + 3, value="TOTAL")
@@ -447,17 +463,17 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     fila += 1
 
     for d in detalle:
-        por_talla = {int(t["punto_id"]): int(t.get("pares", 0) or 0)
-                     for t in d.get("puntos", [])}
+        por_talla = {int(t["talla_id"]): int(t.get("pares", 0) or 0)
+                     for t in d.get("tallas", [])}
         ws.cell(row=fila, column=1, value=d.get("insumo_nombre", ""))
         for i, col in enumerate(columnas):
             ws.cell(row=fila, column=2 + i,
-                    value=por_talla.get(int(col["punto_id"]), 0) or "")
+                    value=por_talla.get(int(col["talla_id"]), 0) or "")
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
         ws.cell(row=fila, column=1 + n_tallas + 1, value=cant)
         ws.cell(row=fila, column=1 + n_tallas + 2, value=precio)
-        ws.cell(row=fila, column=1 + n_tallas + 3, value=round(cant * precio, 2))
+        ws.cell(row=fila, column=1 + n_tallas + 3, value=round(_oc_subtotal_detalle(d), 2))
         for col in range(1, last + 1):
             cc = ws.cell(row=fila, column=col)
             cc.border = borde

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from src.controllers.accesos_controller import AccesosController
 from src.models.accesos_model import tiene
 from src.utils.icons import mono_icon
+from src.utils.logs import registrar_log, set_usuario_actual
 from src.views.login_view import LoginView
 from src.views.clientes_view import ClientesView
 from src.views.ordenes_compra_view import OrdenesCompraView
@@ -115,13 +116,8 @@ class MainWindow(QMainWindow):
         self._login_view.login_successful.connect(self._on_login)
 
     def _setup_menu(self) -> None:
+        # El estilo de la barra de menú lo define styles.qss (QMenuBar/QMenu).
         menubar = self.menuBar()
-        menubar.setStyleSheet("""
-            QMenuBar { background-color: #1e293b; color: #94a3b8; padding: 2px; }
-            QMenuBar::item:selected { background-color: #334155; color: #e2e8f0; }
-            QMenu { background-color: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; }
-            QMenu::item:selected { background-color: #eef2ff; color: #4f46e5; }
-        """)
 
         archivo_menu = menubar.addMenu("Archivo")
         self._config_action = QAction("Configuración", self)
@@ -236,14 +232,14 @@ class MainWindow(QMainWindow):
         self._splash_stack = stack
         return stack
 
-    _NAV_W_ABIERTO = 240
-    _NAV_W_CERRADO = 62
+    _NAV_W_ABIERTO = 216
+    _NAV_W_CERRADO = 58
 
     def _create_nav_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("navPanel")
         panel.setFixedWidth(self._NAV_W_ABIERTO)
-        panel.setStyleSheet("QFrame#navPanel { background-color: #1e293b; border: none; }")
+        # El fondo del panel lo define styles.qss (navPanel) — sin override inline
 
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(12, 14, 12, 16)
@@ -271,10 +267,6 @@ class MainWindow(QMainWindow):
 
         self._nav_logo_text = QLabel("SIAC ERP")
         self._nav_logo_text.setObjectName("navBrand")
-        self._nav_logo_text.setStyleSheet("""
-            font-size: 17px; font-weight: bold; color: #ffffff;
-            padding: 4px 8px 12px 8px;
-        """)
         self._nav_logo_text.setAlignment(Qt.AlignCenter)
         layout.addWidget(self._nav_logo_text)
 
@@ -304,7 +296,7 @@ class MainWindow(QMainWindow):
             btn.setObjectName("navButton")
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
-            btn.setMinimumHeight(42)
+            btn.setMinimumHeight(36)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setIcon(mono_icon(clave, 22))
             btn.setIconSize(QSize(22, 22))
@@ -315,7 +307,7 @@ class MainWindow(QMainWindow):
 
         self.nav_salir.setIcon(mono_icon("logout", 22))
         self.nav_salir.setIconSize(QSize(22, 22))
-        self.nav_salir.setMinimumHeight(42)
+        self.nav_salir.setMinimumHeight(36)
         self.nav_salir.setCursor(Qt.PointingHandCursor)
 
         divider = QFrame()
@@ -444,6 +436,7 @@ class MainWindow(QMainWindow):
             credentials["username"], credentials["password"])
         if user:
             self._current_user = user
+            set_usuario_actual(user)
             self._permisos = AccesosController().permisos_login(user)
             self._stack.setCurrentWidget(self._main_container)
             self._aplicar_permisos()
@@ -468,7 +461,11 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage("Módulo: Sandbox")
 
     def _logout(self) -> None:
+        if self._current_user:
+            registrar_log("seguridad", "logout", "usuario", self._current_user.get("id"),
+                          datos={"username": self._current_user.get("username")})
         self._current_user = None
+        set_usuario_actual(None)
         self._permisos = set()
         self._config_action.setEnabled(False)
         self._stack.setCurrentWidget(self._login_view)
