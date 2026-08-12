@@ -51,13 +51,20 @@ registrar_componente(
     "ordenables y selección/doble clic configurable.",
 )
 
-from src.components.tallas_matrix import MatrizTallasDialog  # noqa: E402
+from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget  # noqa: E402
 
 registrar_componente(
     "matriz_tallas",
     MatrizTallasDialog,
     "Matriz de tallas por bloques: encabezado negro/texto blanco, filas de "
     "captura con navegación Enter/Tab y celdas sin flechas numéricas.",
+)
+
+registrar_componente(
+    "matriz_tallas_widget",
+    MatrizTallasWidget,
+    "Control embebido de matriz de tallas por bloques (sin diálogo) con "
+    "captura por celdas, navegación Enter/Tab y señales de cambio.",
 )
 
 from src.components.complex_grid import ComplexGrid  # noqa: E402
@@ -78,4 +85,20 @@ registrar_componente(
     "Vista previa de impresión WYSIWYG para reportes HTML: hoja simulada con "
     "proporción real de página, zoom, tamaño de página, orientación, "
     "impresión y exportación a PDF por la misma vía que los reportes.",
+)
+
+from src.components.editor_etiqueta import LabelCanvas, PanelPropiedadesCampo  # noqa: E402
+
+registrar_componente(
+    "label_canvas",
+    LabelCanvas,
+    "Lienzo interactivo de diseño de etiqueta: render en tiempo real y "
+    "arrastre (drag & drop) de elementos con el mouse.",
+)
+
+registrar_componente(
+    "label_campo_props",
+    PanelPropiedadesCampo,
+    "Panel de propiedades del elemento de etiqueta: coordenadas, dimensiones, "
+    "borde, tipografía, alineación y visibilidad.",
 )

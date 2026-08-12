@@ -1,18 +1,18 @@
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget,
+    QVBoxLayout, QWidget,
 )
 
+from src.components.complex_grid import ComplexGrid
 from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
-from src.utils.icons import mono_icon, tile_icon
-from src.utils.table_utils import configurar_tabla_excel
+from src.utils.icons import tile_icon
 
 
 _SECCIONES = [
@@ -226,17 +226,16 @@ class _TabUnidades(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Abreviatura"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
-
-        layout.addWidget(self.table)
+        self.grid = ComplexGrid()
+        self.grid.set_columnas([
+            {"key": "nombre", "titulo": "Nombre", "ancho": 300},
+            {"key": "abreviatura", "titulo": "Abreviatura", "ancho": 160},
+        ])
+        self.grid.set_renderers(estilo=self._estilo)
+        self.grid.set_exportar_visible(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.grid.doubleClicked.connect(self._editar)
+        layout.addWidget(self.grid)
 
         self.btn_add = QPushButton("+ Nueva Unidad")
         self.btn_add.setObjectName("btnPrimary")
@@ -259,18 +258,14 @@ class _TabUnidades(QWidget):
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
+
     def recargar(self) -> None:
         unidades = self.controller.listar_unidades(solo_activos=False)
-        self.table.setRowCount(len(unidades))
-        for i, u in enumerate(unidades):
-            self.table.setItem(i, 0, QTableWidgetItem(str(u["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(u["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(u["abreviatura"]))
-            if not u["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.grid.set_datos(unidades)
 
     def _crear(self) -> None:
         dlg = _DialogUnidad(self.controller)
@@ -278,29 +273,26 @@ class _TabUnidades(QWidget):
             self.recargar()
 
     def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione una unidad de la lista.")
             return
-        unidad_id = int(self.table.item(row, 0).text())
-        dlg = _DialogUnidad(self.controller, unidad_id)
+        dlg = _DialogUnidad(self.controller, rec["id"])
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione una unidad de la lista.")
             return
-        unidad_id = int(self.table.item(row, 0).text())
-        nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar la unidad '{nombre}'?",
+            f"¿Desactivar la unidad '{rec['nombre']}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_unidad(unidad_id)
+            self.controller.desactivar_unidad(rec["id"])
             self.recargar()
 
 
@@ -397,100 +389,71 @@ class _TabEstaciones(QWidget):
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Orden", "Área", "Descripción", "Acciones", "ID"])
-        self.table.setColumnHidden(4, True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.table.verticalHeader().setDefaultSectionSize(60)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(lambda _index: self._editar())
+        self.grid = ComplexGrid()
+        self.grid.set_columnas([
+            {"key": "orden", "titulo": "Orden", "ancho": 90, "tipo": "numero"},
+            {"key": "nombre", "titulo": "Área", "ancho": 260},
+            {"key": "descripcion", "titulo": "Descripción", "ancho": 320},
+        ])
+        self.grid.set_renderers(estilo=self._estilo)
+        self.grid.set_acciones(self._acciones())
+        self.grid.set_exportar_visible(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.grid.doubleClicked.connect(self._editar)
+        layout.addWidget(self.grid)
 
-        layout.addWidget(self.table)
+    def _acciones(self) -> list:
+        acciones = []
+        if tiene(self.permisos, "configuracion", "editar"):
+            acciones.append({"texto": "", "icono": "editar",
+                             "color": "#4f46e5", "callback": self._editar})
+        if tiene(self.permisos, "configuracion", "eliminar"):
+            acciones.append({"texto": "", "icono": "eliminar",
+                             "color": "#dc2626", "callback": self._eliminar})
+        return acciones
+
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
 
     def recargar(self) -> None:
         estaciones = self.controller.listar_estaciones(solo_activos=False)
-        self.table.setRowCount(len(estaciones))
-        for i, e in enumerate(estaciones):
-            self.table.setItem(i, 0, QTableWidgetItem(str(e.get("orden", 0))))
-            self.table.setItem(i, 1, QTableWidgetItem(e.get("nombre", "")))
-            self.table.setItem(i, 2, QTableWidgetItem(e.get("descripcion", "") or ""))
-            self.table.setItem(i, 4, QTableWidgetItem(str(e.get("id", ""))))
-            self.table.setCellWidget(i, 3, self._celda_acciones(i))
-            if not e.get("activo"):
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
-
-    def _celda_acciones(self, row: int) -> QWidget:
-        contenedor = QWidget()
-        fila = QHBoxLayout(contenedor)
-        fila.setContentsMargins(4, 8, 4, 8)
-        fila.setSpacing(6)
-
-        btn_editar = QPushButton()
-        btn_editar.setIcon(mono_icon("editar", 18, "#4f46e5"))
-        btn_editar.setIconSize(QSize(18, 18))
-        btn_editar.setFixedSize(34, 34)
-        btn_editar.setToolTip("Editar")
-        btn_editar.setObjectName("btnRowEdit")
-        btn_editar.setCursor(Qt.PointingHandCursor)
-        btn_editar.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        btn_editar.clicked.connect(lambda: self._editar(row))
-        fila.addWidget(btn_editar)
-
-        btn_eliminar = QPushButton()
-        btn_eliminar.setIcon(mono_icon("eliminar", 18, "#dc2626"))
-        btn_eliminar.setIconSize(QSize(18, 18))
-        btn_eliminar.setFixedSize(34, 34)
-        btn_eliminar.setToolTip("Eliminar")
-        btn_eliminar.setObjectName("btnRowDel")
-        btn_eliminar.setCursor(Qt.PointingHandCursor)
-        btn_eliminar.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-        btn_eliminar.clicked.connect(lambda: self._eliminar(row))
-        fila.addWidget(btn_eliminar)
-
-        fila.addStretch()
-        return contenedor
+        self.grid.set_datos(estaciones)
 
     def _crear(self) -> None:
         dlg = _DialogEstacion(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self, row: int | None = None) -> None:
-        if row is None:
-            row = self.table.currentRow()
-        if row < 0:
+    def _editar(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un área de la lista.")
             return
-        estacion_id = int(self.table.item(row, 4).text())
-        dlg = _DialogEstacion(self.controller, estacion_id)
+        dlg = _DialogEstacion(self.controller, rec["id"])
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _eliminar(self, row: int) -> None:
-        estacion_id = int(self.table.item(row, 4).text())
-        nombre = self.table.item(row, 1).text()
+    def _eliminar(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.grid.registro_seleccionado()
+        if rec is None:
+            return
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Eliminar el área '{nombre}'?\nEsta acción no se puede deshacer.",
+            f"¿Eliminar el área '{rec.get('nombre', '')}'?\nEsta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp != QMessageBox.Yes:
             return
         try:
-            self.controller.eliminar_estacion(estacion_id)
+            self.controller.eliminar_estacion(rec["id"])
         except Exception:
             QMessageBox.warning(
                 self, "No se pudo eliminar",
-                f"El área '{nombre}' está en uso por órdenes de producción y no se puede eliminar.")
+                f"El área '{rec.get('nombre', '')}' está en uso por órdenes de producción y no se puede eliminar.")
             return
         self.recargar()
 
@@ -825,16 +788,17 @@ class _TabColores(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Código", "Orden"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
-        layout.addWidget(self.table)
+        self.grid = ComplexGrid()
+        self.grid.set_columnas([
+            {"key": "nombre", "titulo": "Nombre", "ancho": 240},
+            {"key": "codigo", "titulo": "Código", "ancho": 140},
+            {"key": "orden", "titulo": "Orden", "ancho": 100, "tipo": "numero"},
+        ])
+        self.grid.set_renderers(estilo=self._estilo)
+        self.grid.set_exportar_visible(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.grid.doubleClicked.connect(self._editar)
+        layout.addWidget(self.grid)
 
         self.btn_add = QPushButton("+ Nuevo Color")
         self.btn_add.setObjectName("btnPrimary")
@@ -857,19 +821,14 @@ class _TabColores(QWidget):
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
+
     def recargar(self) -> None:
         colores = self.controller.listar_colores(solo_activos=False)
-        self.table.setRowCount(len(colores))
-        for i, c in enumerate(colores):
-            self.table.setItem(i, 0, QTableWidgetItem(str(c["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(c["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(c["codigo"]))
-            self.table.setItem(i, 3, QTableWidgetItem(str(c["orden"])))
-            if not c["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.grid.set_datos(colores)
 
     def _crear(self) -> None:
         dlg = _DialogColor(self.controller)
@@ -877,27 +836,26 @@ class _TabColores(QWidget):
             self.recargar()
 
     def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un color de la lista.")
             return
-        dlg = _DialogColor(self.controller, int(self.table.item(row, 0).text()))
+        dlg = _DialogColor(self.controller, rec["id"])
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un color de la lista.")
             return
-        nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar el color '{nombre}'?",
+            f"¿Desactivar el color '{rec['nombre']}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_color(int(self.table.item(row, 0).text()))
+            self.controller.desactivar_color(rec["id"])
             self.recargar()
 
 
@@ -989,17 +947,18 @@ class _TabAccesos(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["ID", "Usuario", "Nombre", "Rol", "Estatus"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.itemSelectionChanged.connect(self._on_seleccion)
-        layout.addWidget(self.table)
+        self.grid = ComplexGrid()
+        self.grid.set_columnas([
+            {"key": "username", "titulo": "Usuario", "ancho": 180},
+            {"key": "nombre_completo", "titulo": "Nombre", "ancho": 260},
+            {"key": "rol", "titulo": "Rol", "ancho": 130},
+            {"key": "activo", "titulo": "Estatus", "ancho": 110},
+        ])
+        self.grid.set_renderers(fila=self._fila, claves=self._fila,
+                                estilo=self._estilo)
+        self.grid.set_exportar_visible(tiene(self.permisos, "usuarios", "exportar"))
+        self.grid.selectionChanged.connect(self._on_seleccion)
+        layout.addWidget(self.grid)
 
         self.btn_nuevo = QPushButton("+ Nuevo Usuario")
         self.btn_nuevo.setObjectName("btnPrimary")
@@ -1060,38 +1019,41 @@ class _TabAccesos(QWidget):
         self.btn_guardar.clicked.connect(self._guardar_permisos)
         layout.addWidget(self.btn_guardar, 0, Qt.AlignLeft)
 
+    @staticmethod
+    def _fila(rec) -> list:
+        return [
+            str(rec.get("username", "")),
+            str(rec.get("nombre_completo", "")),
+            "Administrador" if rec.get("rol") == "admin" else "Operador",
+            "Activo" if rec.get("activo") else "Inactivo",
+        ]
+
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
+
     def recargar(self) -> None:
-        seleccionado = self._usuario_id
+        objetivo = self._usuario_id
         usuarios = self.controller.listar_usuarios()
-        self.table.setRowCount(len(usuarios))
-        for i, u in enumerate(usuarios):
-            self.table.setItem(i, 0, QTableWidgetItem(str(u["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(u["username"]))
-            self.table.setItem(i, 2, QTableWidgetItem(u["nombre_completo"]))
-            rol = "Administrador" if u["rol"] == "admin" else "Operador"
-            self.table.setItem(i, 3, QTableWidgetItem(rol))
-            self.table.setItem(i, 4, QTableWidgetItem("Activo" if u["activo"] else "Inactivo"))
-            if not u["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
-        if seleccionado is not None:
-            for i in range(self.table.rowCount()):
-                if int(self.table.item(i, 0).text()) == seleccionado:
-                    self.table.selectRow(i)
-                    return
-        if self.table.rowCount() > 0:
-            self.table.selectRow(0)
+        self.grid.set_datos(usuarios)
+        fila = -1
+        for i, u in enumerate(self.grid.datos_visibles()):
+            if objetivo is not None and u["id"] == objetivo:
+                fila = i
+                break
+        if fila < 0 and self.grid.table.rowCount() > 0:
+            fila = 0
+        if fila >= 0:
+            self.grid.table.selectRow(fila)
 
     def _on_seleccion(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             self._usuario_id = None
             return
-        self._usuario_id = int(self.table.item(row, 0).text())
-        user = self.controller.obtener_usuario(self._usuario_id)
-        es_admin = bool(user and user.get("rol") == "admin")
+        self._usuario_id = rec["id"]
+        es_admin = bool(rec.get("rol") == "admin")
         if es_admin:
             for chk in self._checks.values():
                 chk.setChecked(True)

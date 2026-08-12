@@ -1,17 +1,34 @@
-"""Componente reutilizable del sistema: matriz de tallas por bloques.
+"""Componentes reutilizables del sistema: matriz de tallas por bloques.
 
 Aprobado desde el Sandbox. Muestra las tallas en bloques: cada bloque tiene
 una fila de encabezado (fondo negro, texto blanco) y una fila de captura.
 La navegación entre celdas se hace con Enter o Tabulador y las celdas no
 usan controles de flechas numéricas.
 
-Uso:
+Dos usos disponibles:
+
+Como control embebido (widget, sin diálogo):
+
+    from src.components.tallas_matrix import MatrizTallasWidget
+
+    w = MatrizTallasWidget(puntos)       # puntos: list[dict] con "id" y "punto"
+    w.establecer_valores({"15": 42})     # precarga valores
+    layout.addWidget(w)
+    valores = w.obtener_valores()        # -> {"15": 42, "15.5": 0, ...}
+    w.valoresCambiados.connect(fn)       # se emite al editar una celda
+    w.celdaSeleccionada.connect(fn)      # se emite al terminar de editar (str)
+
+Como diálogo:
+
     from src.components import obtener_componente
 
     MatrizTallas = obtener_componente("matriz_tallas")
-    dlg = MatrizTallas(tallas)          # tallas: list[dict] con "id" y "talla"
+    dlg = MatrizTallas(puntos)          # puntos: list[dict] con "id" y "punto"
     if dlg.exec():
-        valores = dlg.obtener_valores()  # -> {"3": 42, "4": 0, ...} por talla_id
+        valores = dlg.obtener_valores()  # -> {"3": 42, "4": 0, ...} por talla
+
+También acepta filas del catálogo unificado `tallas_catalogo` (con "id" y
+"talla"): en ese caso las celdas se indexan por el id de la talla.
 """
 
 from functools import partial
@@ -26,6 +43,22 @@ from PySide6.QtWidgets import (
 from src.models.catalogos_model import TallasModel
 
 
+def _clave_talla(p: dict) -> str:
+    """Clave canónica de celda: el punto/talla si existe, si no el id."""
+    punto = p.get("punto")
+    if punto not in (None, ""):
+        return str(punto)
+    return str(p.get("id", ""))
+
+
+def _etiqueta_talla(p: dict) -> str:
+    """Texto visible del encabezado de una talla."""
+    punto = p.get("punto")
+    if punto not in (None, ""):
+        return str(punto)
+    return str(p.get("talla", "") or "")
+
+
 class CeldaMatriz(QLineEdit):
     """Celda de captura: solo números, sin borde, navegación Enter/Tab."""
 
@@ -36,7 +69,7 @@ class CeldaMatriz(QLineEdit):
         super().__init__(parent)
         self.setValidator(QIntValidator(0, 100000, self))
         self.setAlignment(Qt.AlignCenter)
-        self.setMinimumHeight(30)
+        self.setMinimumHeight(34)
         self.setMaximumWidth(80)
         self.setStyleSheet(
             "QLineEdit { border: none; background: transparent; padding: 0px;"
@@ -55,32 +88,41 @@ class CeldaMatriz(QLineEdit):
         super().keyPressEvent(event)
 
 
-class MatrizTallasDialog(QDialog):
-    """Matriz de tallas por bloques con encabezados negros y captura por celdas.
+class MatrizTallasWidget(QWidget):
+    """Matriz de tallas por bloques reutilizable como control embebido.
 
     Propiedades públicas (referencia directa por talla):
-        tallas              list[dict]                          — datos usados.
-        encabezado_general  QLabel                              — encabezado general.
-        encabezados         dict[str, QLabel]                   — encabezado por talla.
-        celdas              dict[str, CeldaMatriz]              — celda de captura por talla.
+        tallas              list[dict]                       — datos usados.
+        puntos              list[dict]                       — alias de tallas.
+        encabezado_general  QLabel                           — encabezado general.
+        encabezados         dict[str, QLabel]                — encabezado por talla.
+        celdas              dict[str, CeldaMatriz]           — celda de captura por talla.
         bloques             list[list[tuple[dict, CeldaMatriz]]] — estructura por bloque.
 
+    Señales:
+        valoresCambiados()      — se emite al editar cualquier celda.
+        celdaSeleccionada(str)  — se emite al terminar de editar una celda,
+                                  con el punto (talla) de esa celda.
+
     Métodos públicos:
-        obtener_valores() -> dict[str, int]  — valores capturados por talla_id.
-        establecer_valores(dict[str, int])   — precarga valores por talla_id.
+        obtener_valores() -> dict[str, int]  — valores capturados por talla.
+        establecer_valores(dict[str, int])   — precarga valores por talla.
     """
+
+    valoresCambiados = Signal()
+    celdaSeleccionada = Signal(str)
 
     NEGRO = "#111827"
     COLUMNAS = 11
 
-    def __init__(self, tallas: list[dict] | None = None, titulo: str = "TALLAS",
-                 parent: QWidget | None = None) -> None:
+    def __init__(self, puntos: list[dict] | None = None, titulo: str = "TALLAS",
+                 parent: QWidget | None = None,
+                 tallas: list[dict] | None = None) -> None:
         super().__init__(parent)
         self.titulo = titulo
-        self.setWindowTitle("Controles de tallas")
-        self.setModal(True)
-        self.resize(720, 480)
-        self.tallas = list(tallas) if tallas is not None else TallasModel().listar()
+        filas = puntos if puntos is not None else tallas
+        self.puntos = list(filas) if filas is not None else TallasModel().listar()
+        self.tallas = self.puntos
         self.bloques: list[list[tuple[dict, CeldaMatriz]]] = []
         self._celdas: list[CeldaMatriz] = []
         self.encabezado_general: QLabel | None = None
@@ -90,24 +132,12 @@ class MatrizTallasDialog(QDialog):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(12)
-
-        titulo = QLabel("Controles de tallas")
-        titulo.setObjectName("sectionTitle")
-        layout.addWidget(titulo)
-
-        subtitulo = QLabel(
-            "Matriz de celdas por bloques: cada bloque tiene su fila de "
-            "encabezado y su fila de captura. Navegue entre celdas con Enter "
-            "o Tabulador.")
-        subtitulo.setObjectName("sectionSubtitle")
-        subtitulo.setWordWrap(True)
-        layout.addWidget(subtitulo)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
         self.encabezado_general = QLabel(self.titulo)
         self.encabezado_general.setAlignment(Qt.AlignCenter)
-        self.encabezado_general.setMinimumHeight(32)
+        self.encabezado_general.setMinimumHeight(38)
         self.encabezado_general.setStyleSheet(
             f"background-color: {self.NEGRO}; color: #ffffff; font-weight: bold;"
             " font-size: 14px; padding: 0px; border: none;"
@@ -118,7 +148,7 @@ class MatrizTallasDialog(QDialog):
             layout.addWidget(QLabel("No hay tallas configuradas en el sistema."))
         else:
             self.tabla = self._crear_matriz()
-            layout.addWidget(self.tabla, 1)
+            layout.addWidget(self.tabla)
 
             hint = QLabel(
                 "Sin controles de flechas: escriba los números directamente "
@@ -127,19 +157,6 @@ class MatrizTallasDialog(QDialog):
             layout.addWidget(hint)
 
         self._crear_corrida(layout)
-
-        bar = QHBoxLayout()
-        bar.addStretch()
-        btn_capturar = QPushButton("Capturar")
-        btn_capturar.setObjectName("btnPrimary")
-        btn_capturar.clicked.connect(self._mostrar_resumen)
-        btn_cerrar = QPushButton("Cerrar")
-        btn_cerrar.setObjectName("btnSecondary")
-        btn_cerrar.clicked.connect(self.accept)
-        bar.addWidget(btn_capturar)
-        bar.addWidget(btn_cerrar)
-        layout.addLayout(bar)
-
         self._actualizar_total()
 
         if self._celdas:
@@ -156,9 +173,10 @@ class MatrizTallasDialog(QDialog):
         corrida_layout.addWidget(QLabel("De talla:"))
         self.cmb_talla_desde = QComboBox()
         self.cmb_talla_hasta = QComboBox()
-        for t in self.tallas:
-            self.cmb_talla_desde.addItem(str(t["talla"]), t["id"])
-            self.cmb_talla_hasta.addItem(str(t["talla"]), t["id"])
+        for p in self.tallas:
+            texto = _etiqueta_talla(p)
+            self.cmb_talla_desde.addItem(texto, _clave_talla(p))
+            self.cmb_talla_hasta.addItem(texto, _clave_talla(p))
         if self.cmb_talla_hasta.count() > 0:
             self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
         corrida_layout.addWidget(self.cmb_talla_desde)
@@ -195,9 +213,9 @@ class MatrizTallasDialog(QDialog):
         if idx_desde > idx_hasta:
             idx_desde, idx_hasta = idx_hasta, idx_desde
         pares = self.spn_corrida.value()
-        for i, t in enumerate(self.tallas):
+        for i, p in enumerate(self.tallas):
             if idx_desde <= i <= idx_hasta:
-                celda = self.celdas.get(str(t["id"]))
+                celda = self.celdas.get(_clave_talla(p))
                 if celda is not None:
                     celda.setText(str(pares))
         self._actualizar_total()
@@ -217,7 +235,7 @@ class MatrizTallasDialog(QDialog):
     def _etiqueta_encabezado(self, texto: str) -> QLabel:
         lbl = QLabel(texto)
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setMinimumSize(60, 32)
+        lbl.setMinimumSize(60, 38)
         lbl.setStyleSheet(
             f"background-color: {self.NEGRO}; color: #ffffff; font-weight: bold;"
             " font-size: 12px; padding: 0px; border: none;"
@@ -237,26 +255,29 @@ class MatrizTallasDialog(QDialog):
         tabla.horizontalHeader().setVisible(False)
         tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         tabla.setSelectionMode(QTableWidget.NoSelection)
-        tabla.verticalHeader().setDefaultSectionSize(32)
+        tabla.verticalHeader().setDefaultSectionSize(38)
         tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
         for c in range(self.COLUMNAS):
             tabla.setColumnWidth(c, 60)
-        tabla.setFixedHeight(tabla.rowCount() * 32 + 6)
+        tabla.setFixedHeight(tabla.rowCount() * 38 + 6)
 
         for b, tallas_bloque in enumerate(bloques_tallas):
             fila_encabezado = b * 2
             fila_captura = b * 2 + 1
             bloque: list[tuple[dict, CeldaMatriz]] = []
             for c, p in enumerate(tallas_bloque):
-                etiqueta = self._etiqueta_encabezado(p["talla"])
+                etiqueta = self._etiqueta_encabezado(_etiqueta_talla(p))
                 tabla.setCellWidget(fila_encabezado, c, etiqueta)
-                self.encabezados[p["talla"]] = etiqueta
+                self.encabezados[_etiqueta_talla(p)] = etiqueta
 
                 celda = CeldaMatriz()
                 tabla.setCellWidget(fila_captura, c, celda)
-                self.celdas[str(p["id"])] = celda
+                self.celdas[_clave_talla(p)] = celda
                 celda.textChanged.connect(self._actualizar_total)
                 self._celdas.append(celda)
+                celda.textChanged.connect(self.valoresCambiados)
+                celda.editingFinished.connect(
+                    partial(self._celda_finalizada, _etiqueta_talla(p)))
                 bloque.append((p, celda))
             self.bloques.append(bloque)
 
@@ -266,24 +287,92 @@ class MatrizTallasDialog(QDialog):
 
         return tabla
 
+    def _celda_finalizada(self, punto) -> None:
+        self.celdaSeleccionada.emit(str(punto))
+
     def _mover(self, indice: int, delta: int) -> None:
         siguiente = self._celdas[(indice + delta) % len(self._celdas)]
         siguiente.setFocus()
         siguiente.selectAll()
 
     def obtener_valores(self) -> dict[str, int]:
-        """Devuelve los valores capturados por talla_id (los vacíos como 0)."""
+        """Devuelve los valores capturados por talla (los vacíos como 0)."""
         return {
             talla_id: int(celda.text().strip() or 0)
             for talla_id, celda in self.celdas.items()
         }
 
-    def establecer_valores(self, valores: dict[str, int]) -> None:
-        """Precarga valores por talla_id (acepta clave str o int)."""
+    def establecer_valores(self, valores: dict) -> None:
+        """Precarga valores por talla (acepta clave str o int)."""
         for talla_id, valor in valores.items():
             celda = self.celdas.get(str(talla_id))
             if celda is not None:
                 celda.setText(str(int(valor)))
+
+
+class MatrizTallasDialog(QDialog):
+    """Matriz de tallas por bloques presentada como diálogo.
+
+    Envuelve `MatrizTallasWidget` y conserva la API pública de la versión
+    anterior (puntos, encabezado_general, encabezados, celdas, bloques,
+    obtener_valores, establecer_valores).
+    """
+
+    def __init__(self, puntos: list[dict] | None = None, titulo: str = "TALLAS",
+                 parent: QWidget | None = None,
+                 tallas: list[dict] | None = None) -> None:
+        super().__init__(parent)
+        self.titulo = titulo
+        self.setWindowTitle("Controles de tallas")
+        self.setModal(True)
+        self.resize(720, 480)
+        self.widget = MatrizTallasWidget(
+            puntos=puntos, titulo=titulo, parent=self, tallas=tallas)
+        self.puntos = self.widget.puntos
+        self.tallas = self.widget.tallas
+        self.bloques = self.widget.bloques
+        self.encabezado_general = self.widget.encabezado_general
+        self.encabezados = self.widget.encabezados
+        self.celdas = self.widget.celdas
+        self.tabla = getattr(self.widget, "tabla", None)
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        titulo = QLabel("Controles de tallas")
+        titulo.setObjectName("sectionTitle")
+        layout.addWidget(titulo)
+
+        subtitulo = QLabel(
+            "Matriz de celdas por bloques: cada bloque tiene su fila de "
+            "encabezado y su fila de captura. Navegue entre celdas con Enter "
+            "o Tabulador.")
+        subtitulo.setObjectName("sectionSubtitle")
+        subtitulo.setWordWrap(True)
+        layout.addWidget(subtitulo)
+
+        layout.addWidget(self.widget, 1)
+
+        bar = QHBoxLayout()
+        bar.addStretch()
+        btn_capturar = QPushButton("Capturar")
+        btn_capturar.setObjectName("btnPrimary")
+        btn_capturar.clicked.connect(self._mostrar_resumen)
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.setObjectName("btnSecondary")
+        btn_cerrar.clicked.connect(self.accept)
+        bar.addWidget(btn_capturar)
+        bar.addWidget(btn_cerrar)
+        layout.addLayout(bar)
+
+    def obtener_valores(self) -> dict[str, int]:
+        return self.widget.obtener_valores()
+
+    def establecer_valores(self, valores: dict[str, int]) -> None:
+        self.widget.establecer_valores(valores)
 
     def _mostrar_resumen(self) -> None:
         partes = []

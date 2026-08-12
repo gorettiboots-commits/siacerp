@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController

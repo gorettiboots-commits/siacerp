@@ -1,6 +1,18 @@
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from src.database.db_manager import DatabaseManager
+
+
+_MESES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo",
+    6: "Junio", 7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre",
+    11: "Noviembre", 12: "Diciembre",
+}
+
+
+def _lunes(d: date) -> date:
+    return d - timedelta(days=d.weekday())
 
 
 class ProgramacionModel:
@@ -9,7 +21,44 @@ class ProgramacionModel:
 
     # ---- Semanas ----
 
+    def asegurar_semanas(self) -> None:
+        """Genera las semanas faltantes desde la última existente hasta fin
+        de año (lunes a sábado). Idempotente."""
+        fila = self.db.fetch_one(
+            "SELECT MAX(fecha_inicio) AS f, MAX(orden) AS o "
+            "FROM programacion_semana WHERE activo = 1")
+        ultimo = None
+        orden_max = 0
+        if fila and fila["f"]:
+            try:
+                ultimo = datetime.strptime(fila["f"], "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                ultimo = None
+            orden_max = int(fila["o"] or 0)
+        hoy = date.today()
+        inicio = _lunes(hoy)
+        if ultimo:
+            inicio = max(inicio, _lunes(ultimo) + timedelta(days=7))
+        fin_anio = date(hoy.year, 12, 31)
+        k = 0
+        while inicio <= fin_anio:
+            fin = inicio + timedelta(days=5)
+            if fin.month == inicio.month:
+                nombre = (f"{inicio.day:02d}-{fin.day:02d} "
+                          f"{_MESES[inicio.month]} {inicio.year}")
+            else:
+                nombre = (f"{inicio.day:02d} {_MESES[inicio.month]} "
+                          f"{inicio.year} - {fin.day:02d} "
+                          f"{_MESES[fin.month]} {fin.year}")
+            self.db.execute(
+                "INSERT INTO programacion_semana (nombre, fecha_inicio, orden) "
+                "VALUES (?, ?, ?)",
+                (nombre, inicio.isoformat(), orden_max + k + 1))
+            inicio += timedelta(days=7)
+            k += 1
+
     def listar_semanas(self) -> list[dict]:
+        self.asegurar_semanas()
         return self.db.fetch_all(
             "SELECT * FROM programacion_semana WHERE activo = 1 "
             "ORDER BY fecha_inicio, orden")
@@ -87,6 +136,13 @@ class ProgramacionModel:
             "updated_at = datetime('now') WHERE id = ?",
             (folio_pedido.strip(), linea_id),
         )
+
+    def eliminar_linea(self, linea_id: int) -> None:
+        self.db.execute(
+            "DELETE FROM programacion_linea_tallas WHERE linea_id = ?",
+            (linea_id,))
+        self.db.execute(
+            "DELETE FROM programacion_lineas WHERE id = ?", (linea_id,))
 
     # ---- Programación desde pedidos ----
 

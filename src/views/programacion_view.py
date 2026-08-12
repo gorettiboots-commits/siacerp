@@ -1,15 +1,14 @@
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QComboBox, QFrame, QHBoxLayout, QHeaderView, QInputDialog, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QComboBox, QFrame, QHBoxLayout, QInputDialog, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
+from src.components.complex_grid import ComplexGrid
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.table_utils import NumericItem, configurar_tabla_excel
+from src.utils.export_utils import export_table_to_excel
+from src.utils.programacion_print import abrir_programacion_html
 from src.utils.ui_helpers import crear_tarjeta
 from src.views.etiqueta_prueba_dialog import EtiquetaPruebaDialog
 from src.views.etiquetas_dialog import EtiquetasDialog
@@ -37,6 +36,8 @@ _FACTORES_AGRUPAR = {
     "color": "Color",
 }
 
+_PRODUCCION_INICIADA = ("en_proceso", "producido")
+
 
 def _fmt_estatus(estatus: str) -> str:
     return _ESTATUS.get(estatus, estatus.replace("_", " ").capitalize())
@@ -46,11 +47,15 @@ class ProgramacionView(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.controller = ProgramacionController()
-        self._talla_cols: list[tuple[int, str]] = []
+        self._factor_actual: str | None = None
+        self._lineas_actuales: list[dict] = []
+        self._col_estatus = 0
+        self._permiso_eliminar = True
         self._setup_ui()
         self._cargar_semanas()
 
     def set_permisos(self, permisos) -> None:
+        self._permiso_eliminar = tiene(permisos, "programacion", "eliminar")
         self.btn_estatus.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_folio_pedido.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_export.setEnabled(tiene(permisos, "programacion", "exportar"))
@@ -115,16 +120,22 @@ class ProgramacionView(QWidget):
         layout.addLayout(self._toolbar)
         layout.addLayout(self._toolbar_agrupar)
 
-        self.table = QTableWidget()
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.setSortingEnabled(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(False)
-        configurar_tabla_excel(self.table)
-        self.table.cellDoubleClicked.connect(self._ver_detalle)
-        layout.addWidget(self.table)
+        self.vista = ComplexGrid()
+        self.vista.set_buscador_visible(False)
+        self.vista.set_exportar_visible(False)
+        self.vista.set_agrupar_visible(False)
+        self.vista.set_renderers(fila=self._fila_linea, claves=self._claves_linea,
+                                 estilo=self._estilo_linea, lista=self._lista_linea,
+                                 tarjeta=self._tarjeta_linea)
+        self.vista.set_acciones([
+            {"texto": "Eliminar", "icono": "eliminar", "color": "#dc2626",
+             "habilitado": lambda rec: self._permiso_eliminar and rec.get(
+                 "estatus", "programado") not in _PRODUCCION_INICIADA,
+             "callback": self._eliminar_linea},
+        ])
+        self.vista.set_grupo_fn(self._grupo_label)
+        self.vista.doubleClicked.connect(self._ver_detalle)
+        layout.addWidget(self.vista)
 
     def _setup_toolbar(self) -> None:
         self._toolbar = QHBoxLayout()
@@ -224,85 +235,62 @@ class ProgramacionView(QWidget):
         folio_pedido = self.txt_folio_pedido.text().strip()
 
         es_todas = semana_id is None
-        tallas = self.controller.tallas_semana(semana_id)
         lineas = self.controller.lineas_con_tallas(
             semana_id, termino, estatus, folio_pedido)
 
-        fixed = ([("semana", "Semana")] + self._FIXED_COLS if es_todas
-                 else self._FIXED_COLS)
-        self._fixed_cols = fixed
+        self._factor_actual = self.cmb_agrupar.currentData()
 
-        n_tallas = len(tallas)
-        n_cols = len(fixed) + n_tallas + 2
-        self._talla_cols = list(enumerate(tallas, start=len(fixed)))
+        cols = []
+        if es_todas:
+            cols.append({"key": "semana", "titulo": "Semana", "ancho": 130})
+        for key, titulo in self._FIXED_COLS:
+            cols.append({"key": key, "titulo": titulo,
+                         "ancho": self._ANCHOS.get(key, 80)})
+        cols.append({"key": "corrida", "titulo": "Corrida", "ancho": 150})
+        cols.append({"key": "estatus", "titulo": "Estatus", "ancho": 110})
+        self._col_estatus = len(cols) - 1
 
-        self.table.setColumnCount(n_cols)
-        headers = [h for _, h in fixed]
-        headers += [t["talla"] for t in tallas]
-        headers += ["Estatus", "ID"]
-        self.table.setHorizontalHeaderLabels(headers)
-        self.table.setColumnHidden(n_cols - 1, True)
+        self.vista.set_columnas(cols)
+        self.vista.set_datos(lineas)
+        self.vista.set_agrupacion(self._factor_actual)
+        self._lineas_actuales = lineas
 
-        _ANCHOS = {"semana": 130, "cliente": 220, "folio_prog": 90,
-                   "folio_pedido": 115, "modelo": 90, "piel": 110,
-                   "color": 130, "fecha_prog": 100, "total": 60}
-        for col, (key, _h) in enumerate(fixed):
-            self.table.setColumnWidth(col, _ANCHOS.get(key, 80))
-        for c in range(n_tallas):
-            self.table.setColumnWidth(len(fixed) + c, 46)
-        self.table.setColumnWidth(n_cols - 2, 110)
+    def _grupo_label(self, valor, recs: list[dict]) -> str:
+        total = sum(int(r.get("total_pares", 0) or 0) for r in recs)
+        factor = _FACTORES_AGRUPAR.get(self._factor_actual, "Cliente")
+        texto = str(valor or "").strip() or "(sin valor)"
+        return f"{factor.upper()}: {texto}  ({len(recs)} líneas · {total} pares)"
 
-        self.table.setSortingEnabled(False)
-        self.table.clearContents()
-        self.table.clearSpans()
+    @staticmethod
+    def _fmt_talla(talla) -> str:
+        try:
+            v = float(talla)
+            return str(int(v)) if v == int(v) else str(v)
+        except (TypeError, ValueError):
+            return str(talla)
 
-        factor = self.cmb_agrupar.currentData()
-        if factor:
-            grupos = self._agrupar_lineas(lineas, factor)
-            n_rows = sum(1 + len(ms) for _k, ms in grupos)
-            self.table.setRowCount(n_rows)
-            r = 0
-            for clave, ms in grupos:
-                self._set_fila_grupo(r, factor, clave, ms)
-                r += 1
-                for l in ms:
-                    self._set_fila(r, l)
-                    r += 1
-        else:
-            self.table.setRowCount(len(lineas))
-            for i, l in enumerate(lineas):
-                self._set_fila(i, l)
-            self.table.setSortingEnabled(True)
+    @staticmethod
+    def _valor_talla(talla):
+        try:
+            return (0, float(talla))
+        except (TypeError, ValueError):
+            return (1, str(talla))
 
-    def _agrupar_lineas(self, lineas: list[dict],
-                        factor: str) -> list[tuple[str, list[dict]]]:
-        grupos: dict[str, list[dict]] = {}
-        orden: list[str] = []
-        for l in lineas:
-            clave = str(l.get(factor, "") or "").strip() or "(sin valor)"
-            if clave not in grupos:
-                grupos[clave] = []
-                orden.append(clave)
-            grupos[clave].append(l)
-        return [(k, grupos[k]) for k in orden]
+    def _texto_corrida(self, l: dict) -> str:
+        tallas = [t for t in l.get("tallas", []) if t.get("talla") is not None]
+        if not tallas:
+            return ""
+        parejas = sorted(
+            (self._valor_talla(t["talla"]), self._fmt_talla(t["talla"]))
+            for t in tallas)
+        return f"del {parejas[0][1]} al {parejas[-1][1]}"
 
-    def _set_fila_grupo(self, r: int, factor: str, clave: str,
-                        ms: list[dict]) -> None:
-        total = sum(int(m.get("total_pares", 0) or 0) for m in ms)
-        label = f"{_FACTORES_AGRUPAR[factor].upper()}: {clave}  " \
-                f"({len(ms)} líneas · {total} pares)"
-        self.table.setSpan(r, 0, 1, self.table.columnCount())
-        item = QTableWidgetItem(label)
-        f = item.font()
-        f.setBold(True)
-        item.setFont(f)
-        item.setBackground(QColor("#e0e7ff"))
-        item.setForeground(QColor("#1e293b"))
-        self.table.setItem(r, 0, item)
-
-    def _set_fila(self, i: int, l: dict) -> None:
-        base_vals = {
-            "semana": l.get("semana", ""),
+    def _fila_linea(self, l: dict) -> list[str]:
+        fila = []
+        es_todas = self.cmb_semana.currentData() is None
+        if es_todas:
+            fila.append(l.get("semana", ""))
+        base = {
             "cliente": l.get("cliente", ""),
             "folio_prog": l.get("folio_prog", ""),
             "folio_pedido": l.get("folio_pedido", ""),
@@ -312,27 +300,56 @@ class ProgramacionView(QWidget):
             "fecha_prog": l.get("fecha_prog", "") or "",
             "total": str(l.get("total_pares", 0)),
         }
-        for col, (key, _h) in enumerate(self._fixed_cols):
-            if key == "total":
-                item = NumericItem(l.get("total_pares", 0))
-                item.setTextAlignment(Qt.AlignCenter)
-            else:
-                item = QTableWidgetItem(base_vals.get(key, ""))
-            self.table.setItem(i, col, item)
+        fila += [base.get(key, "") for key, _ in self._FIXED_COLS]
+        fila.append(self._texto_corrida(l))
+        fila.append(_fmt_estatus(l.get("estatus", "programado")))
+        return fila
 
-        por_talla = {t["talla"]: t["pares"] for t in l.get("tallas", [])}
-        for col, t in self._talla_cols:
-            val = por_talla.get(t["talla"], 0)
-            item = NumericItem(val)
-            item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(i, col, item)
+    def _claves_linea(self, l: dict) -> list:
+        claves = []
+        es_todas = self.cmb_semana.currentData() is None
+        if es_todas:
+            claves.append(l.get("semana", ""))
+        base = {
+            "cliente": (l.get("cliente", "") or "").lower(),
+            "folio_prog": l.get("folio_prog", ""),
+            "folio_pedido": l.get("folio_pedido", ""),
+            "modelo": l.get("modelo", ""),
+            "piel": l.get("piel", ""),
+            "color": l.get("color", ""),
+            "fecha_prog": l.get("fecha_prog", "") or "",
+            "total": float(l.get("total_pares", 0) or 0),
+        }
+        claves += [base.get(key, "") for key, _ in self._FIXED_COLS]
+        tallas = [t for t in l.get("tallas", []) if t.get("talla") is not None]
+        if tallas:
+            clave_corrida = min(self._valor_talla(t["talla"]) for t in tallas)
+        else:
+            clave_corrida = (1, "")
+        claves.append(clave_corrida)
+        claves.append(l.get("estatus", "programado"))
+        return claves
 
-        est = l.get("estatus", "programado")
-        item_est = QTableWidgetItem(_fmt_estatus(est))
-        item_est.setForeground(_ESTATUS_COLOR.get(est, Qt.black))
-        self.table.setItem(i, len(self._fixed_cols) + len(self._talla_cols), item_est)
-        self.table.setItem(i, self.table.columnCount() - 1,
-                           QTableWidgetItem(str(l.get("id", ""))))
+    def _estilo_linea(self, l: dict, item, col: int) -> None:
+        if col != self._col_estatus:
+            return
+        item.setForeground(_ESTATUS_COLOR.get(l.get("estatus", "programado"), Qt.black))
+
+    @staticmethod
+    def _lista_linea(l: dict) -> tuple[str, str]:
+        return (f"{l.get('folio_prog', '')} · {l.get('cliente', '')}",
+                f"{l.get('modelo', '')} / {l.get('piel', '')} / {l.get('color', '')} "
+                f"· {l.get('total_pares', 0)} pares")
+
+    @staticmethod
+    def _tarjeta_linea(l: dict) -> dict:
+        return {
+            "icono": "oc",
+            "titulo": l.get("folio_prog", ""),
+            "subtitulo": f"{l.get('cliente', '')} / {l.get('modelo', '')}",
+            "badge": _fmt_estatus(l.get("estatus", "programado")),
+            "color": "#4f46e5",
+        }
 
     _FIXED_COLS = [
         ("cliente", "Cliente"),
@@ -345,18 +362,17 @@ class ProgramacionView(QWidget):
         ("total", "Pares"),
     ]
 
+    _ANCHOS = {"semana": 130, "cliente": 220, "folio_prog": 90,
+               "folio_pedido": 115, "modelo": 90, "piel": 110,
+               "color": 130, "fecha_prog": 100, "total": 60}
+
     def _cambiar_estatus(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.vista.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccionar",
                                     "Seleccione una línea de la programación.")
             return
-        item_id = self.table.item(row, self.table.columnCount() - 1)
-        if item_id is None or not item_id.text():
-            QMessageBox.information(self, "Seleccionar",
-                                    "Seleccione una línea de la programación (no una fila de grupo).")
-            return
-        linea_id = int(item_id.text())
+        linea_id = rec["id"]
         linea = self.controller.obtener_linea(linea_id)
         if not linea:
             return
@@ -376,17 +392,12 @@ class ProgramacionView(QWidget):
         self._recargar_tabla()
 
     def _asignar_folio_pedido(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.vista.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccionar",
                                     "Seleccione una línea de la programación.")
             return
-        item_id = self.table.item(row, self.table.columnCount() - 1)
-        if item_id is None or not item_id.text():
-            QMessageBox.information(self, "Seleccionar",
-                                    "Seleccione una línea de la programación (no una fila de grupo).")
-            return
-        linea_id = int(item_id.text())
+        linea_id = rec["id"]
         linea = self.controller.obtener_linea(linea_id)
         if not linea:
             return
@@ -404,14 +415,42 @@ class ProgramacionView(QWidget):
         self.controller.asignar_folio_pedido(linea_id, nuevo)
         self._recargar_tabla()
 
+    def _eliminar_linea(self, rec=None) -> None:
+        if rec is None:
+            rec = self.vista.registro_seleccionado()
+        if rec is None:
+            QMessageBox.information(self, "Seleccionar",
+                                    "Seleccione una línea de la programación.")
+            return
+        linea = self.controller.obtener_linea(rec["id"])
+        if not linea:
+            return
+        if linea.get("estatus", "programado") in _PRODUCCION_INICIADA:
+            QMessageBox.warning(
+                self, "No se puede eliminar",
+                "Esta línea ya inició un proceso de producción y no se puede "
+                "eliminar.")
+            return
+        resp = QMessageBox.question(
+            self, "Confirmar",
+            f"¿Eliminar la línea {linea.get('folio_prog', '')} — "
+            f"{linea.get('cliente', '')} / {linea.get('modelo', '')}?",
+            QMessageBox.Yes | QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            return
+        self.controller.eliminar_linea(linea["id"])
+        self._on_semana_cambiada()
+
     def _exportar(self) -> None:
-        path = export_table_to_excel(self.table, "Programacion", self)
+        path = export_table_to_excel(self.vista.table, "Programacion", self)
         if path:
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
     def _imprimir(self) -> None:
-        semana = self.cmb_semana.currentText()
-        print_table(self.table, f"Programacion - {semana}", self)
+        es_todas = self.cmb_semana.currentData() is None
+        titulo = f"PROGRAMACIÓN SEMANAL — {self.cmb_semana.currentText()}"
+        abrir_programacion_html(self._lineas_actuales, titulo=titulo,
+                                incluir_semana=es_todas)
 
     def _imprimir_etiquetas(self) -> None:
         dlg = EtiquetasDialog(self.controller, self)
@@ -422,14 +461,10 @@ class ProgramacionView(QWidget):
         dlg.exec()
 
     def _ver_detalle(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.vista.registro_seleccionado()
+        if rec is None:
             return
-        item_id = self.table.item(row, self.table.columnCount() - 1)
-        if item_id is None or not item_id.text():
-            return
-        linea_id = int(item_id.text())
-        linea = self.controller.obtener_linea_con_tallas(linea_id)
+        linea = self.controller.obtener_linea_con_tallas(rec["id"])
         if not linea:
             return
         dlg = LineaDetalleDialog(linea, self)

@@ -1,26 +1,30 @@
-"""Diálogo de detalle de una línea de programación.
+"""Diálogo de detalle de una línea de programación con editor de etiqueta.
 
-Muestra los datos de la línea y, en la parte de impresión, una tabla
-Modelo | Corte | Color | Talla | Cantidad con edición inline. Las ediciones
-solo afectan la impresión; no se guardan. Imprime una etiqueta por par con el
-formato de la etiqueta de prueba (75x45 mm).
+Muestra los datos de la línea y, en el área de impresión, permite:
+  - Editar Modelo/Corte/Color (solo afectan la impresión) y capturar la
+    cantidad de pares por talla con MatrizTallasWidget.
+  - Diseñar el layout de la etiqueta en vivo: lienzo con arrastre (drag &
+    drop) y redimensionado; cada elemento se edita con doble clic
+    (propiedades, coordenadas, borde, tipografía, color, etc.) y la plantilla
+    se guarda en etiqueta_config.
+  - Imprimir una muestra con los datos actuales, imprimir todas las etiquetas
+    o exportar a PDF, respetando exactamente el layout definido en la
+    plantilla.
 """
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QPainter
-from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog, QPrinter
+from PySide6.QtCore import QSizeF, Qt
+from PySide6.QtGui import QPageSize, QPainter
+from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
-    QHeaderView, QLabel, QMessageBox, QPushButton, QSpinBox, QTableWidget,
-    QTableWidgetItem, QVBoxLayout,
+    QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
-from src.utils.etiqueta_termica import (
-    configurar_printer, etiqueta_termica_pdf, render_etiqueta_termica,
-    render_etiqueta_termica_pixmap,
+from src.components.editor_etiqueta import (
+    DialogoPropiedadesCampo, LabelCanvas, normalizar_diseno,
 )
-
-_PREVIEW_W = 380
-_PREVIEW_H = 256
+from src.components.tallas_matrix import MatrizTallasWidget
+from src.models.etiqueta_model import EtiquetaModel
+from src.utils.etiqueta_render import render_label
 
 _ESTATUS = {
     "programado": "Programado",
@@ -34,9 +38,31 @@ class LineaDetalleDialog(QDialog):
     def __init__(self, linea: dict, parent=None) -> None:
         super().__init__(parent)
         self._linea = linea
-        self.setWindowTitle("Detalle de Línea")
-        self.setMinimumWidth(680)
+        self._valores: dict[str, int] = self._valores_iniciales()
+        self._talla_actual = ""
+        self.etiquetas = EtiquetaModel()
+        self._diseno = normalizar_diseno(self.etiquetas.cargar_diseno())
+        self.setWindowTitle("Detalle de Línea — Editor de Etiqueta")
+        self.setMinimumSize(1000, 660)
         self._setup_ui()
+
+    def _valores_iniciales(self) -> dict[str, int]:
+        valores: dict[str, int] = {}
+        for t in self._linea.get("tallas") or []:
+            talla = str(t.get("talla", "") or "").strip()
+            if talla:
+                valores[talla] = int(t.get("pares", 0) or 0)
+        return valores
+
+    def _puntos_linea(self) -> list[dict]:
+        tallas = self._linea.get("tallas") or []
+        return [
+            {"id": i, "punto": str(t.get("talla", "")).strip()}
+            for i, t in enumerate(tallas)
+            if str(t.get("talla", "")).strip()
+        ]
+
+    # ---- UI ----
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -46,9 +72,6 @@ class LineaDetalleDialog(QDialog):
         campos = [
             ("Folio Prog.:", self._linea.get("folio_prog", "")),
             ("Cliente:", self._linea.get("cliente", "")),
-            ("Modelo:", self._linea.get("modelo", "")),
-            ("Piel:", self._linea.get("piel", "")),
-            ("Color:", self._linea.get("color", "")),
             ("Fecha Prog.:", self._linea.get("fecha_prog", "") or "—"),
             ("Estatus:", _ESTATUS.get(
                 self._linea.get("estatus", ""),
@@ -61,114 +84,143 @@ class LineaDetalleDialog(QDialog):
             datos.addRow(f"<b>{etiqueta}</b>", lbl)
         layout.addLayout(datos)
 
-        self.tbl_etiquetas = QTableWidget(0, 5)
-        self.tbl_etiquetas.setHorizontalHeaderLabels(
-            ["Modelo", "Corte", "Color", "Talla", "Cantidad"])
-        self.tbl_etiquetas.setEditTriggers(
-            QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked
-            | QAbstractItemView.EditKeyPressed)
-        self.tbl_etiquetas.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.tbl_etiquetas.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents)
-        self.tbl_etiquetas.setMaximumHeight(200)
-        self.tbl_etiquetas.itemChanged.connect(self._previsualizar)
-        self.tbl_etiquetas.currentCellChanged.connect(self._previsualizar)
-        layout.addWidget(self.tbl_etiquetas)
+        grp_datos = QWidget()
+        form = QFormLayout(grp_datos)
+        self.txt_modelo = QLineEdit(str(self._linea.get("modelo", "") or ""))
+        self.txt_corte = QLineEdit(str(self._linea.get("piel", "") or ""))
+        self.txt_color = QLineEdit(str(self._linea.get("color", "") or ""))
+        for etiqueta, txt in (("Modelo:", self.txt_modelo),
+                              ("Corte:", self.txt_corte),
+                              ("Color:", self.txt_color)):
+            txt.textChanged.connect(self._refrescar_vista)
+            form.addRow(etiqueta, txt)
+        layout.addWidget(grp_datos)
+
+        self.matriz = MatrizTallasWidget(self._puntos_linea(), "PARES A IMPRIMIR")
+        self.matriz.establecer_valores(self._valores)
+        self.matriz.valoresCambiados.connect(self._on_matriz_cambio)
+        self.matriz.celdaSeleccionada.connect(self._on_celda_seleccionada)
+        layout.addWidget(self.matriz)
 
         lbl_nota = QLabel(
-            "Las ediciones en esta tabla solo afectan la impresión; no se guardan.")
+            "Modelo/Corte/Color editados y pares por talla solo afectan la "
+            "impresión; no se guardan. El diseño de la etiqueta sí se puede "
+            "guardar como plantilla.")
         lbl_nota.setStyleSheet("color: #64748b; font-size: 11px;")
         layout.addWidget(lbl_nota)
 
-        self.lbl_vista = QLabel()
-        self.lbl_vista.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_vista.setFixedSize(_PREVIEW_W, _PREVIEW_H)
-        self.lbl_vista.setStyleSheet(
-            "border: 1px solid #cbd5e1; background: white; border-radius: 4px;")
-        layout.addWidget(self.lbl_vista)
-
-        self._poblar_tabla()
-        self._previsualizar()
+        self.canvas = LabelCanvas()
+        self.canvas.campoDobleClic.connect(self._editar_campo)
+        layout.addWidget(self.canvas, 1)
 
         btns = QHBoxLayout()
         btn_pdf = QPushButton("Guardar PDF")
         btn_pdf.setObjectName("btnSecondary")
         btn_pdf.clicked.connect(self._guardar_pdf)
-        btn_preview = QPushButton("Vista previa de impresión")
-        btn_preview.setObjectName("btnSecondary")
-        btn_preview.clicked.connect(self._vista_previa)
+        btn_muestra = QPushButton("Imprimir Muestra")
+        btn_muestra.setObjectName("btnSecondary")
+        btn_muestra.clicked.connect(self._imprimir_muestra)
+        btn_guardar = QPushButton("Guardar Plantilla / Formato")
+        btn_guardar.setObjectName("btnPrimary")
+        btn_guardar.clicked.connect(self._guardar_plantilla)
         btn_imprimir = QPushButton("Imprimir Etiquetas")
         btn_imprimir.setObjectName("btnPrimary")
         btn_imprimir.clicked.connect(self._imprimir)
         btn_cerrar = QPushButton("Cerrar")
         btn_cerrar.clicked.connect(self.reject)
         btns.addWidget(btn_pdf)
-        btns.addWidget(btn_preview)
+        btns.addWidget(btn_muestra)
+        btns.addWidget(btn_guardar)
         btns.addStretch()
         btns.addWidget(btn_cerrar)
         btns.addWidget(btn_imprimir)
         layout.addLayout(btns)
 
-    def _poblar_tabla(self) -> None:
-        tallas = self._linea.get("tallas") or []
-        if not tallas:
-            tallas = [{"talla": "", "pares": 1}]
-        self.tbl_etiquetas.setRowCount(len(tallas))
-        for i, t in enumerate(tallas):
-            modelo = str(self._linea.get("modelo", "") or "")
-            corte = str(self._linea.get("piel", "") or "")
-            color = str(self._linea.get("color", "") or "")
-            talla = str(t.get("talla", ""))
-            pares = int(t.get("pares", 0) or 0)
-            for col, valor in ((0, modelo), (1, corte), (2, color)):
-                item = QTableWidgetItem(valor)
-                self.tbl_etiquetas.setItem(i, col, item)
-            item_talla = QTableWidgetItem(talla)
-            item_talla.setFlags(Qt.ItemFlag.ItemIsEnabled
-                                | Qt.ItemFlag.ItemIsSelectable)
-            self.tbl_etiquetas.setItem(i, 3, item_talla)
-            spin = QSpinBox()
-            spin.setMinimum(0)
-            spin.setMaximum(9999)
-            spin.setValue(pares if pares > 0 else 1)
-            spin.valueChanged.connect(self._previsualizar)
-            self.tbl_etiquetas.setCellWidget(i, 4, spin)
-        if self.tbl_etiquetas.rowCount():
-            self.tbl_etiquetas.setCurrentCell(0, 0)
+        if self._diseno["campos"]:
+            self.canvas.seleccionar(0)
+        self._refrescar_vista()
 
-    def _datos_fila(self, row: int) -> dict:
-        if row < 0:
-            return {}
+    # ---- Datos de la etiqueta ----
+
+    def _talla_seleccionada(self) -> str:
+        if self._talla_actual:
+            return self._talla_actual
+        for talla, cantidad in self._valores.items():
+            if int(cantidad or 0) > 0:
+                return talla
+        for talla in self._valores:
+            return talla
+        return ""
+
+    def _datos_etiqueta(self, talla: str | None = None) -> dict:
         return {
-            "modelo": self.tbl_etiquetas.item(row, 0).text(),
-            "corte": self.tbl_etiquetas.item(row, 1).text(),
-            "color": self.tbl_etiquetas.item(row, 2).text(),
-            "talla": self.tbl_etiquetas.item(row, 3).text(),
+            "modelo": self.txt_modelo.text(),
+            "corte": self.txt_corte.text(),
+            "color": self.txt_color.text(),
+            "talla": talla if talla is not None else self._talla_seleccionada(),
+            "folio_prog": self._linea.get("folio_prog", ""),
+            "cliente": self._linea.get("cliente", ""),
+            "pares": sum(int(v or 0) for v in self._valores.values()),
+            "fecha_prog": self._linea.get("fecha_prog", "") or "",
         }
 
-    def _fila_seleccionada(self) -> int:
-        return self.tbl_etiquetas.currentRow()
+    def _refrescar_vista(self, *_args) -> None:
+        if hasattr(self, "canvas"):
+            self.canvas.set_contenido(self._diseno, self._datos_etiqueta())
 
-    def _previsualizar(self) -> None:
-        if not hasattr(self, "lbl_vista"):
+    def _on_matriz_cambio(self) -> None:
+        self._valores = self.matriz.obtener_valores()
+        self._refrescar_vista()
+
+    def _on_celda_seleccionada(self, talla: str) -> None:
+        self._talla_actual = talla
+        self._refrescar_vista()
+
+    # ---- Editor de diseño ----
+
+    def _ancho_etiqueta(self) -> float:
+        return float(self._diseno.get("ancho_mm", 76.0))
+
+    def _editar_campo(self, idx: int) -> None:
+        """Abre el diálogo de propiedades por doble clic y aplica los cambios."""
+        campos = self._diseno.get("campos", [])
+        if not (0 <= idx < len(campos)):
             return
-        datos = self._datos_fila(self._fila_seleccionada())
-        pix = render_etiqueta_termica_pixmap(datos)
-        self.lbl_vista.setPixmap(pix.scaled(
-            QSize(_PREVIEW_W, _PREVIEW_H),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation))
+        dlg = DialogoPropiedadesCampo(campos[idx], self._ancho_etiqueta(), self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            campos[idx] = dlg.campo_resultado()
+            self._refrescar_vista()
 
-    def _filas_impresion(self) -> list[tuple[str, str, str, str, int]]:
-        filas = []
-        for row in range(self.tbl_etiquetas.rowCount()):
-            spin = self.tbl_etiquetas.cellWidget(row, 4)
-            cantidad = spin.value() if spin else 0
-            if cantidad > 0:
-                d = self._datos_fila(row)
-                filas.append((d["modelo"], d["corte"], d["color"],
-                              d["talla"], cantidad))
-        return filas
+    def _guardar_plantilla(self) -> None:
+        self.etiquetas.guardar_diseno(self._diseno)
+        QMessageBox.information(self, "Plantilla",
+                                "Plantilla de etiqueta guardada.\n"
+                                "Se cargará en las próximas aperturas.")
+
+    # ---- Impresión / PDF (respeta el layout) ----
+
+    def _filas_impresion(self) -> list[tuple[str, int]]:
+        return [
+            (talla, int(cantidad or 0))
+            for talla, cantidad in self.matriz.obtener_valores().items()
+            if int(cantidad or 0) > 0
+        ]
+
+    def _printer(self) -> QPrinter:
+        p = QPrinter(QPrinter.PrinterMode.HighResolution)
+        self._configurar_impresora(p)
+        return p
+
+    def _configurar_impresora(self, p: QPrinter) -> None:
+        """Aplica el tamaño de página y full-page.
+
+        Se llama también después del QPrintDialog: en Windows el diálogo puede
+        reiniciar la configuración del QPrinter a la del controlador."""
+        p.setPageSize(QPageSize(
+            QSizeF(self._ancho_etiqueta(),
+                   float(self._diseno.get("alto_mm", 51.0))),
+            QPageSize.Unit.Millimeter))
+        p.setFullPage(True)
 
     def _imprimir(self) -> None:
         filas = self._filas_impresion()
@@ -176,12 +228,12 @@ class LineaDetalleDialog(QDialog):
             QMessageBox.information(self, "Cantidad",
                                     "Indique al menos una cantidad por talla.")
             return
-        total = sum(c for _, _, _, _, c in filas)
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        configurar_printer(printer)
+        total = sum(c for _, c in filas)
+        printer = self._printer()
         dlg = QPrintDialog(printer, self)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
+        self._configurar_impresora(printer)
         printer.setDocName("Etiquetas SIAC")
         try:
             painter = QPainter(printer)
@@ -191,15 +243,19 @@ class LineaDetalleDialog(QDialog):
                     "Revisa el driver y que la cola de impresión no esté en error.")
             px_per_mm = printer.resolution() / 25.4
             n = 0
-            for modelo, corte, color, talla, cantidad in filas:
-                datos = {"modelo": modelo, "corte": corte,
-                         "color": color, "talla": talla}
+            for talla, cantidad in filas:
+                datos = self._datos_etiqueta(talla)
                 for _ in range(cantidad):
-                    if n > 0:
-                        printer.newPage()
-                    render_etiqueta_termica(painter, px_per_mm, datos)
+                    if n > 0 and not printer.newPage():
+                        raise RuntimeError(
+                            "La impresora no aceptó una nueva página. "
+                            "Revisa el driver y el tamaño del papel.")
+                    render_label(painter, self._diseno, datos, px_per_mm)
                     n += 1
-            painter.end()
+            if not painter.end():
+                raise RuntimeError(
+                    "No se pudo cerrar el trabajo de impresión. "
+                    "Revisa la cola de impresión de Windows.")
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir",
                                  f"{type(e).__name__}: {e}")
@@ -208,21 +264,49 @@ class LineaDetalleDialog(QDialog):
             self, "Impresión",
             f"Se enviaron {total} etiquetas a la impresora.")
 
-    def _vista_previa(self) -> None:
-        datos = self._datos_fila(self._fila_seleccionada())
-        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-        configurar_printer(printer)
-        dlg = QPrintPreviewDialog(printer, self)
-        dlg.paintRequested.connect(
-            lambda p: render_etiqueta_termica(p, p.resolution() / 25.4, datos))
-        dlg.exec()
+    def _imprimir_muestra(self) -> None:
+        """Imprime una sola etiqueta de muestra con los datos actuales."""
+        printer = self._printer()
+        dlg = QPrintDialog(printer, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        self._configurar_impresora(printer)
+        printer.setDocName("Etiqueta muestra SIAC")
+        try:
+            painter = QPainter(printer)
+            if not painter.isActive():
+                raise RuntimeError(
+                    "No se pudo iniciar el painter sobre la impresora. "
+                    "Revisa el driver y que la cola de impresión no esté en error.")
+            render_label(painter, self._diseno, self._datos_etiqueta(),
+                         printer.resolution() / 25.4)
+            if not painter.end():
+                raise RuntimeError(
+                    "No se pudo cerrar el trabajo de impresión. "
+                    "Revisa la cola de impresión de Windows.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error al imprimir",
+                                 f"{type(e).__name__}: {e}")
+            return
+        QMessageBox.information(self, "Impresión",
+                                "Etiqueta de muestra enviada a la impresora.")
 
     def _guardar_pdf(self) -> None:
-        datos = self._datos_fila(self._fila_seleccionada())
+        talla = self._talla_seleccionada()
         path, _ = QFileDialog.getSaveFileName(
-            self, "Guardar etiqueta PDF", f"etiqueta_{datos['talla']}.pdf",
-            "PDF (*.pdf)")
+            self, "Guardar etiqueta PDF", f"etiqueta_{talla}.pdf", "PDF (*.pdf)")
         if not path:
             return
-        etiqueta_termica_pdf(path, datos)
+        printer = self._printer()
+        printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+        printer.setOutputFileName(path)
+        try:
+            painter = QPainter(printer)
+            render_label(painter, self._diseno, self._datos_etiqueta(),
+                         printer.resolution() / 25.4)
+            painter.end()
+        except Exception as e:
+            QMessageBox.critical(self, "Error al generar PDF",
+                                 f"{type(e).__name__}: {e}")
+            return
         QMessageBox.information(self, "PDF", f"Etiqueta guardada en:\n{path}")

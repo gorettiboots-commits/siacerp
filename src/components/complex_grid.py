@@ -76,6 +76,9 @@ class ComplexGrid(QWidget):
         self._claves_fn = None
         self._tarjeta_fn = None
         self._lista_fn = None
+        self._estilo_fn = None
+        self._grupo_fn = None
+        self._totales_fn = None
         self._acciones: list[dict] = []
         self._filtros: list = []
         self._buscar = ""
@@ -197,13 +200,22 @@ class ComplexGrid(QWidget):
         self._registros = list(registros or [])
         self._aplicar_filtro()
 
-    def set_renderers(self, fila=None, claves=None, tarjeta=None, lista=None) -> None:
+    def set_renderers(self, fila=None, claves=None, tarjeta=None, lista=None,
+                      estilo=None) -> None:
         self._fila_fn = fila
         self._claves_fn = claves
         self._tarjeta_fn = tarjeta
         self._lista_fn = lista
+        self._estilo_fn = estilo
+
+    def set_exportar_visible(self, visible: bool) -> None:
+        for b in (self._btn_excel, self._btn_pdf, self._btn_imprimir):
+            b.setVisible(visible)
 
     def set_acciones(self, acciones: list[dict]) -> None:
+        """Acciones por registro. Cada dict: texto, icono, color, callback,
+        habilitado y opcional ancho_columna. texto y habilitado aceptan un
+        callable que recibe el registro."""
         self._acciones = list(acciones or [])
 
     def set_filtros(self, filtros: list) -> None:
@@ -228,6 +240,13 @@ class ComplexGrid(QWidget):
     def set_buscador_visible(self, visible: bool) -> None:
         self._txt_buscar.setVisible(visible)
 
+    def set_agrupar_visible(self, visible: bool) -> None:
+        self._cmb_agrupar.setVisible(visible)
+
+    def set_grupo_fn(self, fn) -> None:
+        """fn(valor, recs) -> str: etiqueta para las filas de agrupación."""
+        self._grupo_fn = fn
+
     def buscar(self, texto: str) -> None:
         self._txt_buscar.setText(texto)
 
@@ -247,6 +266,13 @@ class ComplexGrid(QWidget):
 
     def datos_visibles(self) -> list:
         return list(self._visibles)
+
+    def registros_seleccionados(self) -> list:
+        """Devuelve los registros seleccionados en la vista de tabla."""
+        if self._stack.currentIndex() != self._idx_tabla:
+            return []
+        filas = sorted({i.row() for i in self._pag_tabla.selectedIndexes()})
+        return [self._mapa_rec[f] for f in filas if 0 <= f < len(self._mapa_rec)]
 
     def set_vista(self, vista: str) -> None:
         mapa = {
@@ -331,21 +357,28 @@ class ComplexGrid(QWidget):
         for i, c in enumerate(self._col_config):
             t.setColumnWidth(i, c.get("ancho", 110))
         if self._acciones:
-            t.setColumnWidth(n_cols - 1, max(48, 44 * len(self._acciones) + 8))
+            ancho = 44 * len(self._acciones) + 8
+            for acc in self._acciones:
+                ancho = max(ancho, int(acc.get("ancho_columna", 0)))
+            t.setColumnWidth(n_cols - 1, max(48, ancho))
             t.horizontalHeader().setSectionResizeMode(
                 n_cols - 1, QHeaderView.Fixed)
 
         grupos = self._agrupar()
         for valor, recs in grupos or [(None, self._visibles)]:
             if valor is not None:
-                self._insertar_fila_grupo(t, valor, n_cols)
+                self._insertar_fila_grupo(t, valor, recs, n_cols)
             for rec in recs:
                 self._insertar_fila(t, rec)
 
-    def _insertar_fila_grupo(self, t: QTableWidget, valor, n_cols: int) -> None:
+    def _insertar_fila_grupo(self, t: QTableWidget, valor, recs, n_cols: int) -> None:
         r = t.rowCount()
         t.insertRow(r)
-        item = _ItemOrdenable(f"{self._agrupar_por or ''}: {valor}")
+        if self._grupo_fn:
+            label = self._grupo_fn(valor, recs)
+        else:
+            label = f"{self._agrupar_por or ''}: {valor}"
+        item = _ItemOrdenable(label)
         item.setData(Qt.UserRole, str(valor).lower())
         item.setFlags(Qt.ItemIsEnabled)
         item.setBackground(QColor("#eef2ff"))
@@ -376,6 +409,8 @@ class ComplexGrid(QWidget):
             item.setData(Qt.UserRole, clave)
             if cfg.get("tipo") == "numero":
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            if self._estilo_fn:
+                self._estilo_fn(rec, item, c)
             t.setItem(r, c, item)
         if self._acciones:
             t.setCellWidget(r, len(self._col_config),
@@ -389,11 +424,18 @@ class ComplexGrid(QWidget):
         lay.setSpacing(4)
         for acc in self._acciones:
             btn = QToolButton()
-            btn.setText(acc.get("texto", ""))
+            texto = acc.get("texto", "")
+            if callable(texto):
+                texto = texto(rec)
+            btn.setText(texto or "")
             btn.setIcon(mono_icon(acc.get("icono", "mas"), 14,
                                   acc.get("color", "#4f46e5")))
             btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             btn.setCursor(Qt.PointingHandCursor)
+            habilitado = acc.get("habilitado", True)
+            if callable(habilitado):
+                habilitado = habilitado(rec)
+            btn.setEnabled(bool(habilitado))
             btn.clicked.connect(partial(self._ejecutar_accion, acc, rec))
             lay.addWidget(btn)
         return cont

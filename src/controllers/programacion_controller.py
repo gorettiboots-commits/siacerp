@@ -64,6 +64,9 @@ class ProgramacionController:
     def cambiar_estatus(self, linea_id: int, estatus: str) -> None:
         self.model.cambiar_estatus(linea_id, estatus)
 
+    def eliminar_linea(self, linea_id: int) -> None:
+        self.model.eliminar_linea(linea_id)
+
     # ---- Programación desde pedidos ----
 
     def siguiente_folio_prog(self) -> str:

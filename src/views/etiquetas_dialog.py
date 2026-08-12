@@ -2,17 +2,22 @@
 
 Captura el folio de programación (folio_prog), muestra las tallas de la
 línea con el número de copias (una etiqueta por par) y permite imprimir
-directo a la etiquetadora con el controlador de Windows, o editar el diseño
-de la etiqueta (visor/editor) replicando etiquetaa.qdf.qdf.
+directo a la etiquetadora con el controlador de Windows. Incluye edición
+inline del diseño de la etiqueta (medidas y campos con vista previa en
+tiempo real), botón 'Imprimir Muestra' para probar el diseño con datos de
+ejemplo y botón 'Imprimir' para la línea cargada. El diseño replicado es
+etiquetaa.qdf.qdf.
 """
+from functools import partial
+
 from PySide6.QtCore import QSize, QSizeF, Qt
 from PySide6.QtGui import QPageSize, QPainter, QPixmap
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog,
     QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QTableWidgetItem, QVBoxLayout,
 )
 
 from src.models.etiqueta_model import DATOS_ETIQUETA, EtiquetaModel
@@ -36,8 +41,9 @@ class EtiquetasDialog(QDialog):
         self.etiquetas = EtiquetaModel()
         self._diseno = self.etiquetas.cargar_diseno()
         self._linea = None
+        self._cargando = False
         self.setWindowTitle("Imprimir Etiquetas")
-        self.setMinimumWidth(760)
+        self.setMinimumSize(780, 680)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -71,10 +77,54 @@ class EtiquetasDialog(QDialog):
         self.tbl_copias.verticalHeader().setVisible(False)
         self.tbl_copias.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents)
-        self.tbl_copias.setMaximumHeight(180)
+        self.tbl_copias.setMaximumHeight(150)
         self.tbl_copias.itemSelectionChanged.connect(self._previsualizar_seleccion)
         v.addWidget(self.tbl_copias)
         layout.addWidget(grupo)
+
+        editor = QGroupBox("Diseño de la etiqueta (edición inline)")
+        ev = QVBoxLayout(editor)
+        medidas = QFormLayout()
+        self.sp_ancho = QDoubleSpinBox()
+        self.sp_ancho.setRange(10, 200)
+        self.sp_ancho.setSuffix(" mm")
+        self.sp_ancho.setDecimals(1)
+        self.sp_alto = QDoubleSpinBox()
+        self.sp_alto.setRange(10, 150)
+        self.sp_alto.setSuffix(" mm")
+        self.sp_alto.setDecimals(1)
+        for sp in (self.sp_ancho, self.sp_alto):
+            sp.valueChanged.connect(self._previsualizar_seleccion)
+        medidas.addRow("Ancho:", self.sp_ancho)
+        medidas.addRow("Alto:", self.sp_alto)
+        ev.addLayout(medidas)
+
+        self.tbl_campos = QTableWidget(0, 7)
+        self.tbl_campos.setHorizontalHeaderLabels(
+            ["Visible", "Tipo", "Contenido", "X (mm)", "Y (mm)", "Tamaño", "Negrita"])
+        self.tbl_campos.verticalHeader().setVisible(False)
+        self.tbl_campos.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents)
+        self.tbl_campos.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tbl_campos.setMaximumHeight(200)
+        ev.addWidget(self.tbl_campos)
+
+        toolbar = QHBoxLayout()
+        btn_agregar = QPushButton("Agregar campo")
+        btn_agregar.setObjectName("btnSecondary")
+        btn_agregar.clicked.connect(self._agregar_campo)
+        btn_quitar = QPushButton("Quitar campo")
+        btn_quitar.setObjectName("btnSecondary")
+        btn_quitar.clicked.connect(self._quitar_campo)
+        btn_guardar = QPushButton("Guardar Diseño")
+        btn_guardar.setObjectName("btnPrimary")
+        btn_guardar.clicked.connect(self._guardar_diseno)
+        toolbar.addWidget(btn_agregar)
+        toolbar.addWidget(btn_quitar)
+        toolbar.addStretch()
+        toolbar.addWidget(btn_guardar)
+        ev.addLayout(toolbar)
+        layout.addWidget(editor)
 
         vista = QGroupBox("Vista previa de la etiqueta")
         vv = QHBoxLayout(vista)
@@ -88,20 +138,22 @@ class EtiquetasDialog(QDialog):
         layout.addWidget(vista)
 
         btns = QHBoxLayout()
-        btn_editar = QPushButton("Editar Etiqueta")
-        btn_editar.setObjectName("btnSecondary")
-        btn_editar.clicked.connect(self._abrir_editor)
+        btn_muestra = QPushButton("Imprimir Muestra")
+        btn_muestra.setObjectName("btnSecondary")
+        btn_muestra.clicked.connect(self._imprimir_muestra)
         self.btn_imprimir = QPushButton("Imprimir")
         self.btn_imprimir.setObjectName("btnPrimary")
         self.btn_imprimir.setEnabled(False)
         self.btn_imprimir.clicked.connect(self._imprimir)
         btn_cerrar = QPushButton("Cerrar")
         btn_cerrar.clicked.connect(self.reject)
-        btns.addWidget(btn_editar)
+        btns.addWidget(btn_muestra)
         btns.addStretch()
         btns.addWidget(btn_cerrar)
         btns.addWidget(self.btn_imprimir)
         layout.addLayout(btns)
+
+        self._cargar_diseno()
 
     # ---- Búsqueda de línea ----
 
@@ -163,22 +215,171 @@ class EtiquetasDialog(QDialog):
             "fecha_prog": linea.get("fecha_prog", "") or "",
         }
 
-    def _previsualizar_seleccion(self) -> None:
-        if not self._linea:
+    def _datos_muestra(self) -> dict:
+        return {
+            "modelo": "9201", "corte": "PIEL CRAZY", "color": "CAF",
+            "talla": "12.0", "folio_prog": "873",
+            "cliente": "LORENZO RUBIO", "pares": 12, "fecha_prog": "2026-08-05",
+        }
+
+    def _previsualizar_seleccion(self, *_args) -> None:
+        if self._cargando or not hasattr(self, "tbl_campos") \
+                or self.tbl_campos.rowCount() == 0:
             return
+        self._diseno = self._leer_diseno()
         fila = self.tbl_copias.currentRow()
+        if fila < 0 or not self._linea:
+            datos = self._datos_muestra()
+        else:
+            talla = self.tbl_copias.item(fila, 0).text()
+            pares = int(self.tbl_copias.item(fila, 1).text() or 0)
+            datos = self._datos_talla(talla, pares)
+        pix = render_label_pixmap(self._diseno, datos)
+        _cargar_pixmap_en(self.lbl_vista, pix)
+
+    # ---- Edición inline del diseño ----
+
+    def _cargar_diseno(self) -> None:
+        self._cargando = True
+        try:
+            self.sp_ancho.setValue(float(self._diseno.get("ancho_mm", 76.0)))
+            self.sp_alto.setValue(float(self._diseno.get("alto_mm", 51.0)))
+            campos = self._diseno.get("campos", [])
+            self.tbl_campos.setRowCount(len(campos))
+            for i, c in enumerate(campos):
+                self._crear_fila(i, c)
+        finally:
+            self._cargando = False
+        self._previsualizar_seleccion()
+
+    def _crear_fila(self, fila: int, c: dict) -> None:
+        chk = QCheckBox()
+        chk.setChecked(bool(c.get("visible", True)))
+        chk.toggled.connect(self._previsualizar_seleccion)
+        self.tbl_campos.setCellWidget(fila, 0, chk)
+
+        cmb_tipo = QComboBox()
+        cmb_tipo.addItem("Texto fijo", "texto")
+        cmb_tipo.addItem("Dato", "dato")
+        cmb_tipo.setCurrentIndex(0 if c.get("tipo") == "texto" else 1)
+        cmb_tipo.currentIndexChanged.connect(
+            partial(self._tipo_cambia, fila))
+        cmb_tipo.currentIndexChanged.connect(self._previsualizar_seleccion)
+        self.tbl_campos.setCellWidget(fila, 1, cmb_tipo)
+        self._set_contenido(fila, c)
+
+        sp_x = QDoubleSpinBox()
+        sp_x.setRange(0, 200)
+        sp_x.setSuffix(" mm")
+        sp_x.setValue(float(c.get("x_mm", 0)))
+        sp_x.setDecimals(1)
+        sp_x.valueChanged.connect(self._previsualizar_seleccion)
+        self.tbl_campos.setCellWidget(fila, 3, sp_x)
+
+        sp_y = QDoubleSpinBox()
+        sp_y.setRange(0, 150)
+        sp_y.setSuffix(" mm")
+        sp_y.setValue(float(c.get("y_mm", 0)))
+        sp_y.setDecimals(1)
+        sp_y.valueChanged.connect(self._previsualizar_seleccion)
+        self.tbl_campos.setCellWidget(fila, 4, sp_y)
+
+        sp_size = QSpinBox()
+        sp_size.setRange(6, 72)
+        sp_size.setValue(int(c.get("size", 12)))
+        sp_size.valueChanged.connect(self._previsualizar_seleccion)
+        self.tbl_campos.setCellWidget(fila, 5, sp_size)
+
+        chk_bold = QCheckBox()
+        chk_bold.setChecked(bool(c.get("bold", False)))
+        chk_bold.toggled.connect(self._previsualizar_seleccion)
+        self.tbl_campos.setCellWidget(fila, 6, chk_bold)
+
+    def _set_contenido(self, fila: int, c: dict) -> None:
+        if c.get("tipo") == "dato":
+            cmb = QComboBox()
+            keys = [k for k, _ in DATOS_ETIQUETA]
+            cmb.addItems(keys)
+            idx = keys.index(c.get("dato")) if c.get("dato") in keys else 0
+            cmb.setCurrentIndex(idx)
+            cmb.currentIndexChanged.connect(self._previsualizar_seleccion)
+            self.tbl_campos.setCellWidget(fila, 2, cmb)
+        else:
+            ed = QLineEdit(c.get("texto", ""))
+            ed.textChanged.connect(self._previsualizar_seleccion)
+            self.tbl_campos.setCellWidget(fila, 2, ed)
+
+    def _tipo_cambia(self, fila: int, _idx: int = 0) -> None:
+        if self._cargando:
+            return
+        cmb_tipo = self.tbl_campos.cellWidget(fila, 1)
+        if not cmb_tipo:
+            return
+        actual = cmb_tipo.currentData()
+        c = {"tipo": "dato" if actual == "dato" else "texto",
+             "dato": DATOS_ETIQUETA[0][0],
+             "texto": "", "x_mm": 0, "y_mm": 0, "size": 12,
+             "bold": False, "visible": True}
+        self._set_contenido(fila, c)
+
+    def _leer_diseno(self) -> dict:
+        campos = []
+        for i in range(self.tbl_campos.rowCount()):
+            chk = self.tbl_campos.cellWidget(i, 0)
+            cmb_tipo = self.tbl_campos.cellWidget(i, 1)
+            cont = self.tbl_campos.cellWidget(i, 2)
+            sp_x = self.tbl_campos.cellWidget(i, 3)
+            sp_y = self.tbl_campos.cellWidget(i, 4)
+            sp_size = self.tbl_campos.cellWidget(i, 5)
+            chk_bold = self.tbl_campos.cellWidget(i, 6)
+            tipo = cmb_tipo.currentData() if cmb_tipo else "texto"
+            c = {
+                "tipo": tipo,
+                "x_mm": float(sp_x.value() if sp_x else 0),
+                "y_mm": float(sp_y.value() if sp_y else 0),
+                "size": int(sp_size.value() if sp_size else 12),
+                "bold": bool(chk_bold.isChecked() if chk_bold else False),
+                "visible": bool(chk.isChecked() if chk else True),
+            }
+            if tipo == "dato":
+                c["dato"] = cont.currentText() if isinstance(cont, QComboBox) else ""
+            else:
+                c["texto"] = cont.text() if isinstance(cont, QLineEdit) else ""
+            campos.append(c)
+        return {
+            "ancho_mm": self.sp_ancho.value(),
+            "alto_mm": self.sp_alto.value(),
+            "campos": campos,
+        }
+
+    def _agregar_campo(self) -> None:
+        fila = self.tbl_campos.rowCount()
+        self.tbl_campos.insertRow(fila)
+        self._crear_fila(fila, {"tipo": "texto", "texto": "",
+                                "x_mm": 0, "y_mm": 0, "size": 12,
+                                "bold": False, "visible": True})
+        self._previsualizar_seleccion()
+
+    def _quitar_campo(self) -> None:
+        fila = self.tbl_campos.currentRow()
+        if fila < 0:
+            fila = self.tbl_campos.rowCount() - 1
         if fila < 0:
             return
-        talla = self.tbl_copias.item(fila, 0).text()
-        pares = int(self.tbl_copias.item(fila, 1).text() or 0)
-        pix = render_label_pixmap(self._diseno, self._datos_talla(talla, pares))
-        _cargar_pixmap_en(self.lbl_vista, pix)
+        self.tbl_campos.removeRow(fila)
+        self._previsualizar_seleccion()
+
+    def _guardar_diseno(self) -> None:
+        self._diseno = self._leer_diseno()
+        self.etiquetas.guardar_diseno(self._diseno)
+        QMessageBox.information(self, "Diseño", "Diseño de etiqueta guardado.")
 
     # ---- Impresión ----
 
     def _imprimir(self) -> None:
         if not self._linea:
             return
+        self._diseno = self._leer_diseno()
         filas = []
         for i in range(self.tbl_copias.rowCount()):
             talla = self.tbl_copias.item(i, 0).text()
@@ -224,192 +425,30 @@ class EtiquetasDialog(QDialog):
         QMessageBox.information(self, "Impresión",
                                 f"Se enviaron {total} etiquetas a la impresora.")
 
-    # ---- Editor ----
-
-    def _abrir_editor(self) -> None:
-        dlg = EtiquetaEditorDialog(self.etiquetas, self._diseno, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._diseno = self.etiquetas.cargar_diseno()
-            self._previsualizar_seleccion()
-
-
-class EtiquetaEditorDialog(QDialog):
-    def __init__(self, etiquetas: EtiquetaModel, diseno: dict,
-                 parent=None) -> None:
-        super().__init__(parent)
-        self.etiquetas = etiquetas
-        self._diseno = diseno
-        self.setWindowTitle("Editor de Etiqueta")
-        self.setMinimumWidth(860)
-        self.setMinimumHeight(520)
-        self._setup_ui()
-        self._cargar_diseno()
-        self._preview()
-
-    def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-
-        medidas = QFormLayout()
-        self.sp_ancho = QDoubleSpinBox()
-        self.sp_ancho.setRange(10, 200)
-        self.sp_ancho.setSuffix(" mm")
-        self.sp_ancho.setDecimals(1)
-        self.sp_alto = QDoubleSpinBox()
-        self.sp_alto.setRange(10, 150)
-        self.sp_alto.setSuffix(" mm")
-        self.sp_alto.setDecimals(1)
-        for sp in (self.sp_ancho, self.sp_alto):
-            sp.valueChanged.connect(self._preview)
-        medidas.addRow("Ancho:", self.sp_ancho)
-        medidas.addRow("Alto:", self.sp_alto)
-        layout.addLayout(medidas)
-
-        self.tbl = QTableWidget(0, 7)
-        self.tbl.setHorizontalHeaderLabels(
-            ["Visible", "Tipo", "Contenido", "X (mm)", "Y (mm)", "Tamaño", "Negrita"])
-        self.tbl.verticalHeader().setVisible(False)
-        self.tbl.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents)
-        self.tbl.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        layout.addWidget(self.tbl)
-
-        self.lbl_vista = QLabel("—")
-        self.lbl_vista.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_vista.setFixedSize(_PREVIEW_W, _PREVIEW_H)
-        self.lbl_vista.setStyleSheet(
-            "border: 1px solid #cbd5e1; background: white; border-radius: 4px;")
-        layout.addWidget(self.lbl_vista)
-
-        btns = QDialogButtonBox()
-        btn_guardar = btns.addButton("Guardar", QDialogButtonBox.AcceptRole)
-        btn_guardar.setObjectName("btnPrimary")
-        btns.addButton(QDialogButtonBox.Cancel)
-        btns.accepted.connect(self._guardar)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
-
-    # ---- Carga ----
-
-    def _cargar_diseno(self) -> None:
-        self.sp_ancho.setValue(float(self._diseno.get("ancho_mm", 76.0)))
-        self.sp_alto.setValue(float(self._diseno.get("alto_mm", 51.0)))
-        campos = self._diseno.get("campos", [])
-        self.tbl.setRowCount(len(campos))
-        for i, c in enumerate(campos):
-            chk = QCheckBox()
-            chk.setChecked(bool(c.get("visible", True)))
-            chk.toggled.connect(self._preview)
-            self.tbl.setCellWidget(i, 0, chk)
-
-            cmb_tipo = QComboBox()
-            cmb_tipo.addItem("Texto fijo", "texto")
-            cmb_tipo.addItem("Dato", "dato")
-            cmb_tipo.setCurrentIndex(0 if c.get("tipo") == "texto" else 1)
-            cmb_tipo.currentIndexChanged.connect(self._tipo_cambia)
-            cmb_tipo.currentIndexChanged.connect(self._preview)
-            self.tbl.setCellWidget(i, 1, cmb_tipo)
-            self._set_contenido(i, c)
-
-            sp_x = QDoubleSpinBox()
-            sp_x.setRange(0, 200)
-            sp_x.setSuffix(" mm")
-            sp_x.setValue(float(c.get("x_mm", 0)))
-            sp_x.setDecimals(1)
-            sp_x.valueChanged.connect(self._preview)
-            self.tbl.setCellWidget(i, 3, sp_x)
-
-            sp_y = QDoubleSpinBox()
-            sp_y.setRange(0, 150)
-            sp_y.setSuffix(" mm")
-            sp_y.setValue(float(c.get("y_mm", 0)))
-            sp_y.setDecimals(1)
-            sp_y.valueChanged.connect(self._preview)
-            self.tbl.setCellWidget(i, 4, sp_y)
-
-            sp_size = QSpinBox()
-            sp_size.setRange(6, 72)
-            sp_size.setValue(int(c.get("size", 12)))
-            sp_size.valueChanged.connect(self._preview)
-            self.tbl.setCellWidget(i, 5, sp_size)
-
-            chk_bold = QCheckBox()
-            chk_bold.setChecked(bool(c.get("bold", False)))
-            chk_bold.toggled.connect(self._preview)
-            self.tbl.setCellWidget(i, 6, chk_bold)
-
-    def _set_contenido(self, fila: int, c: dict) -> None:
-        if c.get("tipo") == "dato":
-            cmb = QComboBox()
-            keys = [k for k, _ in DATOS_ETIQUETA]
-            cmb.addItems(keys)
-            idx = keys.index(c.get("dato")) if c.get("dato") in keys else 0
-            cmb.setCurrentIndex(idx)
-            cmb.currentIndexChanged.connect(self._preview)
-            self.tbl.setCellWidget(fila, 2, cmb)
-        else:
-            ed = QLineEdit(c.get("texto", ""))
-            ed.textChanged.connect(self._preview)
-            self.tbl.setCellWidget(fila, 2, ed)
-
-    def _tipo_cambia(self, _idx: int) -> None:
-        fila = self.tbl.currentRow()
-        if fila < 0:
+    def _imprimir_muestra(self) -> None:
+        self._diseno = self._leer_diseno()
+        diseno = self._diseno
+        printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+        printer.setPageSize(QPageSize(
+            QSizeF(diseno.get("ancho_mm", 76.0),
+                   diseno.get("alto_mm", 51.0)),
+            QPageSize.Unit.Millimeter))
+        printer.setFullPage(True)
+        dlg = QPrintDialog(printer, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        cmb_tipo = self.tbl.cellWidget(fila, 1)
-        actual = cmb_tipo.currentData()
-        c = {"tipo": "dato" if actual == "dato" else "texto",
-             "dato": DATOS_ETIQUETA[0][0],
-             "texto": "", "x_mm": 0, "y_mm": 0, "size": 12,
-             "bold": False, "visible": True}
-        self._set_contenido(fila, c)
-
-    # ---- Vista previa ----
-
-    def _datos_muestra(self) -> dict:
-        return {
-            "modelo": "9201", "corte": "PIEL CRAZY", "color": "CAF",
-            "talla": "12.0", "folio_prog": "873",
-            "cliente": "LORENZO RUBIO", "pares": 12, "fecha_prog": "2026-08-05",
-        }
-
-    def _preview(self) -> None:
-        diseno = self._leer_diseno()
-        pix = render_label_pixmap(diseno, self._datos_muestra())
-        _cargar_pixmap_en(self.lbl_vista, pix)
-
-    # ---- Lectura / guardado ----
-
-    def _leer_diseno(self) -> dict:
-        campos = []
-        for i in range(self.tbl.rowCount()):
-            chk = self.tbl.cellWidget(i, 0)
-            cmb_tipo = self.tbl.cellWidget(i, 1)
-            cont = self.tbl.cellWidget(i, 2)
-            sp_x = self.tbl.cellWidget(i, 3)
-            sp_y = self.tbl.cellWidget(i, 4)
-            sp_size = self.tbl.cellWidget(i, 5)
-            chk_bold = self.tbl.cellWidget(i, 6)
-            tipo = cmb_tipo.currentData() if cmb_tipo else "texto"
-            c = {
-                "tipo": tipo,
-                "x_mm": float(sp_x.value() if sp_x else 0),
-                "y_mm": float(sp_y.value() if sp_y else 0),
-                "size": int(sp_size.value() if sp_size else 12),
-                "bold": bool(chk_bold.isChecked() if chk_bold else False),
-                "visible": bool(chk.isChecked() if chk else True),
-            }
-            if tipo == "dato":
-                c["dato"] = cont.currentText() if isinstance(cont, QComboBox) else ""
-            else:
-                c["texto"] = cont.text() if isinstance(cont, QLineEdit) else ""
-            campos.append(c)
-        return {
-            "ancho_mm": self.sp_ancho.value(),
-            "alto_mm": self.sp_alto.value(),
-            "campos": campos,
-        }
-
-    def _guardar(self) -> None:
-        self.etiquetas.guardar_diseno(self._leer_diseno())
-        self.accept()
+        printer.setDocName("Etiqueta muestra SIAC")
+        try:
+            painter = QPainter(printer)
+            if not painter.isActive():
+                raise RuntimeError(
+                    "No se pudo iniciar el painter sobre la impresora. "
+                    "Revisa el driver y que la cola de impresión no esté en error.")
+            px_per_mm = printer.resolution() / 25.4
+            render_label(painter, diseno, self._datos_muestra(), px_per_mm)
+            painter.end()
+        except Exception as e:
+            QMessageBox.critical(self, "Error al imprimir", f"{type(e).__name__}: {e}")
+            return
+        QMessageBox.information(self, "Impresión",
+                                "Etiqueta de muestra enviada a la impresora.")

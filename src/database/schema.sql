@@ -167,11 +167,14 @@ CREATE TABLE IF NOT EXISTS clientes (
 CREATE TABLE IF NOT EXISTS pedidos_cliente (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     folio TEXT NOT NULL UNIQUE,
+    folio_pedido TEXT NOT NULL DEFAULT '',
     cliente_id INTEGER NOT NULL REFERENCES clientes(id),
     fecha_pedido TEXT NOT NULL DEFAULT (datetime('now')),
     fecha_programado TEXT,
     estatus TEXT NOT NULL DEFAULT 'pendiente',
     total_pares INTEGER NOT NULL DEFAULT 0,
+    suela TEXT NOT NULL DEFAULT '',
+    horma TEXT NOT NULL DEFAULT '',
     observaciones TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (cliente_id) REFERENCES clientes(id)
@@ -457,7 +460,9 @@ INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) VALUES
     ('clientes', 'eliminar', 'Desactivar clientes y cancelar pedidos'),
     ('clientes', 'exportar', 'Exportar e imprimir pedidos'),
     ('programacion', 'ver', 'Ver el módulo de Programación Semanal'),
+    ('programacion', 'crear', 'Crear líneas de programación'),
     ('programacion', 'editar', 'Cambiar el estatus de líneas programadas'),
+    ('programacion', 'eliminar', 'Eliminar líneas de la programación'),
     ('programacion', 'exportar', 'Exportar e imprimir la programación');
 
 INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
