@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS detalle_orden_compra_puntos (
     detalle_id INTEGER NOT NULL REFERENCES detalle_orden_compra(id) ON DELETE CASCADE,
     punto_id INTEGER NOT NULL REFERENCES puntos_catalogo(id),
     pares INTEGER NOT NULL DEFAULT 0,
+    precio_unitario REAL NOT NULL DEFAULT 0,
     UNIQUE(detalle_id, punto_id),
     FOREIGN KEY (detalle_id) REFERENCES detalle_orden_compra(id),
     FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
@@ -279,6 +280,31 @@ CREATE TABLE IF NOT EXISTS usuario_permisos (
 );
 
 -- -----------------------------------------------------------
+-- 7. LOGS TÉCNICOS DEL SISTEMA
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS logs_sistema (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL DEFAULT (datetime('now')),
+    usuario_id INTEGER,
+    usuario TEXT,
+    modulo TEXT NOT NULL,
+    accion TEXT NOT NULL,
+    entidad TEXT,
+    entidad_id INTEGER,
+    nivel TEXT NOT NULL DEFAULT 'info',
+    detalle TEXT,
+    datos TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_logs_fecha ON logs_sistema (fecha);
+CREATE INDEX IF NOT EXISTS idx_logs_modulo ON logs_sistema (modulo);
+CREATE INDEX IF NOT EXISTS idx_logs_entidad ON logs_sistema (entidad, entidad_id);
+
+-- -----------------------------------------------------------
 -- DATOS INICIALES
 -- -----------------------------------------------------------
 
@@ -338,9 +364,8 @@ INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
     ('Caja', 'caja');
 
 INSERT OR IGNORE INTO puntos_catalogo (punto, orden) VALUES
-    ('00', 1), ('01', 2), ('02', 3), ('03', 4), ('04', 5),
-    ('05', 6), ('06', 7), ('07', 8), ('08', 9), ('09', 10),
-    ('10', 11), ('11', 12), ('12', 13), ('13', 14);
+    ('15', 16), ('15.5', 16.5), ('16', 17), ('16.5', 17.5),
+    ('17', 18), ('18', 19), ('19', 20), ('20', 21), ('21', 22);
 
 INSERT OR IGNORE INTO colores_catalogo (nombre, codigo, orden) VALUES
     ('Negro', 'NEG', 1),

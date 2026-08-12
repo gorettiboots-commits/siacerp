@@ -3,7 +3,45 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSpacerItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox, QCompleter, QFrame, QHBoxLayout, QLabel, QPushButton,
+    QSizePolicy, QSpacerItem, QVBoxLayout, QWidget,
+)
+
+
+class SearchableComboBox(QComboBox):
+    """ComboBox editable con búsqueda inline: filtra las opciones al escribir
+    y permite capturar un valor nuevo si ninguna opción coincide."""
+
+    def __init__(self, parent: QWidget | None = None,
+                 placeholder: str = "Buscar…") -> None:
+        super().__init__(parent)
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.NoInsert)
+        self.setMaxVisibleItems(12)
+        self.lineEdit().setPlaceholderText(placeholder)
+        self._completer = QCompleter(self)
+        self._completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completer.setFilterMode(Qt.MatchContains)
+        self._completer.setCompletionMode(QCompleter.PopupCompletion)
+        self._completer.setModel(self.model())
+        self.setCompleter(self._completer)
+        self._completer.activated.connect(self._on_completer_activated)
+
+    def _on_completer_activated(self, text: str) -> None:
+        idx = self.findText(text, Qt.MatchFixedString)
+        if idx >= 0:
+            self.setCurrentIndex(idx)
+
+    def set_items(self, items) -> None:
+        self.clear()
+        for it in items:
+            self.addItem(str(it))
+
+    def set_current_data(self, data) -> None:
+        idx = self.findData(data)
+        if idx >= 0:
+            self.setCurrentIndex(idx)
 
 
 def load_styles() -> str:

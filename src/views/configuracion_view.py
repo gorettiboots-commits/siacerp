@@ -1,18 +1,19 @@
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget,
+    QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
+from src.controllers.logs_controller import LogsController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
-from src.utils.icons import mono_icon, tile_icon
-from src.utils.table_utils import configurar_tabla_excel
+from src.utils.icons import tile_icon
+from src.views.table_widget import GorettiTable
 
 
 _SECCIONES = [
@@ -26,6 +27,8 @@ _SECCIONES = [
      "Colores y códigos cortos para variantes de insumo."),
     ("usuarios", "Usuarios y Accesos",
      "Usuarios del sistema y sus permisos por módulo."),
+    ("logs", "Logs del Sistema",
+     "Bitácora técnica de las acciones realizadas, con su data y metadata."),
 ]
 
 
@@ -129,6 +132,8 @@ class DialogConfiguracion(QDialog):
                          and s[0] != "colores"]
         if not tiene(self.permisos, "usuarios", "ver"):
             secciones = [s for s in secciones if s[0] != "usuarios"]
+        if not tiene(self.permisos, "configuracion", "ver"):
+            secciones = [s for s in secciones if s[0] != "logs"]
         self._secciones = secciones
 
         contenedor_side = QFrame()
@@ -197,6 +202,8 @@ class DialogConfiguracion(QDialog):
             return _TabColores(self.inv_controller, self.permisos)
         if key == "usuarios":
             return _TabAccesos(self.accesos_controller, self.permisos)
+        if key == "logs":
+            return _TabLogs(LogsController(), self.permisos)
         raise ValueError(f"Sección de configuración desconocida: {key}")
 
     def _navegar(self, index: int) -> None:
@@ -226,15 +233,15 @@ class _TabUnidades(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Abreviatura"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "id", "label": "ID", "hidden": True},
+                {"key": "nombre", "label": "Nombre", "stretch": True},
+                {"key": "abreviatura", "label": "Abreviatura", "stretch": True},
+            ],
+            foreground_fn=lambda rec, key: Qt.gray if not rec.get("activo") else None,
+        )
+        self.table.recordDoubleClicked.connect(self._editar)
 
         layout.addWidget(self.table)
 
@@ -261,46 +268,39 @@ class _TabUnidades(QWidget):
 
     def recargar(self) -> None:
         unidades = self.controller.listar_unidades(solo_activos=False)
-        self.table.setRowCount(len(unidades))
-        for i, u in enumerate(unidades):
-            self.table.setItem(i, 0, QTableWidgetItem(str(u["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(u["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(u["abreviatura"]))
-            if not u["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.table.set_records([
+            {"id": u["id"], "nombre": u["nombre"],
+             "abreviatura": u["abreviatura"], "activo": u["activo"]}
+            for u in unidades
+        ])
 
     def _crear(self) -> None:
         dlg = _DialogUnidad(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _editar(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccione", "Seleccione una unidad de la lista.")
             return
-        unidad_id = int(self.table.item(row, 0).text())
-        dlg = _DialogUnidad(self.controller, unidad_id)
+        dlg = _DialogUnidad(self.controller, int(record["id"]))
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccione", "Seleccione una unidad de la lista.")
             return
-        unidad_id = int(self.table.item(row, 0).text())
-        nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar la unidad '{nombre}'?",
+            f"¿Desactivar la unidad '{record['nombre']}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_unidad(unidad_id)
+            self.controller.desactivar_unidad(int(record["id"]))
             self.recargar()
 
 
@@ -391,106 +391,74 @@ class _TabEstaciones(QWidget):
         self.btn_add.setCursor(Qt.PointingHandCursor)
         self.btn_add.clicked.connect(self._crear)
         self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
+        self.btn_del = QPushButton("Eliminar")
+        self.btn_del.setObjectName("btnDanger")
+        self.btn_del.setCursor(Qt.PointingHandCursor)
+        self.btn_del.clicked.connect(self._eliminar)
+        self.btn_del.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
 
         toolbar = QHBoxLayout()
         toolbar.addWidget(self.btn_add)
+        toolbar.addWidget(self.btn_del)
         toolbar.addStretch()
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Orden", "Área", "Descripción", "Acciones", "ID"])
-        self.table.setColumnHidden(4, True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.table.verticalHeader().setDefaultSectionSize(60)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(lambda _index: self._editar())
+        self.table = GorettiTable(
+            columns=[
+                {"key": "orden", "label": "Orden"},
+                {"key": "nombre", "label": "Área", "stretch": True},
+                {"key": "descripcion", "label": "Descripción", "stretch": True},
+                {"key": "id", "label": "ID", "hidden": True},
+            ],
+            foreground_fn=lambda rec, key: Qt.gray if not rec.get("activo") else None,
+        )
+        self.table.recordDoubleClicked.connect(self._editar)
 
         layout.addWidget(self.table)
 
     def recargar(self) -> None:
         estaciones = self.controller.listar_estaciones(solo_activos=False)
-        self.table.setRowCount(len(estaciones))
-        for i, e in enumerate(estaciones):
-            self.table.setItem(i, 0, QTableWidgetItem(str(e.get("orden", 0))))
-            self.table.setItem(i, 1, QTableWidgetItem(e.get("nombre", "")))
-            self.table.setItem(i, 2, QTableWidgetItem(e.get("descripcion", "") or ""))
-            self.table.setItem(i, 4, QTableWidgetItem(str(e.get("id", ""))))
-            self.table.setCellWidget(i, 3, self._celda_acciones(i))
-            if not e.get("activo"):
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
-
-    def _celda_acciones(self, row: int) -> QWidget:
-        contenedor = QWidget()
-        fila = QHBoxLayout(contenedor)
-        fila.setContentsMargins(4, 8, 4, 8)
-        fila.setSpacing(6)
-
-        btn_editar = QPushButton()
-        btn_editar.setIcon(mono_icon("editar", 18, "#4f46e5"))
-        btn_editar.setIconSize(QSize(18, 18))
-        btn_editar.setFixedSize(34, 34)
-        btn_editar.setToolTip("Editar")
-        btn_editar.setObjectName("btnRowEdit")
-        btn_editar.setCursor(Qt.PointingHandCursor)
-        btn_editar.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        btn_editar.clicked.connect(lambda: self._editar(row))
-        fila.addWidget(btn_editar)
-
-        btn_eliminar = QPushButton()
-        btn_eliminar.setIcon(mono_icon("eliminar", 18, "#dc2626"))
-        btn_eliminar.setIconSize(QSize(18, 18))
-        btn_eliminar.setFixedSize(34, 34)
-        btn_eliminar.setToolTip("Eliminar")
-        btn_eliminar.setObjectName("btnRowDel")
-        btn_eliminar.setCursor(Qt.PointingHandCursor)
-        btn_eliminar.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-        btn_eliminar.clicked.connect(lambda: self._eliminar(row))
-        fila.addWidget(btn_eliminar)
-
-        fila.addStretch()
-        return contenedor
+        self.table.set_records([
+            {"id": e.get("id", ""), "orden": e.get("orden", 0),
+             "nombre": e.get("nombre", ""),
+             "descripcion": e.get("descripcion", "") or "",
+             "activo": e.get("activo")}
+            for e in estaciones
+        ])
 
     def _crear(self) -> None:
         dlg = _DialogEstacion(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self, row: int | None = None) -> None:
-        if row is None:
-            row = self.table.currentRow()
-        if row < 0:
+    def _editar(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un área de la lista.")
             return
-        estacion_id = int(self.table.item(row, 4).text())
-        dlg = _DialogEstacion(self.controller, estacion_id)
+        dlg = _DialogEstacion(self.controller, int(record["id"]))
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _eliminar(self, row: int) -> None:
-        estacion_id = int(self.table.item(row, 4).text())
-        nombre = self.table.item(row, 1).text()
+    def _eliminar(self) -> None:
+        record = self.table.current_record()
+        if record is None:
+            QMessageBox.information(self, "Seleccione", "Seleccione un área de la lista.")
+            return
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Eliminar el área '{nombre}'?\nEsta acción no se puede deshacer.",
+            f"¿Eliminar el área '{record['nombre']}'?\nEsta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp != QMessageBox.Yes:
             return
         try:
-            self.controller.eliminar_estacion(estacion_id)
+            self.controller.eliminar_estacion(int(record["id"]))
         except Exception:
             QMessageBox.warning(
                 self, "No se pudo eliminar",
-                f"El área '{nombre}' está en uso por órdenes de producción y no se puede eliminar.")
+                f"El área '{record['nombre']}' está en uso por órdenes de producción y no se puede eliminar.")
             return
         self.recargar()
 
@@ -611,15 +579,16 @@ class _TabPuntos(QWidget):
         serie_layout.addStretch()
         layout.addWidget(serie_box)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["ID", "Punto", "Orden"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.ExtendedSelection)
-        self.table.doubleClicked.connect(self._editar)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "id", "label": "ID", "hidden": True},
+                {"key": "punto", "label": "Punto", "stretch": True},
+                {"key": "orden", "label": "Orden"},
+            ],
+            selection_mode="multi",
+            foreground_fn=lambda rec, key: Qt.gray if not rec.get("activo") else None,
+        )
+        self.table.recordDoubleClicked.connect(self._editar)
         layout.addWidget(self.table)
 
         self.btn_add = QPushButton("+ Nuevo Punto")
@@ -655,16 +624,11 @@ class _TabPuntos(QWidget):
 
     def recargar(self) -> None:
         puntos = self.controller.listar_puntos(solo_activos=False)
-        self.table.setRowCount(len(puntos))
-        for i, p in enumerate(puntos):
-            self.table.setItem(i, 0, QTableWidgetItem(str(p["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(p["punto"]))
-            self.table.setItem(i, 2, QTableWidgetItem(str(p["orden"])))
-            if not p["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.table.set_records([
+            {"id": p["id"], "punto": p["punto"], "orden": p["orden"],
+             "activo": p["activo"]}
+            for p in puntos
+        ])
 
     def _generar_serie(self) -> None:
         desde = self.spn_serie_desde.value()
@@ -686,42 +650,43 @@ class _TabPuntos(QWidget):
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _editar(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un punto de la lista.")
             return
-        dlg = _DialogPunto(self.controller, int(self.table.item(row, 0).text()))
+        dlg = _DialogPunto(self.controller, int(record["id"]))
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _filas_seleccionadas(self) -> list[int]:
-        filas = sorted({i.row() for i in self.table.selectedIndexes()})
-        if not filas:
+    def _registros_seleccionados(self) -> list[dict]:
+        registros = self.table.selected_records()
+        if not registros:
             QMessageBox.information(self, "Seleccione", "Seleccione al menos un punto de la lista.")
-        return filas
+        return registros
 
     def _desactivar(self) -> None:
-        filas = self._filas_seleccionadas()
-        if not filas:
+        registros = self._registros_seleccionados()
+        if not registros:
             return
-        nombres = ", ".join(self.table.item(r, 1).text() for r in filas)
+        nombres = ", ".join(r["punto"] for r in registros)
         resp = QMessageBox.question(
             self, "Confirmar",
             f"¿Desactivar los puntos seleccionados?\n{nombres}",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            for r in filas:
-                self.controller.desactivar_punto(int(self.table.item(r, 0).text()))
+            for r in registros:
+                self.controller.desactivar_punto(int(r["id"]))
             self.recargar()
 
     def _activar(self) -> None:
-        filas = self._filas_seleccionadas()
-        if not filas:
+        registros = self._registros_seleccionados()
+        if not registros:
             return
-        for r in filas:
-            self.controller.activar_punto(int(self.table.item(r, 0).text()))
+        for r in registros:
+            self.controller.activar_punto(int(r["id"]))
         self.recargar()
 
     def _vaciar(self) -> None:
@@ -828,15 +793,16 @@ class _TabColores(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Código", "Orden"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "id", "label": "ID", "hidden": True},
+                {"key": "nombre", "label": "Nombre", "stretch": True},
+                {"key": "codigo", "label": "Código"},
+                {"key": "orden", "label": "Orden"},
+            ],
+            foreground_fn=lambda rec, key: Qt.gray if not rec.get("activo") else None,
+        )
+        self.table.recordDoubleClicked.connect(self._editar)
         layout.addWidget(self.table)
 
         self.btn_add = QPushButton("+ Nuevo Color")
@@ -862,45 +828,39 @@ class _TabColores(QWidget):
 
     def recargar(self) -> None:
         colores = self.controller.listar_colores(solo_activos=False)
-        self.table.setRowCount(len(colores))
-        for i, c in enumerate(colores):
-            self.table.setItem(i, 0, QTableWidgetItem(str(c["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(c["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(c["codigo"]))
-            self.table.setItem(i, 3, QTableWidgetItem(str(c["orden"])))
-            if not c["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.table.set_records([
+            {"id": c["id"], "nombre": c["nombre"], "codigo": c["codigo"],
+             "orden": c["orden"], "activo": c["activo"]}
+            for c in colores
+        ])
 
     def _crear(self) -> None:
         dlg = _DialogColor(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _editar(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un color de la lista.")
             return
-        dlg = _DialogColor(self.controller, int(self.table.item(row, 0).text()))
+        dlg = _DialogColor(self.controller, int(record["id"]))
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un color de la lista.")
             return
-        nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar el color '{nombre}'?",
+            f"¿Desactivar el color '{record['nombre']}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_color(int(self.table.item(row, 0).text()))
+            self.controller.desactivar_color(int(record["id"]))
             self.recargar()
 
 
@@ -992,16 +952,17 @@ class _TabAccesos(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["ID", "Usuario", "Nombre", "Rol", "Estatus"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.itemSelectionChanged.connect(self._on_seleccion)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "id", "label": "ID", "hidden": True},
+                {"key": "username", "label": "Usuario", "stretch": True},
+                {"key": "nombre_completo", "label": "Nombre", "stretch": True},
+                {"key": "rol", "label": "Rol"},
+                {"key": "estatus", "label": "Estatus"},
+            ],
+            foreground_fn=lambda rec, key: Qt.gray if not rec.get("activo") else None,
+        )
+        self.table.currentRecordChanged.connect(self._on_seleccion)
         layout.addWidget(self.table)
 
         self.btn_nuevo = QPushButton("+ Nuevo Usuario")
@@ -1066,33 +1027,30 @@ class _TabAccesos(QWidget):
     def recargar(self) -> None:
         seleccionado = self._usuario_id
         usuarios = self.controller.listar_usuarios()
-        self.table.setRowCount(len(usuarios))
-        for i, u in enumerate(usuarios):
-            self.table.setItem(i, 0, QTableWidgetItem(str(u["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(u["username"]))
-            self.table.setItem(i, 2, QTableWidgetItem(u["nombre_completo"]))
-            rol = "Administrador" if u["rol"] == "admin" else "Operador"
-            self.table.setItem(i, 3, QTableWidgetItem(rol))
-            self.table.setItem(i, 4, QTableWidgetItem("Activo" if u["activo"] else "Inactivo"))
-            if not u["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.table.set_records([
+            {"id": u["id"], "username": u["username"],
+             "nombre_completo": u["nombre_completo"],
+             "rol": "Administrador" if u["rol"] == "admin" else "Operador",
+             "estatus": "Activo" if u["activo"] else "Inactivo",
+             "activo": u["activo"]}
+            for u in usuarios
+        ])
+        registros = self.table.records()
+        rec = None
         if seleccionado is not None:
-            for i in range(self.table.rowCount()):
-                if int(self.table.item(i, 0).text()) == seleccionado:
-                    self.table.selectRow(i)
-                    return
-        if self.table.rowCount() > 0:
-            self.table.selectRow(0)
+            rec = next((r for r in registros if r["id"] == seleccionado), None)
+        if rec is None and registros:
+            rec = registros[0]
+        if rec is not None:
+            self.table.select_record(rec)
 
-    def _on_seleccion(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _on_seleccion(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             self._usuario_id = None
             return
-        self._usuario_id = int(self.table.item(row, 0).text())
+        self._usuario_id = int(record["id"])
         user = self.controller.obtener_usuario(self._usuario_id)
         es_admin = bool(user and user.get("rol") == "admin")
         if es_admin:
@@ -1300,3 +1258,270 @@ class _DialogPassword(QDialog):
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
             return
         self.accept()
+
+
+class _TabLogs(QWidget):
+    def __init__(self, controller: LogsController, permisos=None) -> None:
+        super().__init__()
+        self.controller = controller
+        self.permisos = permisos or set()
+        self._filtros = {}
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        hint = QLabel(
+            "Bitácora técnica del sistema: cada acción que modifica datos "
+            "(crear, editar, eliminar, recibir, cancelar, login/logout) se registra "
+            "con su data y metadata (usuario, IP, fecha, datos implicados)."
+        )
+        hint.setStyleSheet("color: #64748b; font-size: 12px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        filtros = QHBoxLayout()
+        filtros.setSpacing(8)
+
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText("Buscar en logs...")
+        self.txt_buscar.setMinimumWidth(220)
+        self.txt_buscar.returnPressed.connect(self._aplicar_filtros)
+        filtros.addWidget(self.txt_buscar)
+
+        self.cmb_modulo = QComboBox()
+        self.cmb_modulo.addItem("Módulo: todos", "")
+        self.cmb_modulo.currentIndexChanged.connect(self._on_modulo)
+        filtros.addWidget(self.cmb_modulo)
+
+        self.cmb_accion = QComboBox()
+        self.cmb_accion.addItem("Acción: todas", "")
+        self.cmb_accion.setMinimumWidth(150)
+        filtros.addWidget(self.cmb_accion)
+
+        self.cmb_nivel = QComboBox()
+        self.cmb_nivel.addItem("Nivel: todos", "")
+        for nivel, etiqueta in (("info", "Info"), ("advertencia", "Advertencia"), ("error", "Error")):
+            self.cmb_nivel.addItem(etiqueta, nivel)
+        filtros.addWidget(self.cmb_nivel)
+
+        self.cmb_usuario = QComboBox()
+        self.cmb_usuario.addItem("Usuario: todos", "")
+        self.cmb_usuario.setMinimumWidth(140)
+        filtros.addWidget(self.cmb_usuario)
+
+        btn_aplicar = QPushButton("Filtrar")
+        btn_aplicar.setObjectName("btnPrimary")
+        btn_aplicar.clicked.connect(self._aplicar_filtros)
+        filtros.addWidget(btn_aplicar)
+
+        btn_limpiar = QPushButton("Limpiar")
+        btn_limpiar.setObjectName("btnSecondary")
+        btn_limpiar.clicked.connect(self._limpiar_filtros)
+        filtros.addWidget(btn_limpiar)
+        filtros.addStretch()
+
+        self.btn_refresh = QPushButton("Actualizar")
+        self.btn_refresh.setObjectName("btnPrimary")
+        self.btn_refresh.clicked.connect(self.recargar)
+        self.btn_export = QPushButton("Exportar Excel")
+        self.btn_export.setObjectName("btnPrimary")
+        self.btn_export.clicked.connect(self._exportar)
+        self.btn_limpiar_todo = QPushButton("Vaciar Logs")
+        self.btn_limpiar_todo.setObjectName("btnDanger")
+        self.btn_limpiar_todo.clicked.connect(self._vaciar_logs)
+
+        self.btn_refresh.setEnabled(tiene(self.permisos, "configuracion", "ver"))
+        self.btn_export.setEnabled(tiene(self.permisos, "configuracion", "exportar"))
+        self.btn_limpiar_todo.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
+
+        layout.addLayout(filtros)
+
+        toolbar = QHBoxLayout()
+        toolbar.addWidget(self.btn_refresh)
+        toolbar.addWidget(self.btn_export)
+        toolbar.addWidget(self.btn_limpiar_todo)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        self.table = GorettiTable(
+            columns=[
+                {"key": "fecha", "label": "Fecha", "width": 155},
+                {"key": "usuario", "label": "Usuario", "width": 130},
+                {"key": "modulo", "label": "Módulo", "width": 130},
+                {"key": "accion", "label": "Acción", "width": 120},
+                {"key": "entidad", "label": "Entidad", "width": 130},
+                {"key": "nivel", "label": "Nivel", "width": 100},
+                {"key": "detalle", "label": "Detalle", "stretch": True},
+            ],
+            foreground_fn=lambda rec, key: Qt.red if rec.get("nivel") == "error"
+            else (Qt.darkYellow if rec.get("nivel") == "advertencia" else None)
+            if key == "nivel" else None,
+        )
+        self.table.recordDoubleClicked.connect(self._ver_detalle)
+        layout.addWidget(self.table)
+
+    def recargar(self) -> None:
+        self._cargar_modulos()
+        self._cargar_usuarios()
+        self._aplicar_filtros()
+
+    def _cargar_modulos(self) -> None:
+        actual = self.cmb_modulo.currentData()
+        self.cmb_modulo.blockSignals(True)
+        self.cmb_modulo.clear()
+        self.cmb_modulo.addItem("Módulo: todos", "")
+        for m in self.controller.modulos_registrados():
+            self.cmb_modulo.addItem(m, m)
+        idx = self.cmb_modulo.findData(actual)
+        self.cmb_modulo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cmb_modulo.blockSignals(False)
+        self._cargar_acciones(actual)
+
+    def _cargar_acciones(self, modulo: str) -> None:
+        actual = self.cmb_accion.currentData()
+        self.cmb_accion.blockSignals(True)
+        self.cmb_accion.clear()
+        self.cmb_accion.addItem("Acción: todas", "")
+        for a in self.controller.acciones_registradas(modulo or None):
+            self.cmb_accion.addItem(a, a)
+        idx = self.cmb_accion.findData(actual)
+        self.cmb_accion.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cmb_accion.blockSignals(False)
+
+    def _cargar_usuarios(self) -> None:
+        actual = self.cmb_usuario.currentData()
+        self.cmb_usuario.blockSignals(True)
+        self.cmb_usuario.clear()
+        self.cmb_usuario.addItem("Usuario: todos", "")
+        for u in self.controller.usuarios_registrados():
+            self.cmb_usuario.addItem(f"{u['usuario']} (id {u['usuario_id']})", u["usuario_id"])
+        idx = self.cmb_usuario.findData(actual)
+        self.cmb_usuario.setCurrentIndex(idx if idx >= 0 else 0)
+        self.cmb_usuario.blockSignals(False)
+
+    def _on_modulo(self, _idx: int) -> None:
+        self._cargar_acciones(self.cmb_modulo.currentData())
+
+    def _filtros_actuales(self) -> dict:
+        return {
+            "termino": self.txt_buscar.text().strip(),
+            "modulo": self.cmb_modulo.currentData(),
+            "accion": self.cmb_accion.currentData(),
+            "nivel": self.cmb_nivel.currentData(),
+            "usuario": self.cmb_usuario.currentData(),
+        }
+
+    def _aplicar_filtros(self) -> None:
+        self._filtros = self._filtros_actuales()
+        logs = self.controller.listar_logs(self._filtros)
+        self.table.set_records([
+            {"id": l["id"], "fecha": l["fecha"], "usuario": l["usuario"] or "—",
+             "modulo": l["modulo"], "accion": l["accion"],
+             "entidad": f"{l['entidad'] or ''} #{l['entidad_id'] or ''}".strip() or "—",
+             "nivel": l["nivel"], "detalle": l["detalle"] or ""}
+            for l in logs
+        ])
+
+    def _limpiar_filtros(self) -> None:
+        self.txt_buscar.clear()
+        self.cmb_modulo.setCurrentIndex(0)
+        self.cmb_nivel.setCurrentIndex(0)
+        self.cmb_usuario.setCurrentIndex(0)
+        self._aplicar_filtros()
+
+    def _ver_detalle(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
+            return
+        dlg = _DialogLogDetalle(self.controller, int(record["id"]), self)
+        dlg.exec()
+
+    def _exportar(self) -> None:
+        path = self.table.exportar_excel("Logs_Sistema", self)
+        if path:
+            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+
+    def _vaciar_logs(self) -> None:
+        resp = QMessageBox.warning(
+            self, "Vaciar Logs",
+            "Esto eliminará TODOS los logs del sistema.\nEsta acción no se puede deshacer.\n\n¿Continuar?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if resp == QMessageBox.Yes:
+            eliminados = self.controller.limpiar()
+            self._aplicar_filtros()
+            QMessageBox.information(self, "Listo", f"Se eliminaron {eliminados} registros.")
+
+
+class _DialogLogDetalle(QDialog):
+    def __init__(self, controller: LogsController, log_id: int, parent=None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.log_id = log_id
+        self.setWindowTitle("Detalle del Log")
+        self.setMinimumSize(680, 520)
+        self.setModal(True)
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        log = self.controller.db.fetch_one("SELECT * FROM logs_sistema WHERE id = ?", (self.log_id,))
+        if not log:
+            layout.addWidget(QLabel("Registro no encontrado."))
+            return
+
+        from PySide6.QtGui import QFont
+        mono = QFont("Consolas")
+        mono.setStyleHint(QFont.StyleHint.TypeWriter)
+
+        info = QFormLayout()
+        info.setSpacing(6)
+        info.addRow("Fecha:", QLabel(f"<b>{log['fecha']}</b>"))
+        info.addRow("Usuario:", QLabel(log["usuario"] or "—"))
+        info.addRow("Módulo / Acción:", QLabel(f"{log['modulo']} · {log['accion']}"))
+        info.addRow("Entidad:", QLabel(f"{log['entidad'] or '—'} #{log['entidad_id'] or '—'}"))
+        info.addRow("Nivel:", QLabel(log["nivel"]))
+        layout.addLayout(info)
+
+        try:
+            datos = self.controller.db.fetch_one(
+                "SELECT datos, metadata FROM logs_sistema WHERE id = ?", (self.log_id,))
+            txt_datos = datos["datos"] if datos else ""
+            txt_meta = datos["metadata"] if datos else ""
+        except Exception:
+            txt_datos = ""
+            txt_meta = ""
+
+        lbl_datos = QLabel("Datos implicados")
+        lbl_datos.setStyleSheet("font-weight: bold; color: #475569;")
+        layout.addWidget(lbl_datos)
+        self.txt_datos = QTextEdit()
+        self.txt_datos.setReadOnly(True)
+        self.txt_datos.setFont(mono)
+        self.txt_datos.setPlainText(txt_datos)
+        self.txt_datos.setMinimumHeight(150)
+        layout.addWidget(self.txt_datos)
+
+        lbl_meta = QLabel("Metadata")
+        lbl_meta.setStyleSheet("font-weight: bold; color: #475569;")
+        layout.addWidget(lbl_meta)
+        self.txt_meta = QTextEdit()
+        self.txt_meta.setReadOnly(True)
+        self.txt_meta.setFont(mono)
+        self.txt_meta.setPlainText(txt_meta)
+        self.txt_meta.setMinimumHeight(130)
+        layout.addWidget(self.txt_meta)
+
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.setObjectName("btnPrimary")
+        btn_cerrar.clicked.connect(self.accept)
+        btns.addWidget(btn_cerrar)
+        layout.addLayout(btns)

@@ -1,18 +1,23 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import (
-    export_orden_compra_excel, export_table_to_excel, print_orden_compra, print_table,
-)
-from src.utils.table_utils import configurar_tabla_excel
+from src.utils.export_utils import export_orden_compra_excel, print_orden_compra
 from src.views.dialogs import DialogOrdenCompra, DialogProveedor, DialogRecibirOrden, DialogVerOrden
+from src.views.table_widget import GorettiTable
+
+
+def _tipo_documento(tipo: str) -> str:
+    if tipo == "factura":
+        return "Factura"
+    if tipo == "remision":
+        return "Remisión"
+    return "Orden de Compra"
 
 
 class OrdenesCompraView(QWidget):
@@ -55,9 +60,9 @@ class OrdenesCompraView(QWidget):
         self.btn_nueva.setObjectName("btnPrimary")
         self.btn_nueva.clicked.connect(self._nueva_orden)
 
-        self.btn_factura = QPushButton("Ingresar Factura")
+        self.btn_factura = QPushButton("Ingresar Inventario")
         self.btn_factura.setObjectName("btnPrimary")
-        self.btn_factura.clicked.connect(self._nueva_factura)
+        self.btn_factura.clicked.connect(self._ingresar_inventario)
 
         self.btn_proveedor = QPushButton("Proveedores")
         self.btn_proveedor.setObjectName("btnSecondary")
@@ -123,18 +128,22 @@ class OrdenesCompraView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(
-            ["Folio", "Tipo", "Proveedor", "Fecha", "Total", "Estatus", "ID"])
-        self.table.setColumnHidden(6, True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(False)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.doubleClicked.connect(self._ver_orden)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "folio", "label": "Folio", "width": 130},
+                {"key": "tipo", "label": "Tipo", "width": 130},
+                {"key": "proveedores", "label": "Proveedor", "stretch": True},
+                {"key": "fecha_emision", "label": "Fecha", "width": 170},
+                {"key": "total", "label": "Total", "width": 120, "align": "right"},
+                {"key": "estatus", "label": "Estatus", "width": 130},
+            ],
+            id_key="id",
+            background_fn=self._color_fila_orden,
+            foreground_fn=self._color_estatus,
+            show_mode_selector=True,
+        )
+        self.table.recordDoubleClicked.connect(self._ver_orden)
+        self.table.set_group_options([("Tipo", "tipo"), ("Estatus", "estatus")])
         layout.addWidget(self.table)
 
     def _setup_tab_proveedores(self) -> None:
@@ -172,66 +181,59 @@ class OrdenesCompraView(QWidget):
         toolbar.addWidget(self.btn_export_prov)
         layout.addLayout(toolbar)
 
-        self.table_prov = QTableWidget()
-        self.table_prov.setColumnCount(7)
-        self.table_prov.setHorizontalHeaderLabels(
-            ["RFC", "Nombre", "Nombre Comercial", "Teléfono", "Email", "Dirección", "ID"])
-        self.table_prov.setColumnHidden(6, True)
-        self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_prov.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_prov.setAlternatingRowColors(True)
-        self.table_prov.horizontalHeader().setStretchLastSection(True)
-        self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_prov)
-        self.table_prov.doubleClicked.connect(self._editar_proveedor)
-        self.table_prov.setStyleSheet(self.table.styleSheet())
+        self.table_prov = GorettiTable(
+            columns=[
+                {"key": "rfc", "label": "RFC", "width": 150},
+                {"key": "nombre", "label": "Nombre", "stretch": True},
+                {"key": "nombre_comercial", "label": "Nombre Comercial", "width": 170},
+                {"key": "telefono", "label": "Teléfono", "width": 120},
+                {"key": "email", "label": "Email", "width": 180},
+                {"key": "direccion", "label": "Dirección", "width": 220},
+            ],
+            id_key="id",
+        )
+        self.table_prov.recordDoubleClicked.connect(self._editar_proveedor)
         layout.addWidget(self.table_prov)
+
+    def _color_fila_orden(self, record: dict) -> QColor | None:
+        if record.get("_tipo_raw") == "factura" or record.get("estatus") == "Recibida":
+            return QColor("#daf2d0")
+        return None
+
+    def _color_estatus(self, record: dict, key: str) -> QColor | None:
+        if key != "estatus":
+            return None
+        est = record.get("estatus", "")
+        if "Recibida" in est:
+            return Qt.darkGreen if est == "Recibida" else Qt.darkYellow
+        if est == "Cancelada":
+            return Qt.red
+        return None
 
     def _load_ordenes(self) -> None:
         try:
             ordenes = self.controller.listar_ordenes()
-            self.table.setRowCount(len(ordenes))
-            for i, oc in enumerate(ordenes):
-                self._set_fila_orden(i, oc)
+            self.table.set_records([self._fila_orden(oc) for oc in ordenes])
             self._load_proveedores()
         except Exception as e:
             print(f"Error: {e}")
 
-    def _set_fila_orden(self, i: int, oc: dict) -> None:
-        tipo = oc.get("tipo", "orden")
-        self.table.setItem(i, 0, QTableWidgetItem(oc.get("folio", "")))
-        item_tipo = QTableWidgetItem(
-            "Factura" if tipo == "factura" else "Orden de Compra")
-        self.table.setItem(i, 1, item_tipo)
-        self.table.setItem(i, 2, QTableWidgetItem(oc.get("proveedores", "")))
-        self.table.setItem(i, 3, QTableWidgetItem(oc.get("fecha_emision", "")))
-        self.table.setItem(i, 4, QTableWidgetItem(f"${oc.get('total', 0):.2f}"))
-        est = oc.get("estatus", "").replace("_", " ").capitalize()
-        item_est = QTableWidgetItem(est)
-        if "recibida" in oc.get("estatus", ""):
-            item_est.setForeground(Qt.darkGreen if est == "Recibida" else Qt.darkYellow)
-        elif est == "Cancelada":
-            item_est.setForeground(Qt.red)
-        self.table.setItem(i, 5, item_est)
-        self.table.setItem(i, 6, QTableWidgetItem(str(oc.get("id", ""))))
-        color = QColor("#daf2d0") if (tipo == "factura" or oc.get("estatus") == "recibida") else QColor("#ffffff")
-        for c in range(6):
-            it = self.table.item(i, c)
-            if it:
-                it.setBackground(color)
+    def _fila_orden(self, oc: dict) -> dict:
+        return {
+            "id": oc.get("id"),
+            "folio": oc.get("folio", ""),
+            "tipo": _tipo_documento(oc.get("tipo", "orden")),
+            "_tipo_raw": oc.get("tipo", "orden"),
+            "proveedores": oc.get("proveedores", ""),
+            "fecha_emision": oc.get("fecha_emision", ""),
+            "total": f"${oc.get('total', 0):.2f}",
+            "estatus": oc.get("estatus", "").replace("_", " ").capitalize(),
+        }
 
     def _load_proveedores(self) -> None:
         try:
             proveedores = self.controller.listar_proveedores()
-            self.table_prov.setRowCount(len(proveedores))
-            for i, p in enumerate(proveedores):
-                self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
-                self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            self.table_prov.set_records(proveedores)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -241,9 +243,7 @@ class OrdenesCompraView(QWidget):
             return
         try:
             resultados = self.controller.buscar_ordenes(texto)
-            self.table.setRowCount(len(resultados))
-            for i, oc in enumerate(resultados):
-                self._set_fila_orden(i, oc)
+            self.table.set_records([self._fila_orden(oc) for oc in resultados])
         except Exception as e:
             print(f"Error: {e}")
 
@@ -253,15 +253,7 @@ class OrdenesCompraView(QWidget):
             return
         try:
             resultados = self.controller.buscar_proveedores(texto)
-            self.table_prov.setRowCount(len(resultados))
-            for i, p in enumerate(resultados):
-                self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
-                self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            self.table_prov.set_records(resultados)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -271,63 +263,70 @@ class OrdenesCompraView(QWidget):
             self._load_ordenes()
 
     def _nueva_factura(self) -> None:
-        dlg = DialogOrdenCompra(self.controller, tipo="factura")
+        self._ingresar_inventario()
+
+    def _ingresar_inventario(self) -> None:
+        opcion, ok = QInputDialog.getItem(
+            self, "Ingresar Inventario", "Tipo de documento de ingreso:",
+            ["Factura", "Remisión"], 0, False)
+        if not ok:
+            return
+        tipo = "factura" if opcion == "Factura" else "remision"
+        dlg = DialogOrdenCompra(self.controller, tipo=tipo)
         if dlg.exec():
             self._load_ordenes()
 
-    def _ver_orden(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _ver_orden(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        oc_id = int(self.table.item(row, 6).text())
-        dlg = DialogVerOrden(self.controller, oc_id)
+        dlg = DialogVerOrden(self.controller, int(record["id"]))
         dlg.exec()
 
     def _recibir_orden(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        if self.table.item(row, 1).text() == "Factura":
-            QMessageBox.warning(self, "Estatus", "Las facturas no se reciben en inventario.")
+        if record["tipo"] in ("Factura", "Remisión"):
+            QMessageBox.warning(self, "Estatus",
+                                "Los documentos de ingreso (factura/remisión) ya se registran en inventario.")
             return
-        estatus = self.table.item(row, 5).text().lower()
+        estatus = record["estatus"].lower()
         if "recibida" in estatus:
             QMessageBox.warning(self, "Estatus", "Esta orden ya fue recibida.")
             return
         if estatus == "cancelada":
             QMessageBox.warning(self, "Estatus", "No se puede recibir una orden cancelada.")
             return
-        oc_id = int(self.table.item(row, 6).text())
-        dlg = DialogRecibirOrden(self.controller, oc_id)
+        dlg = DialogRecibirOrden(self.controller, int(record["id"]))
         if dlg.exec():
             QMessageBox.information(self, "Éxito", "Orden recibida. Stock actualizado.")
             self._load_ordenes()
 
     def _cancelar_orden(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione una orden.")
             return
-        estatus = self.table.item(row, 5).text().lower()
+        estatus = record["estatus"].lower()
         if "recibida" in estatus or estatus == "cancelada":
             QMessageBox.warning(self, "Estatus", "Solo se pueden cancelar órdenes pendientes.")
             return
-        folio = self.table.item(row, 0).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar '{folio}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar '{record['folio']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            oc_id = int(self.table.item(row, 6).text())
-            self.controller.cancelar_orden(oc_id)
+            self.controller.cancelar_orden(int(record["id"]))
             self._load_ordenes()
 
     def _exportar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            path = export_table_to_excel(self.table, "Ordenes_Compra", self)
+        record = self.table.current_record()
+        if record is None:
+            path = self.table.exportar_excel("Ordenes_Compra", self)
         else:
-            oc_id = int(self.table.item(row, 6).text())
+            oc_id = int(record["id"])
             datos = self.controller.obtener_orden(oc_id)
             detalle = self.controller.obtener_detalle_orden(oc_id)
             path = export_orden_compra_excel(datos, detalle, self)
@@ -335,17 +334,17 @@ class OrdenesCompraView(QWidget):
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
     def _imprimir(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            print_table(self.table, "Ordenes_Compra", self)
+        record = self.table.current_record()
+        if record is None:
+            self.table.imprimir("Ordenes_Compra", self)
         else:
-            oc_id = int(self.table.item(row, 6).text())
+            oc_id = int(record["id"])
             datos = self.controller.obtener_orden(oc_id)
             detalle = self.controller.obtener_detalle_orden(oc_id)
             print_orden_compra(datos, detalle, self)
 
     def _exportar_proveedores(self) -> None:
-        path = export_table_to_excel(self.table_prov, "Proveedores", self)
+        path = self.table_prov.exportar_excel("Proveedores", self)
         if path:
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
@@ -357,24 +356,22 @@ class OrdenesCompraView(QWidget):
         if dlg.exec():
             self._load_proveedores()
 
-    def _editar_proveedor(self) -> None:
-        row = self.table_prov.currentRow()
-        if row < 0:
+    def _editar_proveedor(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table_prov.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un proveedor.")
             return
-        proveedor_id = int(self.table_prov.item(row, 6).text())
-        dlg = DialogProveedor(self.controller, proveedor_id)
+        dlg = DialogProveedor(self.controller, int(record["id"]))
         if dlg.exec():
             self._load_proveedores()
 
     def _desactivar_proveedor(self) -> None:
-        row = self.table_prov.currentRow()
-        if row < 0:
+        record = self.table_prov.current_record()
+        if record is None:
             return
-        nombre = self.table_prov.item(row, 1).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{record['nombre']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            proveedor_id = int(self.table_prov.item(row, 6).text())
-            self.controller.desactivar_proveedor(proveedor_id)
+            self.controller.desactivar_proveedor(int(record["id"]))
             self._load_proveedores()

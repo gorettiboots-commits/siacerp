@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from src.controllers.accesos_controller import AccesosController
 from src.models.accesos_model import tiene
 from src.utils.icons import mono_icon
+from src.utils.logs import registrar_log, set_usuario_actual
 from src.views.login_view import LoginView
 from src.views.ordenes_compra_view import OrdenesCompraView
 from src.views.produccion_view import ProduccionView
@@ -412,6 +413,7 @@ class MainWindow(QMainWindow):
             credentials["username"], credentials["password"])
         if user:
             self._current_user = user
+            set_usuario_actual(user)
             self._permisos = AccesosController().permisos_login(user)
             self._stack.setCurrentWidget(self._main_container)
             self._aplicar_permisos()
@@ -432,7 +434,11 @@ class MainWindow(QMainWindow):
                 w.lbl_error.setVisible(True)
 
     def _logout(self) -> None:
+        if self._current_user:
+            registrar_log("seguridad", "logout", "usuario", self._current_user.get("id"),
+                          datos={"username": self._current_user.get("username")})
         self._current_user = None
+        set_usuario_actual(None)
         self._permisos = set()
         self._config_action.setEnabled(False)
         self._stack.setCurrentWidget(self._login_view)

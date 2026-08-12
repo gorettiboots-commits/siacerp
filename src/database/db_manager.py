@@ -105,6 +105,7 @@ class DatabaseManager:
 
     def _migrar(self) -> None:
         self._migrar_passwords()
+        self._migrar_logs()
         try:
             conn = self.connect()
             cursor = conn.cursor()
@@ -240,11 +241,18 @@ class DatabaseManager:
                     detalle_id INTEGER NOT NULL REFERENCES detalle_orden_compra(id) ON DELETE CASCADE,
                     punto_id INTEGER NOT NULL REFERENCES puntos_catalogo(id),
                     pares INTEGER NOT NULL DEFAULT 0,
+                    precio_unitario REAL NOT NULL DEFAULT 0,
                     UNIQUE(detalle_id, punto_id),
                     FOREIGN KEY (detalle_id) REFERENCES detalle_orden_compra(id),
                     FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
                 )
             """)
+
+            puntos_cols = [r[1] for r in cursor.execute("PRAGMA table_info(detalle_orden_compra_puntos)").fetchall()]
+            if 'precio_unitario' not in puntos_cols:
+                cursor.execute(
+                    "ALTER TABLE detalle_orden_compra_puntos ADD COLUMN precio_unitario REAL NOT NULL DEFAULT 0")
+                print("Migración: columna precio_unitario agregada a detalle_orden_compra_puntos.")
 
             prov_cols = [r[1] for r in cursor.execute("PRAGMA table_info(proveedores)").fetchall()]
             if 'nombre_comercial' not in prov_cols:
@@ -260,6 +268,34 @@ class DatabaseManager:
             except Exception:
                 pass
             print(f"Migración tallas/pago omitida: {e}")
+
+    def _migrar_logs(self) -> None:
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS logs_sistema (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fecha TEXT NOT NULL DEFAULT (datetime('now')),
+                    usuario_id INTEGER,
+                    usuario TEXT,
+                    modulo TEXT NOT NULL,
+                    accion TEXT NOT NULL,
+                    entidad TEXT,
+                    entidad_id INTEGER,
+                    nivel TEXT NOT NULL DEFAULT 'info',
+                    detalle TEXT,
+                    datos TEXT,
+                    metadata TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_fecha ON logs_sistema (fecha)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_modulo ON logs_sistema (modulo)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_entidad ON logs_sistema (entidad, entidad_id)")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración logs omitida: {e}")
 
     def _migrar_passwords(self) -> None:
         from src.utils.security import es_hash_bcrypt, hash_contrasena

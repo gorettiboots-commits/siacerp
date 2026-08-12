@@ -2,6 +2,17 @@ from typing import Optional
 from src.database.db_manager import DatabaseManager
 
 
+def _subtotal_detalle_oc(d: dict) -> float:
+    """Subtotal del renglón: Σ(pares × precio) por punto si hay precios por talla;
+    si no, cantidad × precio_unitario."""
+    con_precio = [t for t in (d.get("puntos") or [])
+                  if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        return sum(float(t.get("pares", 0) or 0) * float(t.get("precio", 0) or 0)
+                   for t in con_precio)
+    return float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
+
+
 class ProveedorModel:
     def __init__(self) -> None:
         self.db = DatabaseManager()
@@ -16,8 +27,10 @@ class ProveedorModel:
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
         return self.db.fetch_all(
-            "SELECT * FROM proveedores WHERE activo=1 AND (rfc LIKE ? OR nombre LIKE ?) ORDER BY nombre",
-            (q, q),
+            "SELECT * FROM proveedores WHERE activo=1 AND "
+            "(rfc LIKE ? OR nombre LIKE ? OR nombre_comercial LIKE ?) "
+            "ORDER BY nombre",
+            (q, q, q),
         )
 
     def obtener(self, proveedor_id: int) -> Optional[dict]:
@@ -200,7 +213,7 @@ class OrdenCompraModel:
             return detalle
         ids = ",".join(str(d["id"]) for d in detalle)
         rows = self.db.fetch_all(
-            f"""SELECT dt.detalle_id, dt.pares, pc.punto, pc.id as punto_id, pc.orden
+            f"""SELECT dt.detalle_id, dt.pares, dt.precio_unitario, pc.punto, pc.id as punto_id, pc.orden
                 FROM detalle_orden_compra_puntos dt
                 JOIN puntos_catalogo pc ON pc.id = dt.punto_id
                 WHERE dt.detalle_id IN ({ids})
@@ -212,6 +225,7 @@ class OrdenCompraModel:
                 "punto_id": r["punto_id"],
                 "punto": r["punto"],
                 "pares": r["pares"],
+                "precio": r["precio_unitario"],
                 "orden": r["orden"],
             })
         for d in detalle:
@@ -241,8 +255,9 @@ class OrdenCompraModel:
         for p in (puntos or []):
             if p.get("pares", 0) > 0:
                 self.db.execute(
-                    "INSERT OR REPLACE INTO detalle_orden_compra_puntos (detalle_id, punto_id, pares) VALUES (?, ?, ?)",
-                    (detalle_id, p["punto_id"], p["pares"]),
+                    "INSERT OR REPLACE INTO detalle_orden_compra_puntos "
+                    "(detalle_id, punto_id, pares, precio_unitario) VALUES (?, ?, ?, ?)",
+                    (detalle_id, p["punto_id"], p["pares"], p.get("precio", 0) or 0),
                 )
         return detalle_id
 
@@ -253,9 +268,7 @@ class OrdenCompraModel:
         )
 
     def recibir(self, oc_id: int) -> None:
-        detalle = self.db.fetch_all(
-            "SELECT * FROM detalle_orden_compra WHERE orden_compra_id = ?", (oc_id,)
-        )
+        detalle = self.obtener_detalle(oc_id)
         for d in detalle:
             self.db.execute(
                 "UPDATE insumos SET stock_actual = stock_actual + ?, updated_at = datetime('now') WHERE id = ?",
@@ -265,7 +278,7 @@ class OrdenCompraModel:
                 "INSERT INTO movimiento_inventario (insumo_id, tipo_movimiento, cantidad, referencia_tipo, referencia_id, observaciones) VALUES (?, 'entrada', ?, 'orden_compra', ?, ?)",
                 (d["insumo_id"], d["cantidad"], oc_id, f"OC {d['orden_compra_id']}"),
             )
-        total = sum(d["cantidad"] * d["precio_unitario"] for d in detalle)
+        total = sum(_subtotal_detalle_oc(d) for d in detalle)
         self.db.execute(
             "UPDATE ordenes_compra SET estatus='recibida', fecha_recibido=datetime('now'), total=? WHERE id=?",
             (total, oc_id),

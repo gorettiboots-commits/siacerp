@@ -1,19 +1,18 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import (
     DialogBOM, DialogModelo, DialogOrdenProduccion,
     DialogSeguimientoOP, DialogVariante,
 )
+from src.views.table_widget import GorettiTable
 
 
 class ProduccionView(QWidget):
@@ -115,7 +114,7 @@ class ProduccionView(QWidget):
         self.btn_export.clicked.connect(lambda: self._exportar_tabla(self.table, "Ordenes_Produccion"))
         self.btn_print = QPushButton("Imprimir")
         self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(lambda: print_table(self.table, "Ordenes_Produccion", self))
+        self.btn_print.clicked.connect(lambda: self.table.imprimir("Ordenes_Produccion", self))
 
         btn_refresh = QPushButton("Actualizar")
         btn_refresh.setObjectName("btnPrimary")
@@ -130,20 +129,21 @@ class ProduccionView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels([
-            "Folio", "Modelo", "Variante", "Pares", "F. Inicio",
-            "F. Entrega", "Prioridad", "Estatus", "ID",
-        ])
-        self.table.setColumnHidden(8, True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.doubleClicked.connect(self._ver_seguimiento)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "folio", "label": "Folio", "width": 120},
+                {"key": "modelo_nombre", "label": "Modelo", "stretch": True},
+                {"key": "codigo_variante", "label": "Variante", "width": 140},
+                {"key": "total_pares", "label": "Pares", "width": 90, "align": "right"},
+                {"key": "fecha_inicio", "label": "F. Inicio", "width": 160},
+                {"key": "fecha_entrega", "label": "F. Entrega", "width": 160},
+                {"key": "prioridad", "label": "Prioridad", "width": 110, "align": "center"},
+                {"key": "estatus", "label": "Estatus", "width": 140},
+            ],
+            id_key="id",
+            foreground_fn=self._color_estatus_op,
+        )
+        self.table.recordDoubleClicked.connect(self._ver_seguimiento)
         layout.addWidget(self.table)
 
     def _setup_tab_catalogos(self) -> None:
@@ -185,18 +185,16 @@ class ProduccionView(QWidget):
         mtoolbar.addWidget(self.btn_export_m)
         mlayout.addLayout(mtoolbar)
 
-        self.table_modelos = QTableWidget()
-        self.table_modelos.setColumnCount(4)
-        self.table_modelos.setHorizontalHeaderLabels(["Código", "Nombre", "Descripción", "ID"])
-        self.table_modelos.setColumnHidden(3, True)
-        self.table_modelos.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_modelos.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_modelos.setAlternatingRowColors(True)
-        self.table_modelos.horizontalHeader().setStretchLastSection(True)
-        self.table_modelos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_modelos)
-        self.table_modelos.doubleClicked.connect(self._editar_modelo)
-        self.table_modelos.setStyleSheet(self.table.styleSheet())
+        self.table_modelos = GorettiTable(
+            columns=[
+                {"key": "codigo", "label": "Código", "width": 130},
+                {"key": "nombre", "label": "Nombre", "stretch": True},
+                {"key": "descripcion", "label": "Descripción", "width": 300},
+            ],
+            id_key="id",
+        )
+        self.table_modelos.recordDoubleClicked.connect(self._editar_modelo)
+        self.table_modelos.currentRecordChanged.connect(self._on_modelo_selected)
         mlayout.addWidget(self.table_modelos)
 
         # Variantes
@@ -225,18 +223,17 @@ class ProduccionView(QWidget):
         vtoolbar.addWidget(self.btn_export_v)
         vlayout.addLayout(vtoolbar)
 
-        self.table_variantes = QTableWidget()
-        self.table_variantes.setColumnCount(6)
-        self.table_variantes.setHorizontalHeaderLabels(["Código", "Modelo", "Talla", "Color", "Piel", "ID"])
-        self.table_variantes.setColumnHidden(5, True)
-        self.table_variantes.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_variantes.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_variantes.setAlternatingRowColors(True)
-        self.table_variantes.horizontalHeader().setStretchLastSection(True)
-        self.table_variantes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_variantes)
-        self.table_variantes.doubleClicked.connect(self._editar_variante)
-        self.table_variantes.setStyleSheet(self.table.styleSheet())
+        self.table_variantes = GorettiTable(
+            columns=[
+                {"key": "codigo_variante", "label": "Código", "width": 140},
+                {"key": "modelo_nombre", "label": "Modelo", "stretch": True},
+                {"key": "talla", "label": "Talla", "width": 100, "align": "center"},
+                {"key": "color", "label": "Color", "width": 130},
+                {"key": "piel", "label": "Piel", "width": 130},
+            ],
+            id_key="id",
+        )
+        self.table_variantes.recordDoubleClicked.connect(self._editar_variante)
         vlayout.addWidget(self.table_variantes)
 
         # BOM
@@ -250,17 +247,18 @@ class ProduccionView(QWidget):
         self.btn_editar_bom.setMinimumHeight(40)
         self.btn_editar_bom.clicked.connect(self._editar_bom)
         self.btn_editar_bom.setEnabled(False)
-        self.table_bom = QTableWidget()
-        self.table_bom.setColumnCount(4)
-        self.table_bom.setHorizontalHeaderLabels(["Insumo", "Cant. por Par", "Unidad", "Stock Actual"])
-        self.table_bom.horizontalHeader().setStretchLastSection(True)
-        self.table_bom.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_bom)
-        self.table_bom.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table_bom = GorettiTable(
+            columns=[
+                {"key": "insumo_nombre", "label": "Insumo", "stretch": True},
+                {"key": "cantidad_por_par", "label": "Cant. por Par", "width": 140, "align": "right"},
+                {"key": "unidad_medida", "label": "Unidad", "width": 100, "align": "center"},
+                {"key": "stock_actual", "label": "Stock Actual", "width": 120, "align": "right"},
+            ],
+            id_key="id",
+        )
         blayout.addWidget(self.cmb_bom_modelo)
         blayout.addWidget(self.btn_editar_bom)
         blayout.addWidget(self.table_bom)
-        self.table_modelos.itemSelectionChanged.connect(self._on_modelo_selected)
 
     def _setup_tab_pt(self) -> None:
         layout = QVBoxLayout(self.tab_pt)
@@ -272,7 +270,7 @@ class ProduccionView(QWidget):
         self.btn_export_pt.clicked.connect(lambda: self._exportar_tabla(self.table_pt, "Producto_Terminado"))
         self.btn_print_pt = QPushButton("Imprimir")
         self.btn_print_pt.setObjectName("btnSecondary")
-        self.btn_print_pt.clicked.connect(lambda: print_table(self.table_pt, "Producto_Terminado", self))
+        self.btn_print_pt.clicked.connect(lambda: self.table_pt.imprimir("Producto_Terminado", self))
 
         btn_refresh_pt = QPushButton("Actualizar")
         btn_refresh_pt.setObjectName("btnPrimary")
@@ -283,18 +281,17 @@ class ProduccionView(QWidget):
         toolbar.addWidget(btn_refresh_pt)
         layout.addLayout(toolbar)
 
-        self.table_pt = QTableWidget()
-        self.table_pt.setColumnCount(6)
-        self.table_pt.setHorizontalHeaderLabels([
-            "Modelo", "Variante", "Color", "Piel", "Talla", "Pares"
-        ])
-        self.table_pt.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_pt.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_pt.setAlternatingRowColors(True)
-        self.table_pt.horizontalHeader().setStretchLastSection(True)
-        self.table_pt.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_pt)
-        self.table_pt.setStyleSheet(self.table.styleSheet())
+        self.table_pt = GorettiTable(
+            columns=[
+                {"key": "modelo_nombre", "label": "Modelo", "stretch": True},
+                {"key": "codigo_variante", "label": "Variante", "width": 150},
+                {"key": "color", "label": "Color", "width": 130},
+                {"key": "piel", "label": "Piel", "width": 130},
+                {"key": "talla", "label": "Talla", "width": 100, "align": "center"},
+                {"key": "pares", "label": "Pares", "width": 100, "align": "right"},
+            ],
+            id_key="id",
+        )
         layout.addWidget(self.table_pt)
 
     def _load_ops(self) -> None:
@@ -302,62 +299,50 @@ class ProduccionView(QWidget):
             ops = self.controller.listar_ops()
             if hasattr(self, "kanban"):
                 self.kanban.recargar()
-            self.table.setRowCount(len(ops))
-            for i, op in enumerate(ops):
-                self.table.setItem(i, 0, QTableWidgetItem(op.get("folio", "")))
-                self.table.setItem(i, 1, QTableWidgetItem(op.get("modelo_nombre", "")))
-                self.table.setItem(i, 2, QTableWidgetItem(op.get("codigo_variante", "")))
-                self.table.setItem(i, 3, QTableWidgetItem(str(op.get("total_pares", 0))))
-                self.table.setItem(i, 4, QTableWidgetItem(op.get("fecha_inicio", "") or ""))
-                self.table.setItem(i, 5, QTableWidgetItem(op.get("fecha_entrega", "") or ""))
-                self.table.setItem(i, 6, QTableWidgetItem(op.get("prioridad", "").capitalize()))
-                est_item = QTableWidgetItem(op.get("estatus", "").replace("_", " ").capitalize())
-                est = op.get("estatus", "")
-                if est == "terminada":
-                    est_item.setForeground(Qt.darkGreen)
-                elif "produccion" in est:
-                    est_item.setForeground(Qt.darkYellow)
-                elif est == "planeada":
-                    est_item.setForeground(Qt.blue)
-                self.table.setItem(i, 7, est_item)
-                self.table.setItem(i, 8, QTableWidgetItem(str(op.get("id", ""))))
+            self.table.set_records([self._fila_op(op) for op in ops])
             self._load_catalogos()
             self._load_pt()
         except Exception as e:
             print(f"Error: {e}")
 
+    def _fila_op(self, op: dict) -> dict:
+        return {
+            "id": op.get("id"),
+            "folio": op.get("folio", ""),
+            "modelo_nombre": op.get("modelo_nombre", ""),
+            "codigo_variante": op.get("codigo_variante", ""),
+            "total_pares": op.get("total_pares", 0),
+            "fecha_inicio": op.get("fecha_inicio", "") or "",
+            "fecha_entrega": op.get("fecha_entrega", "") or "",
+            "prioridad": op.get("prioridad", "").capitalize(),
+            "estatus": op.get("estatus", "").replace("_", " ").capitalize(),
+        }
+
+    def _color_estatus_op(self, record: dict, key: str) -> QColor | None:
+        if key != "estatus":
+            return None
+        est = record.get("estatus", "")
+        if est == "Terminada":
+            return Qt.darkGreen
+        if "Produccion" in est:
+            return Qt.darkYellow
+        if est == "Planeada":
+            return Qt.blue
+        return None
+
     def _load_catalogos(self) -> None:
         try:
             modelos = self.controller.listar_modelos()
-            self.table_modelos.setRowCount(len(modelos))
-            for i, m in enumerate(modelos):
-                self.table_modelos.setItem(i, 0, QTableWidgetItem(m.get("codigo", "")))
-                self.table_modelos.setItem(i, 1, QTableWidgetItem(m.get("nombre", "")))
-                self.table_modelos.setItem(i, 2, QTableWidgetItem(m.get("descripcion", "") or ""))
-                self.table_modelos.setItem(i, 3, QTableWidgetItem(str(m.get("id", ""))))
+            self.table_modelos.set_records(modelos)
             variantes = self.controller.listar_variantes()
-            self.table_variantes.setRowCount(len(variantes))
-            for i, v in enumerate(variantes):
-                self.table_variantes.setItem(i, 0, QTableWidgetItem(v.get("codigo_variante", "")))
-                self.table_variantes.setItem(i, 1, QTableWidgetItem(v.get("modelo_nombre", "")))
-                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("talla", "")))
-                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("color", "")))
-                self.table_variantes.setItem(i, 4, QTableWidgetItem(v.get("piel", "")))
-                self.table_variantes.setItem(i, 5, QTableWidgetItem(str(v.get("id", ""))))
+            self.table_variantes.set_records(variantes)
         except Exception as e:
             print(f"Error catálogos: {e}")
 
     def _load_pt(self) -> None:
         try:
             pts = self.controller.listar_pt()
-            self.table_pt.setRowCount(len(pts))
-            for i, p in enumerate(pts):
-                self.table_pt.setItem(i, 0, QTableWidgetItem(p.get("modelo_nombre", "")))
-                self.table_pt.setItem(i, 1, QTableWidgetItem(p.get("codigo_variante", "")))
-                self.table_pt.setItem(i, 2, QTableWidgetItem(p.get("color", "")))
-                self.table_pt.setItem(i, 3, QTableWidgetItem(p.get("piel", "")))
-                self.table_pt.setItem(i, 4, QTableWidgetItem(p.get("talla", "")))
-                self.table_pt.setItem(i, 5, QTableWidgetItem(str(p.get("pares", 0))))
+            self.table_pt.set_records(pts)
         except Exception as e:
             print(f"Error PT: {e}")
 
@@ -367,17 +352,7 @@ class ProduccionView(QWidget):
             return
         try:
             resultados = self.controller.buscar_ops(texto)
-            self.table.setRowCount(len(resultados))
-            for i, op in enumerate(resultados):
-                self.table.setItem(i, 0, QTableWidgetItem(op.get("folio", "")))
-                self.table.setItem(i, 1, QTableWidgetItem(op.get("modelo_nombre", "")))
-                self.table.setItem(i, 2, QTableWidgetItem(op.get("codigo_variante", "")))
-                self.table.setItem(i, 3, QTableWidgetItem(str(op.get("total_pares", 0))))
-                self.table.setItem(i, 4, QTableWidgetItem(op.get("fecha_inicio", "") or ""))
-                self.table.setItem(i, 5, QTableWidgetItem(op.get("fecha_entrega", "") or ""))
-                self.table.setItem(i, 6, QTableWidgetItem(op.get("prioridad", "")))
-                self.table.setItem(i, 7, QTableWidgetItem(op.get("estatus", "")))
-                self.table.setItem(i, 8, QTableWidgetItem(str(op.get("id", ""))))
+            self.table.set_records([self._fila_op(op) for op in resultados])
         except Exception as e:
             print(f"Error: {e}")
 
@@ -387,12 +362,7 @@ class ProduccionView(QWidget):
             return
         try:
             res = self.controller.buscar_modelos(texto)
-            self.table_modelos.setRowCount(len(res))
-            for i, m in enumerate(res):
-                self.table_modelos.setItem(i, 0, QTableWidgetItem(m.get("codigo", "")))
-                self.table_modelos.setItem(i, 1, QTableWidgetItem(m.get("nombre", "")))
-                self.table_modelos.setItem(i, 2, QTableWidgetItem(m.get("descripcion", "") or ""))
-                self.table_modelos.setItem(i, 3, QTableWidgetItem(str(m.get("id", ""))))
+            self.table_modelos.set_records(res)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -402,14 +372,7 @@ class ProduccionView(QWidget):
             return
         try:
             res = self.controller.buscar_variantes(texto)
-            self.table_variantes.setRowCount(len(res))
-            for i, v in enumerate(res):
-                self.table_variantes.setItem(i, 0, QTableWidgetItem(v.get("codigo_variante", "")))
-                self.table_variantes.setItem(i, 1, QTableWidgetItem(v.get("modelo_nombre", "")))
-                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("talla", "")))
-                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("color", "")))
-                self.table_variantes.setItem(i, 4, QTableWidgetItem(v.get("piel", "")))
-                self.table_variantes.setItem(i, 5, QTableWidgetItem(str(v.get("id", ""))))
+            self.table_variantes.set_records(res)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -418,23 +381,22 @@ class ProduccionView(QWidget):
         if dlg.exec():
             self._load_ops()
 
-    def _ver_seguimiento(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _ver_seguimiento(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione una OP.")
             return
-        op_id = int(self.table.item(row, 8).text())
-        dlg = DialogSeguimientoOP(self.controller, op_id)
+        dlg = DialogSeguimientoOP(self.controller, int(record["id"]))
         dlg.exec()
         self._load_ops()
 
     def _avanzar_desde_tabla(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        record = self.table.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione una OP.")
             return
-        op_id = int(self.table.item(row, 8).text())
-        dlg = DialogSeguimientoOP(self.controller, op_id)
+        dlg = DialogSeguimientoOP(self.controller, int(record["id"]))
         dlg.exec()
         self._load_ops()
 
@@ -443,25 +405,24 @@ class ProduccionView(QWidget):
         if dlg.exec():
             self._load_catalogos()
 
-    def _editar_modelo(self) -> None:
-        row = self.table_modelos.currentRow()
-        if row < 0:
+    def _editar_modelo(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table_modelos.current_record()
+        if record is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un modelo.")
             return
-        modelo_id = int(self.table_modelos.item(row, 3).text())
-        dlg = DialogModelo(self.controller, self.inv_controller, modelo_id)
+        dlg = DialogModelo(self.controller, self.inv_controller, int(record["id"]))
         if dlg.exec():
             self._load_catalogos()
 
     def _desactivar_modelo(self) -> None:
-        row = self.table_modelos.currentRow()
-        if row < 0:
+        record = self.table_modelos.current_record()
+        if record is None:
             return
-        nombre = self.table_modelos.item(row, 1).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{record['nombre']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_modelo(int(self.table_modelos.item(row, 3).text()))
+            self.controller.desactivar_modelo(int(record["id"]))
             self._load_catalogos()
 
     def _nueva_variante(self) -> None:
@@ -469,49 +430,43 @@ class ProduccionView(QWidget):
         if dlg.exec():
             self._load_catalogos()
 
-    def _editar_variante(self) -> None:
-        row = self.table_variantes.currentRow()
-        if row < 0:
+    def _editar_variante(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table_variantes.current_record()
+        if record is None:
             return
-        v_id = int(self.table_variantes.item(row, 5).text())
-        dlg = DialogVariante(self.controller, v_id)
+        dlg = DialogVariante(self.controller, int(record["id"]))
         if dlg.exec():
             self._load_catalogos()
 
     def _desactivar_variante(self) -> None:
-        row = self.table_variantes.currentRow()
-        if row < 0:
+        record = self.table_variantes.current_record()
+        if record is None:
             return
-        cod = self.table_variantes.item(row, 0).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar variante '{cod}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar variante '{record['codigo_variante']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_variante(int(self.table_variantes.item(row, 5).text()))
+            self.controller.desactivar_variante(int(record["id"]))
             self._load_catalogos()
 
-    def _on_modelo_selected(self) -> None:
-        row = self.table_modelos.currentRow()
-        if row >= 0:
-            modelo_id = int(self.table_modelos.item(row, 3).text())
-            nombre = self.table_modelos.item(row, 1).text()
-            self.cmb_bom_modelo.setText(f"[{self.table_modelos.item(row, 0).text()}] {nombre}")
-            self.btn_editar_bom.setEnabled(tiene(self._permisos, "produccion", "editar"))
-            self._modelo_bom_id = modelo_id
-            self._modelo_bom_nombre = nombre
-            self._cargar_bom(modelo_id)
-        else:
+    def _on_modelo_selected(self, record: dict | None = None) -> None:
+        if not isinstance(record, dict):
+            record = self.table_modelos.current_record()
+        if record is None:
             self.cmb_bom_modelo.clear()
             self.btn_editar_bom.setEnabled(False)
-            self.table_bom.setRowCount(0)
+            self.table_bom.set_records([])
+            return
+        modelo_id = int(record["id"])
+        self.cmb_bom_modelo.setText(f"[{record.get('codigo', '')}] {record.get('nombre', '')}")
+        self.btn_editar_bom.setEnabled(tiene(self._permisos, "produccion", "editar"))
+        self._modelo_bom_id = modelo_id
+        self._modelo_bom_nombre = record.get("nombre", "")
+        self._cargar_bom(modelo_id)
 
     def _cargar_bom(self, modelo_id: int) -> None:
         bom = self.controller.obtener_bom(modelo_id)
-        self.table_bom.setRowCount(len(bom))
-        for i, b in enumerate(bom):
-            self.table_bom.setItem(i, 0, QTableWidgetItem(b.get("insumo_nombre", "")))
-            self.table_bom.setItem(i, 1, QTableWidgetItem(str(b.get("cantidad_por_par", 0))))
-            self.table_bom.setItem(i, 2, QTableWidgetItem(b.get("unidad_medida", "")))
-            self.table_bom.setItem(i, 3, QTableWidgetItem(str(b.get("stock_actual", 0))))
+        self.table_bom.set_records(bom)
 
     def _editar_bom(self) -> None:
         if hasattr(self, "_modelo_bom_id"):
@@ -520,7 +475,7 @@ class ProduccionView(QWidget):
             if dlg.exec():
                 self._cargar_bom(self._modelo_bom_id)
 
-    def _exportar_tabla(self, table: QTableWidget, nombre: str) -> None:
-        path = export_table_to_excel(table, nombre, self)
+    def _exportar_tabla(self, table: GorettiTable, nombre: str) -> None:
+        path = table.exportar_excel(nombre, self)
         if path:
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")

@@ -3,6 +3,7 @@ from src.models.produccion_model import (
     OrdenProduccionModel, VarianteModel,
 )
 from src.models.orden_compra_model import UnidadesMedidaModel
+from src.utils.logs import registrar_log
 
 
 class ProduccionController:
@@ -23,22 +24,32 @@ class ProduccionController:
         return self.estacion_model.listar(solo_activos)
 
     def crear_estacion(self, nombre: str, orden: int, descripcion: str = "") -> int:
-        return self.estacion_model.crear(nombre, orden, descripcion)
+        estacion_id = self.estacion_model.crear(nombre, orden, descripcion)
+        registrar_log("configuracion", "crear", "estacion", estacion_id,
+                      datos={"nombre": nombre, "orden": orden, "descripcion": descripcion})
+        return estacion_id
 
     def actualizar_estacion(self, estacion_id: int, nombre: str, orden: int, descripcion: str) -> None:
         self.estacion_model.actualizar(estacion_id, nombre, orden, descripcion)
+        registrar_log("configuracion", "editar", "estacion", estacion_id,
+                      datos={"nombre": nombre, "orden": orden, "descripcion": descripcion})
 
     def desactivar_estacion(self, estacion_id: int) -> None:
         self.estacion_model.desactivar(estacion_id)
+        registrar_log("configuracion", "eliminar", "estacion", estacion_id)
 
     def eliminar_estacion(self, estacion_id: int) -> None:
         self.estacion_model.eliminar(estacion_id)
+        registrar_log("configuracion", "eliminar", "estacion", estacion_id)
 
     def posicion_op(self, op_id: int) -> dict:
         return self.op_model.posicion_actual(op_id)
 
     def mover_en_kanban(self, op_id: int, target_estacion_id) -> bool:
-        return self.op_model.mover_en_kanban(op_id, target_estacion_id)
+        ok = self.op_model.mover_en_kanban(op_id, target_estacion_id)
+        registrar_log("produccion", "mover", "orden_produccion", op_id,
+                      datos={"estacion_destino": target_estacion_id})
+        return ok
 
     # -- Modelos --
     def listar_modelos(self) -> list[dict]:
@@ -55,14 +66,22 @@ class ProduccionController:
 
     def crear_modelo(self, codigo: str, nombre: str, descripcion: str = "",
                      imagen: bytes | None = None) -> int:
-        return self.modelo_model.crear(codigo, nombre, descripcion, imagen)
+        modelo_id = self.modelo_model.crear(codigo, nombre, descripcion, imagen)
+        registrar_log("produccion", "crear", "modelo", modelo_id,
+                      datos={"codigo": codigo, "nombre": nombre,
+                             "descripcion": descripcion, "imagen": bool(imagen)})
+        return modelo_id
 
     def actualizar_modelo(self, modelo_id: int, codigo: str, nombre: str, descripcion: str,
                           imagen: bytes | None = None) -> None:
         self.modelo_model.actualizar(modelo_id, codigo, nombre, descripcion, imagen)
+        registrar_log("produccion", "editar", "modelo", modelo_id,
+                      datos={"codigo": codigo, "nombre": nombre,
+                             "descripcion": descripcion, "imagen": bool(imagen)})
 
     def desactivar_modelo(self, modelo_id: int) -> None:
         self.modelo_model.desactivar(modelo_id)
+        registrar_log("produccion", "eliminar", "modelo", modelo_id)
 
     # -- Variantes --
     def listar_variantes(self, modelo_id: int | None = None) -> list[dict]:
@@ -79,14 +98,22 @@ class ProduccionController:
 
     def crear_variante(self, modelo_id: int, color: str, piel: str, talla: str,
                        codigo_variante: str) -> int:
-        return self.variante_model.crear(modelo_id, color, piel, talla, codigo_variante)
+        variante_id = self.variante_model.crear(modelo_id, color, piel, talla, codigo_variante)
+        registrar_log("produccion", "crear", "variante", variante_id,
+                      datos={"modelo_id": modelo_id, "color": color, "piel": piel,
+                             "talla": talla, "codigo_variante": codigo_variante})
+        return variante_id
 
     def actualizar_variante(self, variante_id: int, modelo_id: int, color: str, piel: str,
                             talla: str, codigo_variante: str) -> None:
         self.variante_model.actualizar(variante_id, modelo_id, color, piel, talla, codigo_variante)
+        registrar_log("produccion", "editar", "variante", variante_id,
+                      datos={"modelo_id": modelo_id, "color": color, "piel": piel,
+                             "talla": talla, "codigo_variante": codigo_variante})
 
     def desactivar_variante(self, variante_id: int) -> None:
         self.variante_model.desactivar(variante_id)
+        registrar_log("produccion", "eliminar", "variante", variante_id)
 
     def listar_tallas(self) -> list[dict]:
         return self.op_model.listar_tallas_corrida()
@@ -97,6 +124,7 @@ class ProduccionController:
 
     def guardar_bom(self, modelo_id: int, insumos: list[dict]) -> None:
         self.bom_model.guardar(modelo_id, insumos)
+        registrar_log("produccion", "editar", "bom", modelo_id, datos={"insumos": insumos})
 
     # -- Órdenes de Producción --
     def listar_ops(self) -> list[dict]:
@@ -120,6 +148,11 @@ class ProduccionController:
         for m in matriz_tallas:
             if m["pares"] > 0:
                 self.op_model.agregar_talla(op_id, m["talla_id"], m["pares"])
+        registrar_log("produccion", "crear", "orden_produccion", op_id,
+                      datos={"folio": folio, "variante_id": variante_id,
+                             "total_pares": total, "fecha_inicio": fecha_inicio,
+                             "fecha_entrega": fecha_entrega, "prioridad": prioridad,
+                             "observaciones": observaciones, "matriz_tallas": matriz_tallas})
         return op_id
 
     def avanzar_estacion(self, op_id: int, estacion_id: int,
@@ -127,6 +160,10 @@ class ProduccionController:
                           observaciones: str = "") -> None:
         self.op_model.avanzar_estacion(op_id, estacion_id, pares_procesados,
                                         pares_defectuosos, observaciones)
+        registrar_log("produccion", "avanzar", "orden_produccion", op_id,
+                      datos={"estacion_id": estacion_id, "pares_procesados": pares_procesados,
+                             "pares_defectuosos": pares_defectuosos,
+                             "observaciones": observaciones})
 
     def verificar_materiales(self, variante_id: int, total_pares: int) -> list[dict]:
         return self.op_model.verificar_materiales(variante_id, total_pares)
