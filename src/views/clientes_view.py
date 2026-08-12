@@ -1,19 +1,17 @@
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QFrame,
-    QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
+    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
     QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.complex_grid import ComplexGrid
+from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import (
-    export_pedido_cliente_excel, export_table_to_excel, print_pedido_cliente, print_table,
-)
-from src.utils.table_utils import NumericItem, configurar_tabla_excel
-from src.views.dialogs import DialogMatrizTallas
+from src.utils.table_utils import configurar_tabla_excel
 from src.views.programar_pedido_dialog import ProgramarPedidoDialog
 
 
@@ -33,23 +31,16 @@ class ClientesView(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.controller = ClientesController()
+        self._permiso_editar = True
         self._setup_ui()
         self._load_pedidos()
         self._load_clientes()
 
     def set_permisos(self, permisos) -> None:
+        self._permiso_editar = tiene(permisos, "clientes", "editar")
         self.btn_nuevo_pedido.setEnabled(tiene(permisos, "clientes", "crear"))
-        self.btn_ver.setEnabled(tiene(permisos, "clientes", "ver"))
-        self.btn_programar.setEnabled(tiene(permisos, "programacion", "editar"))
-        self.btn_estatus.setEnabled(tiene(permisos, "clientes", "editar"))
-        self.btn_cancelar.setEnabled(tiene(permisos, "clientes", "eliminar"))
-        self.btn_export.setEnabled(tiene(permisos, "clientes", "exportar"))
-        self.btn_print.setEnabled(tiene(permisos, "clientes", "exportar"))
+        self.btn_programas.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_nuevo_cli.setEnabled(tiene(permisos, "clientes", "crear"))
-        self.btn_editar_cli.setEnabled(tiene(permisos, "clientes", "editar"))
-        self.btn_desactivar_cli.setEnabled(tiene(permisos, "clientes", "eliminar"))
-        self.btn_reactivar_cli.setEnabled(tiene(permisos, "clientes", "eliminar"))
-        self.btn_export_cli.setEnabled(tiene(permisos, "clientes", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -72,13 +63,13 @@ class ClientesView(QWidget):
         self.btn_nuevo_pedido.setObjectName("btnPrimary")
         self.btn_nuevo_pedido.clicked.connect(self._nuevo_pedido)
 
-        self.btn_clientes = QPushButton("Clientes")
-        self.btn_clientes.setObjectName("btnSecondary")
-        self.btn_clientes.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
+        self.btn_programas = QPushButton("Programas")
+        self.btn_programas.setObjectName("btnPrimary")
+        self.btn_programas.clicked.connect(self._programar_pedido)
 
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_clientes)
+        hlayout.addWidget(self.btn_programas)
         hlayout.addWidget(self.btn_nuevo_pedido)
 
         self.tabs = QTabWidget()
@@ -96,240 +87,104 @@ class ClientesView(QWidget):
         layout = QVBoxLayout(self.tab_pedidos)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.cmb_filtro_cliente = QComboBox()
-        self.cmb_filtro_cliente.setMinimumWidth(200)
-        self.cmb_filtro_cliente.currentIndexChanged.connect(
-            self._aplicar_filtro_pedidos)
-        self._rellenar_filtro_clientes()
-
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar por folio, cliente o modelo...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar_pedidos)
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_pedidos)
-
-        self.btn_ver = QPushButton("Ver Detalle")
-        self.btn_ver.setObjectName("btnSecondary")
-        self.btn_ver.clicked.connect(self._ver_pedido)
-
-        self.btn_programar = QPushButton("Programar")
-        self.btn_programar.setObjectName("btnPrimary")
-        self.btn_programar.clicked.connect(self._programar_pedido)
-
-        self.btn_estatus = QPushButton("Cambiar Estatus")
-        self.btn_estatus.setObjectName("btnSecondary")
-        self.btn_estatus.clicked.connect(self._cambiar_estatus)
-
-        self.btn_cancelar = QPushButton("Cancelar")
-        self.btn_cancelar.setObjectName("btnDanger")
-        self.btn_cancelar.clicked.connect(self._cancelar_pedido)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(self._exportar)
-
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(self._imprimir)
-
-        toolbar.addWidget(QLabel("Cliente:"))
-        toolbar.addWidget(self.cmb_filtro_cliente)
-        toolbar.addWidget(self.txt_buscar)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
-
-        toolbar_acciones = QHBoxLayout()
-        toolbar_acciones.addStretch()
-        toolbar_acciones.addWidget(self.btn_ver)
-        toolbar_acciones.addWidget(self.btn_programar)
-        toolbar_acciones.addWidget(self.btn_estatus)
-        toolbar_acciones.addWidget(self.btn_cancelar)
-        toolbar_acciones.addWidget(self.btn_export)
-        toolbar_acciones.addWidget(self.btn_print)
-        layout.addLayout(toolbar_acciones)
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels(
-            ["Folio", "Cliente", "Fecha Pedido", "Fecha Programado", "Pares", "Estatus", "ID"])
-        self.table.setColumnHidden(6, True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSortingEnabled(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.doubleClicked.connect(self._ver_pedido)
-        layout.addWidget(self.table)
+        self.vista = ComplexGrid()
+        self.vista.set_columnas([
+            {"key": "folio", "titulo": "Folio", "ancho": 110},
+            {"key": "cliente_nombre", "titulo": "Cliente", "ancho": 220},
+            {"key": "fecha_pedido", "titulo": "Fecha Pedido", "ancho": 110},
+            {"key": "fecha_programado", "titulo": "Fecha Programado", "ancho": 120},
+            {"key": "total_pares", "titulo": "Pares", "ancho": 80, "tipo": "numero"},
+            {"key": "estatus", "titulo": "Estatus", "ancho": 120},
+        ])
+        self.vista.set_renderers(fila=self._fila_pedido, claves=self._claves_pedido,
+                                 estilo=self._estilo_pedido)
+        self.vista.set_acciones([
+            {"texto": "Editar", "icono": "editar", "color": "#4f46e5",
+             "habilitado": lambda rec: self._permiso_editar,
+             "callback": self._editar_pedido},
+        ])
+        self.vista.doubleClicked.connect(self._ver_pedido)
+        layout.addWidget(self.vista)
 
     def _setup_tab_clientes(self) -> None:
         layout = QVBoxLayout(self.tab_clientes)
         layout.setContentsMargins(0, 8, 0, 0)
 
         toolbar = QHBoxLayout()
-        self.txt_buscar_cli = QLineEdit()
-        self.txt_buscar_cli.setPlaceholderText("Buscar cliente...")
-        self.txt_buscar_cli.setMinimumWidth(300)
-        self.txt_buscar_cli.textChanged.connect(self._buscar_clientes)
-
-        btn_refresh_cli = QPushButton("Actualizar")
-        btn_refresh_cli.setObjectName("btnPrimary")
-        btn_refresh_cli.clicked.connect(self._load_clientes)
-
+        toolbar.addStretch()
         self.btn_nuevo_cli = QPushButton("+ Nuevo Cliente")
         self.btn_nuevo_cli.setObjectName("btnPrimary")
         self.btn_nuevo_cli.clicked.connect(self._nuevo_cliente)
-        self.btn_editar_cli = QPushButton("Editar")
-        self.btn_editar_cli.setObjectName("btnSecondary")
-        self.btn_editar_cli.clicked.connect(self._editar_cliente)
-        self.btn_desactivar_cli = QPushButton("Desactivar")
-        self.btn_desactivar_cli.setObjectName("btnDanger")
-        self.btn_desactivar_cli.clicked.connect(self._desactivar_cliente)
-        self.btn_reactivar_cli = QPushButton("Reactivar")
-        self.btn_reactivar_cli.setObjectName("btnSecondary")
-        self.btn_reactivar_cli.clicked.connect(self._reactivar_cliente)
-        self.btn_export_cli = QPushButton("Exportar Excel")
-        self.btn_export_cli.setObjectName("btnPrimary")
-        self.btn_export_cli.clicked.connect(self._exportar_clientes)
-
-        toolbar.addWidget(self.txt_buscar_cli)
-        toolbar.addWidget(btn_refresh_cli)
-        toolbar.addStretch()
+        toolbar.addWidget(self.btn_nuevo_cli)
         layout.addLayout(toolbar)
 
-        toolbar_acciones = QHBoxLayout()
-        toolbar_acciones.addStretch()
-        toolbar_acciones.addWidget(self.btn_nuevo_cli)
-        toolbar_acciones.addWidget(self.btn_editar_cli)
-        toolbar_acciones.addWidget(self.btn_desactivar_cli)
-        toolbar_acciones.addWidget(self.btn_reactivar_cli)
-        toolbar_acciones.addWidget(self.btn_export_cli)
-        layout.addLayout(toolbar_acciones)
-
-        self.table_cli = QTableWidget()
-        self.table_cli.setColumnCount(7)
-        self.table_cli.setHorizontalHeaderLabels(
-            ["RFC", "Nombre", "Nombre Comercial", "Teléfono", "Email", "Dirección", "ID"])
-        self.table_cli.setColumnHidden(6, True)
-        self.table_cli.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_cli.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_cli.setSortingEnabled(True)
-        self.table_cli.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_cli)
-        self.table_cli.doubleClicked.connect(self._editar_cliente)
-        layout.addWidget(self.table_cli)
+        self.grid_cli = ComplexGrid()
+        self.grid_cli.set_columnas([
+            {"key": "rfc", "titulo": "RFC", "ancho": 130},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 200},
+            {"key": "nombre_comercial", "titulo": "Nombre Comercial", "ancho": 170},
+            {"key": "telefono", "titulo": "Teléfono", "ancho": 110},
+            {"key": "email", "titulo": "Email", "ancho": 180},
+            {"key": "direccion", "titulo": "Dirección", "ancho": 220},
+        ])
+        self.grid_cli.set_renderers(estilo=self._estilo_cliente)
+        self.grid_cli.doubleClicked.connect(self._editar_cliente)
+        layout.addWidget(self.grid_cli)
 
     # ---- Carga y búsqueda ----
 
     def _load_pedidos(self) -> None:
         try:
-            cliente_id = self.cmb_filtro_cliente.currentData()
-            pedidos = self.controller.listar_pedidos(cliente_id)
-            self.table.setSortingEnabled(False)
-            self.table.setRowCount(len(pedidos))
-            for i, p in enumerate(pedidos):
-                self._set_fila_pedido(i, p)
-            self.table.setSortingEnabled(True)
+            pedidos = self.controller.listar_pedidos()
+            self.vista.set_datos(pedidos)
         except Exception as e:
             print(f"Error: {e}")
 
-    def _set_fila_pedido(self, i: int, p: dict) -> None:
-        self.table.setItem(i, 0, QTableWidgetItem(p.get("folio", "")))
-        self.table.setItem(i, 1, QTableWidgetItem(p.get("cliente_nombre", "")))
-        self.table.setItem(i, 2, QTableWidgetItem(p.get("fecha_pedido", "")))
-        self.table.setItem(i, 3, QTableWidgetItem(p.get("fecha_programado", "") or ""))
-        item_pares = NumericItem(p.get("total_pares", 0))
-        item_pares.setTextAlignment(Qt.AlignCenter)
-        self.table.setItem(i, 4, item_pares)
+    @staticmethod
+    def _fila_pedido(p: dict) -> list[str]:
+        return [
+            p.get("folio", ""),
+            p.get("cliente_nombre", ""),
+            p.get("fecha_pedido", ""),
+            p.get("fecha_programado", "") or "",
+            str(p.get("total_pares", 0)),
+            _fmt_estatus(p.get("estatus", "")),
+        ]
+
+    @staticmethod
+    def _claves_pedido(p: dict) -> list:
+        return [
+            p.get("folio", ""),
+            (p.get("cliente_nombre", "") or "").lower(),
+            p.get("fecha_pedido", ""),
+            p.get("fecha_programado", "") or "",
+            float(p.get("total_pares", 0) or 0),
+            p.get("estatus", ""),
+        ]
+
+    @staticmethod
+    def _estilo_pedido(p: dict, item, col: int) -> None:
+        if col != 5:
+            return
         est = p.get("estatus", "")
-        item_est = QTableWidgetItem(_fmt_estatus(est))
         if est == "surtido":
-            item_est.setForeground(Qt.darkGreen)
+            item.setForeground(Qt.darkGreen)
         elif est == "programado":
-            item_est.setForeground(Qt.darkYellow)
+            item.setForeground(Qt.darkYellow)
         elif est == "cancelado":
-            item_est.setForeground(Qt.red)
-        self.table.setItem(i, 5, item_est)
-        self.table.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            item.setForeground(Qt.red)
 
     def _load_clientes(self) -> None:
         try:
             clientes = self.controller.listar_clientes(solo_activos=False)
-            self.table_cli.setSortingEnabled(False)
-            self.table_cli.setRowCount(len(clientes))
-            for i, c in enumerate(clientes):
-                self._set_fila_cliente(i, c)
-            self.table_cli.setSortingEnabled(True)
-            self._rellenar_filtro_clientes()
+            self.grid_cli.set_datos(clientes)
         except Exception as e:
             print(f"Error: {e}")
 
-    def _set_fila_cliente(self, i: int, c: dict) -> None:
-        self.table_cli.setItem(i, 0, QTableWidgetItem(c.get("rfc", "")))
-        self.table_cli.setItem(i, 1, QTableWidgetItem(c.get("nombre", "")))
-        self.table_cli.setItem(i, 2, QTableWidgetItem(c.get("nombre_comercial", "") or ""))
-        self.table_cli.setItem(i, 3, QTableWidgetItem(c.get("telefono", "") or ""))
-        self.table_cli.setItem(i, 4, QTableWidgetItem(c.get("email", "") or ""))
-        self.table_cli.setItem(i, 5, QTableWidgetItem(c.get("direccion", "") or ""))
-        self.table_cli.setItem(i, 6, QTableWidgetItem(str(c.get("id", ""))))
+    @staticmethod
+    def _estilo_cliente(c: dict, item, col: int) -> None:
         if not c.get("activo"):
-            for col in range(7):
-                item = self.table_cli.item(i, col)
-                if item:
-                    item.setForeground(Qt.gray)
-
-    def _buscar_pedidos(self, texto: str) -> None:
-        if not texto.strip():
-            self._load_pedidos()
-            return
-        try:
-            cliente_id = self.cmb_filtro_cliente.currentData()
-            resultados = self.controller.buscar_pedidos(texto, cliente_id)
-            self.table.setSortingEnabled(False)
-            self.table.setRowCount(len(resultados))
-            for i, p in enumerate(resultados):
-                self._set_fila_pedido(i, p)
-            self.table.setSortingEnabled(True)
-        except Exception as e:
-            print(f"Error: {e}")
-
-    def _aplicar_filtro_pedidos(self) -> None:
-        texto = self.txt_buscar.text().strip()
-        if texto:
-            self._buscar_pedidos(texto)
-        else:
-            self._load_pedidos()
-
-    def _rellenar_filtro_clientes(self) -> None:
-        if not hasattr(self, "cmb_filtro_cliente"):
-            return
-        actual = self.cmb_filtro_cliente.currentData()
-        self.cmb_filtro_cliente.blockSignals(True)
-        self.cmb_filtro_cliente.clear()
-        self.cmb_filtro_cliente.addItem("Todos", None)
-        for c in self.controller.listar_clientes(solo_activos=False):
-            self.cmb_filtro_cliente.addItem(c["nombre"], c["id"])
-        idx = self.cmb_filtro_cliente.findData(actual)
-        self.cmb_filtro_cliente.setCurrentIndex(idx if idx >= 0 else 0)
-        self.cmb_filtro_cliente.blockSignals(False)
-
-    def _buscar_clientes(self, texto: str) -> None:
-        if not texto.strip():
-            self._load_clientes()
-            return
-        try:
-            resultados = self.controller.buscar_clientes(texto)
-            self.table_cli.setSortingEnabled(False)
-            self.table_cli.setRowCount(len(resultados))
-            for i, c in enumerate(resultados):
-                self._set_fila_cliente(i, c)
-            self.table_cli.setSortingEnabled(True)
-        except Exception as e:
-            print(f"Error: {e}")
+            item.setForeground(Qt.gray)
 
     # ---- Acciones de pedidos ----
 
@@ -339,86 +194,36 @@ class ClientesView(QWidget):
             self._load_pedidos()
 
     def _ver_pedido(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.vista.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
             return
-        pedido_id = int(self.table.item(row, 6).text())
-        dlg = _DialogVerPedido(self.controller, pedido_id)
+        dlg = _DialogVerPedido(self.controller, rec["id"])
         dlg.exec()
 
-    def _programar_pedido(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+    def _editar_pedido(self, rec=None) -> None:
+        if rec is None:
+            rec = self.vista.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
             return
-        pedido_id = int(self.table.item(row, 6).text())
+        dlg = _DialogPedidoCliente(self.controller, rec["id"])
+        if dlg.exec():
+            self._load_pedidos()
+
+    def _programar_pedido(self) -> None:
+        rec = self.vista.registro_seleccionado()
+        if rec is None:
+            QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
+            return
         dlg = ProgramarPedidoDialog(self.controller, ProgramacionController(),
-                                    pedido_id, self)
+                                    rec["id"], self)
         if dlg.exec():
             self._load_pedidos()
             folios = ", ".join(dlg.folios_generados)
             QMessageBox.information(
                 self, "Programado",
                 f"Se generaron los folios de programación: {folios}")
-
-    def _cambiar_estatus(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
-            return
-        pedido_id = int(self.table.item(row, 6).text())
-        actual = self.table.item(row, 5).text().lower()
-        opciones = [_ESTATUS[k] for k in ("pendiente", "programado", "surtido")]
-        if actual not in opciones:
-            QMessageBox.warning(self, "Estatus", "Un pedido cancelado no se puede modificar.")
-            return
-        nuevo, ok = QInputDialog.getItem(
-            self, "Cambiar Estatus", "Nuevo estatus del pedido:",
-            opciones, opciones.index(actual) if actual in opciones else 0, False)
-        if ok and nuevo:
-            clave = [k for k, v in _ESTATUS.items() if v == nuevo][0]
-            self.controller.cambiar_estatus(pedido_id, clave)
-            self._load_pedidos()
-
-    def _cancelar_pedido(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
-            return
-        est = self.table.item(row, 5).text().lower()
-        if est in ("cancelado", "surtido"):
-            QMessageBox.warning(self, "Estatus", "Solo se cancelan pedidos pendientes o programados.")
-            return
-        folio = self.table.item(row, 0).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Cancelar el pedido '{folio}'?",
-                                    QMessageBox.Yes | QMessageBox.No)
-        if resp == QMessageBox.Yes:
-            pedido_id = int(self.table.item(row, 6).text())
-            self.controller.cancelar_pedido(pedido_id)
-            self._load_pedidos()
-
-    def _exportar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            path = export_table_to_excel(self.table, "Pedidos_Cliente", self)
-        else:
-            pedido_id = int(self.table.item(row, 6).text())
-            datos = self.controller.obtener_pedido(pedido_id)
-            detalle = self.controller.obtener_detalle_pedido(pedido_id)
-            path = export_pedido_cliente_excel(datos, detalle, self)
-        if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
-
-    def _imprimir(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
-            print_table(self.table, "Pedidos_Cliente", self)
-        else:
-            pedido_id = int(self.table.item(row, 6).text())
-            datos = self.controller.obtener_pedido(pedido_id)
-            detalle = self.controller.obtener_detalle_pedido(pedido_id)
-            print_pedido_cliente(datos, detalle, self)
 
     # ---- Acciones de clientes ----
 
@@ -428,39 +233,13 @@ class ClientesView(QWidget):
             self._load_clientes()
 
     def _editar_cliente(self) -> None:
-        row = self.table_cli.currentRow()
-        if row < 0:
+        rec = self.grid_cli.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un cliente.")
             return
-        cliente_id = int(self.table_cli.item(row, 6).text())
-        dlg = _DialogCliente(self.controller, cliente_id)
+        dlg = _DialogCliente(self.controller, rec["id"])
         if dlg.exec():
             self._load_clientes()
-
-    def _desactivar_cliente(self) -> None:
-        row = self.table_cli.currentRow()
-        if row < 0:
-            return
-        nombre = self.table_cli.item(row, 1).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
-                                    QMessageBox.Yes | QMessageBox.No)
-        if resp == QMessageBox.Yes:
-            cliente_id = int(self.table_cli.item(row, 6).text())
-            self.controller.desactivar_cliente(cliente_id)
-            self._load_clientes()
-
-    def _reactivar_cliente(self) -> None:
-        row = self.table_cli.currentRow()
-        if row < 0:
-            return
-        cliente_id = int(self.table_cli.item(row, 6).text())
-        self.controller.reactivar_cliente(cliente_id)
-        self._load_clientes()
-
-    def _exportar_clientes(self) -> None:
-        path = export_table_to_excel(self.table_cli, "Clientes", self)
-        if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
 
 class _DialogCliente(QDialog):
@@ -562,9 +341,6 @@ class _DialogPedidoCliente(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(14)
 
-        form = QFormLayout()
-        form.setSpacing(10)
-
         self.cmb_cliente = QComboBox()
         for c in self.controller.listar_clientes():
             self.cmb_cliente.addItem(c["nombre"], c["id"])
@@ -572,6 +348,9 @@ class _DialogPedidoCliente(QDialog):
         self.txt_folio = QLineEdit()
         self.txt_folio.setText(self.controller.siguiente_folio())
         self.txt_folio.setReadOnly(True)
+
+        self.txt_folio_pedido = QLineEdit()
+        self.txt_folio_pedido.setPlaceholderText("Folio de pedido del cliente (opcional)")
 
         self.dte_pedido = QDateEdit()
         self.dte_pedido.setCalendarPopup(True)
@@ -588,18 +367,50 @@ class _DialogPedidoCliente(QDialog):
         for k in ("pendiente", "programado", "surtido"):
             self.cmb_estatus.addItem(_ESTATUS[k], k)
 
+        self.txt_suela = QLineEdit()
+        self.txt_suela.setPlaceholderText("Ej: PIEL CARA")
+
+        self.txt_horma = QLineEdit()
+        self.txt_horma.setPlaceholderText("Ej: H-7")
+
         self.txt_obs = QTextEdit()
         self.txt_obs.setPlaceholderText("Observaciones (opcional)")
         self.txt_obs.setMaximumHeight(60)
 
-        form.addRow("Cliente:", self.cmb_cliente)
-        form.addRow("Folio:", self.txt_folio)
-        form.addRow("Fecha pedido:", self.dte_pedido)
-        form.addRow("Fecha programado:", self.dte_programado)
-        form.addRow("", self.chk_sin_programar)
-        form.addRow("Estatus:", self.cmb_estatus)
-        form.addRow("Observaciones:", self.txt_obs)
-        layout.addLayout(form)
+        grp_datos = QGroupBox("Datos del Pedido")
+        grp_datos.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
+        grid_datos = QGridLayout(grp_datos)
+        grid_datos.setHorizontalSpacing(16)
+        grid_datos.setVerticalSpacing(10)
+        grid_datos.setColumnStretch(1, 1)
+        grid_datos.setColumnStretch(3, 1)
+
+        grid_datos.addWidget(QLabel("Cliente:"), 0, 0)
+        grid_datos.addWidget(self.cmb_cliente, 0, 1)
+        grid_datos.addWidget(QLabel("Folio:"), 0, 2)
+        grid_datos.addWidget(self.txt_folio, 0, 3)
+
+        grid_datos.addWidget(QLabel("Folio Pedido:"), 1, 0)
+        grid_datos.addWidget(self.txt_folio_pedido, 1, 1)
+        grid_datos.addWidget(QLabel("Estatus:"), 1, 2)
+        grid_datos.addWidget(self.cmb_estatus, 1, 3)
+
+        grid_datos.addWidget(QLabel("Fecha pedido:"), 2, 0)
+        grid_datos.addWidget(self.dte_pedido, 2, 1)
+        grid_datos.addWidget(QLabel("Fecha programado:"), 2, 2)
+        grid_datos.addWidget(self.dte_programado, 2, 3)
+
+        grid_datos.addWidget(self.chk_sin_programar, 3, 0, 1, 4)
+        layout.addWidget(grp_datos)
+
+        grp_ficha = QGroupBox("Ficha Técnica")
+        grp_ficha.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
+        form_ficha = QFormLayout(grp_ficha)
+        form_ficha.setSpacing(10)
+        form_ficha.addRow("Suela:", self.txt_suela)
+        form_ficha.addRow("Horma:", self.txt_horma)
+        form_ficha.addRow("Observaciones:", self.txt_obs)
+        layout.addWidget(grp_ficha)
 
         det_label = QLabel("Detalle del pedido:")
         det_label.setStyleSheet("font-weight: bold; font-size: 13px;")
@@ -654,6 +465,9 @@ class _DialogPedidoCliente(QDialog):
         if idx >= 0:
             self.cmb_cliente.setCurrentIndex(idx)
         self.txt_folio.setText(pedido.get("folio", ""))
+        self.txt_folio_pedido.setText(pedido.get("folio_pedido", "") or "")
+        self.txt_suela.setText(pedido.get("suela", "") or "")
+        self.txt_horma.setText(pedido.get("horma", "") or "")
         self.dte_pedido.setDate(QDate.fromString(pedido.get("fecha_pedido", "") or "",
                                                  "yyyy-MM-dd"))
         prog = pedido.get("fecha_programado")
@@ -702,9 +516,17 @@ class _DialogPedidoCliente(QDialog):
             self._set_fila(row, dlg.modelo, dlg.piel, dlg.color)
 
     def _configurar_tallas(self, row: int) -> None:
-        dlg = DialogMatrizTallas(self.controller, self._puntos_fila.get(row))
+        puntos = self.controller.listar_puntos()
+        id_por_talla = {p["punto"]: p["id"] for p in puntos}
+        actual = self._puntos_fila.get(row, {})
+        inicial = {p["punto"]: int(actual.get(p["id"], 0) or 0) for p in puntos}
+        dlg = MatrizTallasDialog(puntos=puntos, titulo="TALLAS DEL PEDIDO",
+                                 parent=self)
+        dlg.establecer_valores(inicial)
         if dlg.exec() == QDialog.Accepted:
-            self._puntos_fila[row] = dlg.get_matriz()
+            valores = dlg.obtener_valores()
+            self._puntos_fila[row] = {id_por_talla[t]: n
+                                      for t, n in valores.items() if n > 0}
             self._actualizar_boton_tallas(row)
 
     def _quitar_linea(self) -> None:
@@ -752,15 +574,18 @@ class _DialogPedidoCliente(QDialog):
         fecha_programado = self._fecha_programado()
         estatus = self.cmb_estatus.currentData()
         obs = self.txt_obs.toPlainText().strip()
+        folio_pedido = self.txt_folio_pedido.text().strip()
+        suela = self.txt_suela.text().strip()
+        horma = self.txt_horma.text().strip()
         try:
             if self.pedido_id:
                 self.controller.actualizar_pedido(
                     self.pedido_id, cliente_id, fecha_pedido, fecha_programado,
-                    estatus, obs, detalle)
+                    estatus, obs, detalle, folio_pedido, suela, horma)
             else:
                 self.controller.crear_pedido(
                     folio, cliente_id, fecha_pedido, fecha_programado,
-                    estatus, obs, detalle)
+                    estatus, obs, detalle, folio_pedido, suela, horma)
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
             return
@@ -844,6 +669,11 @@ class _DialogVerPedido(QDialog):
             lineas.append(
                 f"<b>{pedido.get('folio', '')}</b> — {pedido.get('cliente_nombre', '')} "
                 f"({_fmt_estatus(pedido.get('estatus', ''))})")
+            if pedido.get("folio_pedido"):
+                lineas.append(f"Folio pedido: {pedido.get('folio_pedido')}")
+            if pedido.get("suela") or pedido.get("horma"):
+                lineas.append(f"Suela: {pedido.get('suela') or '—'} | "
+                              f"Horma: {pedido.get('horma') or '—'}")
             lineas.append(f"Fecha pedido: {pedido.get('fecha_pedido', '')} | "
                           f"Programado: {pedido.get('fecha_programado') or 'Sin programar'}")
             if pedido.get("observaciones"):
@@ -867,6 +697,9 @@ class _DialogVerPedido(QDialog):
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         configurar_tabla_excel(self.table)
+        fm = self.table.fontMetrics()
+        for j in range(n):
+            self.table.setColumnWidth(3 + j, fm.horizontalAdvance(headers[3 + j]) + 16)
         self.table.setRowCount(len(detalle))
         for i, d in enumerate(detalle):
             por_talla = {int(t["punto_id"]): int(t.get("pares", 0)) for t in d.get("puntos", [])}

@@ -64,17 +64,22 @@ class ClientesController:
 
     def crear_pedido(self, folio: str, cliente_id: int, fecha_pedido: str,
                      fecha_programado: str = "", estatus: str = "pendiente",
-                     observaciones: str = "", detalle: list[dict] | None = None) -> int:
+                     observaciones: str = "", detalle: list[dict] | None = None,
+                     folio_pedido: str = "", suela: str = "", horma: str = "") -> int:
         pedido_id = self.pedido_model.crear(
-            folio, cliente_id, fecha_pedido, fecha_programado, estatus, observaciones)
+            folio, cliente_id, fecha_pedido, fecha_programado, estatus,
+            observaciones, folio_pedido, suela, horma)
         self._guardar_detalle(pedido_id, detalle or [])
         return pedido_id
 
     def actualizar_pedido(self, pedido_id: int, cliente_id: int, fecha_pedido: str,
                           fecha_programado: str = "", estatus: str = "pendiente",
-                          observaciones: str = "", detalle: list[dict] | None = None) -> None:
+                          observaciones: str = "", detalle: list[dict] | None = None,
+                          folio_pedido: str = "", suela: str = "",
+                          horma: str = "") -> None:
         self.pedido_model.actualizar(
-            pedido_id, cliente_id, fecha_pedido, fecha_programado, estatus, observaciones)
+            pedido_id, cliente_id, fecha_pedido, fecha_programado, estatus,
+            observaciones, folio_pedido, suela, horma)
         self.pedido_model.db.execute(
             "DELETE FROM detalle_pedido_cliente WHERE pedido_id = ?", (pedido_id,))
         self._guardar_detalle(pedido_id, detalle or [])

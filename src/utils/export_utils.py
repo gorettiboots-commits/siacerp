@@ -581,6 +581,9 @@ def _pedido_html(datos: dict, detalle: list[dict]) -> str:
     logo_b64 = _logo_base64()
 
     estatus = str(datos.get("estatus", "") or "").replace("_", " ").capitalize()
+    folio_pedido = datos.get("folio_pedido") or ""
+    suela = datos.get("suela") or ""
+    horma = datos.get("horma") or ""
     cliente = datos.get("cliente_nombre") or ""
     telefono = datos.get("cliente_telefono") or ""
     email = datos.get("cliente_email") or ""
@@ -669,8 +672,11 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 </td>
 <td class='no-fecha' style='width:30%'>
   <div>NO. <span class='num'>{_esc(datos.get('folio', ''))}</span></div>
+  {f"<div>FOLIO PEDIDO: <b>{_esc(folio_pedido)}</b></div>" if folio_pedido else ""}
   <div>FECHA PEDIDO: <b>{_fmt_fecha(datos.get('fecha_pedido', ''))}</b></div>
   <div>FECHA PROGRAMADO: <b>{_fmt_fecha(datos.get('fecha_programado', ''))}</b></div>
+  {f"<div>SUELA: <b>{_esc(suela)}</b></div>" if suela else ""}
+  {f"<div>HORMA: <b>{_esc(horma)}</b></div>" if horma else ""}
   <div style='font-size:10px;color:#64748b'>Estatus: {_esc(estatus)}</div>
 </td>
 </tr></table>
@@ -742,10 +748,18 @@ def _write_pedido_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     ws.row_dimensions[1].height = 30
 
     fecha_prog = f"   FECHA PROGRAMADO: {_fmt_fecha(datos.get('fecha_programado', ''))}"
+    folio_pedido = datos.get("folio_pedido") or ""
+    suela = datos.get("suela") or ""
+    horma = datos.get("horma") or ""
+    extras = " ".join(x for x in [
+        f"FOLIO PEDIDO: {folio_pedido}" if folio_pedido else "",
+        f"SUELA: {suela}" if suela else "",
+        f"HORMA: {horma}" if horma else "",
+    ] if x)
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last)
     c = ws.cell(row=2, column=1,
                 value=f"NO. {datos.get('folio', '')}    FECHA PEDIDO: {_fmt_fecha(datos.get('fecha_pedido', ''))}"
-                      f"{fecha_prog}    ESTATUS: {str(datos.get('estatus', '') or '').replace('_', ' ').capitalize()}")
+                      f"{fecha_prog}    {extras}    ESTATUS: {str(datos.get('estatus', '') or '').replace('_', ' ').capitalize()}".replace("    ", " ").strip())
     c.font = Font(size=11)
     c.alignment = Alignment(horizontal="center", vertical="center")
 

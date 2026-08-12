@@ -187,6 +187,26 @@ class DatabaseManager:
             print(f"Migración pedido_id omitida: {e}")
 
         try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(pedidos_cliente)").fetchall()]
+            if 'folio_pedido' not in cols:
+                cursor.execute(
+                    "ALTER TABLE pedidos_cliente ADD COLUMN folio_pedido TEXT NOT NULL DEFAULT ''")
+                print("Migración: columna folio_pedido agregada a pedidos_cliente.")
+            if 'suela' not in cols:
+                cursor.execute(
+                    "ALTER TABLE pedidos_cliente ADD COLUMN suela TEXT NOT NULL DEFAULT ''")
+                print("Migración: columna suela agregada a pedidos_cliente.")
+            if 'horma' not in cols:
+                cursor.execute(
+                    "ALTER TABLE pedidos_cliente ADD COLUMN horma TEXT NOT NULL DEFAULT ''")
+                print("Migración: columna horma agregada a pedidos_cliente.")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración folio_pedido/suela/horma omitida: {e}")
+
+        try:
             conn.commit()
             cursor.execute("PRAGMA foreign_keys=OFF")
 
@@ -296,6 +316,17 @@ class DatabaseManager:
             except Exception:
                 pass
             print(f"Migración tallas/pago omitida: {e}")
+
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) "
+                "VALUES ('programacion', 'crear', 'Crear líneas de programación'), "
+                "('programacion', 'eliminar', 'Eliminar líneas de la programación')")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración permisos programación omitida: {e}")
 
     def _migrar_passwords(self) -> None:
         from src.utils.security import es_hash_bcrypt, hash_contrasena

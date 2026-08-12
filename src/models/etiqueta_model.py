@@ -14,26 +14,33 @@ DATOS_ETIQUETA = [
     ("fecha_prog", "Fecha Prog."),
 ]
 
+ANCHO_ETIQUETA_MM = 76.0
+ALTO_ETIQUETA_MM = 51.0
+
 DEFAULT_DISENO = {
-    "ancho_mm": 76.0,
-    "alto_mm": 51.0,
+    "ancho_mm": ANCHO_ETIQUETA_MM,
+    "alto_mm": ALTO_ETIQUETA_MM,
     "campos": [
-        {"tipo": "texto", "texto": "MODELO:", "x_mm": 7, "y_mm": 8,
-         "size": 13, "bold": True, "visible": True},
-        {"tipo": "dato", "dato": "modelo", "x_mm": 34, "y_mm": 8,
-         "size": 13, "bold": False, "visible": True},
-        {"tipo": "texto", "texto": "CORTE:", "x_mm": 7, "y_mm": 20,
-         "size": 13, "bold": True, "visible": True},
-        {"tipo": "dato", "dato": "corte", "x_mm": 34, "y_mm": 20,
-         "size": 13, "bold": False, "visible": True},
-        {"tipo": "texto", "texto": "COLOR:", "x_mm": 7, "y_mm": 32,
-         "size": 13, "bold": True, "visible": True},
-        {"tipo": "dato", "dato": "color", "x_mm": 34, "y_mm": 32,
-         "size": 13, "bold": False, "visible": True},
-        {"tipo": "texto", "texto": "TALLA:", "x_mm": 7, "y_mm": 42,
-         "size": 14, "bold": True, "visible": True},
-        {"tipo": "dato", "dato": "talla", "x_mm": 34, "y_mm": 42,
-         "size": 16, "bold": True, "visible": True},
+        {"tipo": "dato", "dato": "modelo", "label": "MODELO:",
+         "x_mm": 7, "y_mm": 8, "ancho_mm": 62, "alto_mm": 7,
+         "size": 14, "label_size": 12, "bold": True, "cursiva": False,
+         "alineacion": "izquierda", "borde_visible": False,
+         "borde_grosor_mm": 0.3, "visible": True},
+        {"tipo": "dato", "dato": "corte", "label": "CORTE:",
+         "x_mm": 7, "y_mm": 18, "ancho_mm": 62, "alto_mm": 7,
+         "size": 14, "label_size": 12, "bold": True, "cursiva": False,
+         "alineacion": "izquierda", "borde_visible": False,
+         "borde_grosor_mm": 0.3, "visible": True},
+        {"tipo": "dato", "dato": "color", "label": "COLOR:",
+         "x_mm": 7, "y_mm": 28, "ancho_mm": 62, "alto_mm": 7,
+         "size": 14, "label_size": 12, "bold": True, "cursiva": False,
+         "alineacion": "izquierda", "borde_visible": False,
+         "borde_grosor_mm": 0.3, "visible": True},
+        {"tipo": "dato", "dato": "talla", "label": "TALLA:",
+         "x_mm": 38, "y_mm": 36, "ancho_mm": 32, "alto_mm": 10,
+         "size": 22, "label_size": 10, "bold": True, "cursiva": False,
+         "alineacion": "centro", "borde_visible": True,
+         "borde_grosor_mm": 0.4, "visible": True},
     ],
 }
 

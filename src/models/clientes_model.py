@@ -130,11 +130,14 @@ class PedidoClienteModel:
 
     def crear(self, folio: str, cliente_id: int, fecha_pedido: str,
               fecha_programado: str = "", estatus: str = "pendiente",
-              observaciones: str = "") -> int:
+              observaciones: str = "", folio_pedido: str = "",
+              suela: str = "", horma: str = "") -> int:
         cursor = self.db.execute(
-            "INSERT INTO pedidos_cliente (folio, cliente_id, fecha_pedido, fecha_programado, estatus, observaciones) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (folio, cliente_id, fecha_pedido, fecha_programado, estatus, observaciones),
+            "INSERT INTO pedidos_cliente (folio, folio_pedido, cliente_id, fecha_pedido, "
+            "fecha_programado, estatus, suela, horma, observaciones) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (folio, folio_pedido, cliente_id, fecha_pedido, fecha_programado,
+             estatus, suela, horma, observaciones),
         )
         return cursor.lastrowid
 
@@ -155,11 +158,13 @@ class PedidoClienteModel:
 
     def actualizar(self, pedido_id: int, cliente_id: int, fecha_pedido: str,
                    fecha_programado: str = "", estatus: str = "pendiente",
-                   observaciones: str = "") -> None:
+                   observaciones: str = "", folio_pedido: str = "",
+                   suela: str = "", horma: str = "") -> None:
         self.db.execute(
             "UPDATE pedidos_cliente SET cliente_id=?, fecha_pedido=?, fecha_programado=?, "
-            "estatus=?, observaciones=? WHERE id=?",
-            (cliente_id, fecha_pedido, fecha_programado, estatus, observaciones, pedido_id),
+            "estatus=?, observaciones=?, folio_pedido=?, suela=?, horma=? WHERE id=?",
+            (cliente_id, fecha_pedido, fecha_programado, estatus, observaciones,
+             folio_pedido, suela, horma, pedido_id),
         )
 
     def cambiar_estatus(self, pedido_id: int, estatus: str) -> None:
