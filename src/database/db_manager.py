@@ -1,8 +1,22 @@
 import configparser
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any, Optional
+
+
+def directorio_datos() -> Path:
+    """Directorio de datos de la aplicación (config.ini y BD SQLite).
+
+    En desarrollo es la raíz del proyecto; en el empaquetado (PyInstaller)
+    es %APPDATA%\\SIAC para que los datos no dependan de la carpeta del .exe.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(os.environ.get("APPDATA", str(Path.home()))) / "SIAC"
+        base.mkdir(parents=True, exist_ok=True)
+        return base
+    return Path(__file__).resolve().parent.parent.parent
 
 
 class DatabaseManager:
@@ -23,15 +37,21 @@ class DatabaseManager:
 
     def _load_config(self) -> configparser.ConfigParser:
         config = configparser.ConfigParser()
-        config_path = Path(__file__).resolve().parent.parent.parent / 'config.ini'
-        config.read(str(config_path))
+        ruta = directorio_datos() / 'config.ini'
+        if not ruta.exists():
+            ejemplo = Path(__file__).resolve().parent.parent.parent / 'config.example.ini'
+            if ejemplo.exists():
+                base = configparser.ConfigParser()
+                base.read(str(ejemplo), encoding='utf-8')
+                with open(str(ruta), 'w', encoding='utf-8') as f:
+                    base.write(f)
+        config.read(str(ruta))
         return config
 
     @property
     def db_path(self) -> str:
-        base = Path(__file__).resolve().parent.parent.parent
         sqlite_path = self.config.get('database', 'sqlite_path')
-        return str(base / sqlite_path)
+        return str(directorio_datos() / sqlite_path)
 
     def connect(self) -> Any:
         if self.connection:

@@ -25,6 +25,10 @@ Ordenes_Compra.xlsx
 Movimientos_Inventario.xlsx
 *.pdf
 
+# Empaquetado PyInstaller
+build/
+dist/
+
 # Capturas de preview (pruebas de UI)
 ui_preview/
 
