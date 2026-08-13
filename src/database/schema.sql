@@ -189,15 +189,15 @@ CREATE TABLE IF NOT EXISTS detalle_pedido_cliente (
     FOREIGN KEY (pedido_id) REFERENCES pedidos_cliente(id)
 );
 
--- Pares por punto (talla) por renglón del pedido de cliente
+-- Pares por talla por renglón del pedido de cliente (catálogo unificado RD-1)
 CREATE TABLE IF NOT EXISTS detalle_pedido_cliente_puntos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     detalle_id INTEGER NOT NULL REFERENCES detalle_pedido_cliente(id) ON DELETE CASCADE,
-    punto_id INTEGER NOT NULL REFERENCES puntos_catalogo(id),
+    talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
     pares INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(detalle_id, punto_id),
+    UNIQUE(detalle_id, talla_id),
     FOREIGN KEY (detalle_id) REFERENCES detalle_pedido_cliente(id),
-    FOREIGN KEY (punto_id) REFERENCES puntos_catalogo(id)
+    FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
 );
 
 CREATE TABLE IF NOT EXISTS movimiento_inventario (

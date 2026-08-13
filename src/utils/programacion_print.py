@@ -3,7 +3,13 @@
 Toma una lista de diccionarios con la programación de calzado y genera un
 documento HTML listo para imprimir: @page letter landscape, encabezado con
 fondo rosa (#ffccff), una columna por talla y una fila final de totales en
-negrita. Guarda el HTML y lo abre en el navegador con window.print().
+negrita.
+
+Dos vías de salida:
+    - `generar_html_programacion`: solo genera el HTML (para la vista previa
+      de impresión del sistema, sin autoprint).
+    - `abrir_programacion_html`: guarda el HTML en un temporal y lo abre en
+      el navegador con window.print() (autoprint por defecto).
 """
 import html
 import tempfile
@@ -50,8 +56,14 @@ def _fila_html(valores: list[str], n_texto: int) -> str:
 
 
 def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACIÓN SEMANAL",
-                              incluir_semana: bool = False) -> str:
-    """Genera el HTML de la programación con fila final de totales en negrita."""
+                              incluir_semana: bool = False,
+                              auto_imprimir: bool = True) -> str:
+    """Genera el HTML de la programación con fila final de totales en negrita.
+
+    `auto_imprimir=False` omite el script de window.print(): útil para mostrar
+    el documento en la vista previa de impresión del sistema en lugar de
+    abrirlo en el navegador.
+    """
     tallas = _tallas_ordenadas(lineas)
     total_por_talla: dict[str, int] = {talla: 0 for talla in tallas}
     gran_total = 0
@@ -104,6 +116,13 @@ def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACIÓN S
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+    script_autoprint = "" if not auto_imprimir else (
+        "<script>\n"
+        "window.addEventListener('load', function () {\n"
+        "  setTimeout(function () { window.print(); }, 400);\n"
+        "});\n"
+        "</script>")
+
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -141,11 +160,7 @@ table.prog tr:nth-child(even) td {{ background: #fdf2ff; }}
 </tbody>
 </table>
 <div class="footer">Goretti ERP — Impresión Carta horizontal</div>
-<script>
-window.addEventListener('load', function () {{
-  setTimeout(function () {{ window.print(); }}, 400);
-}});
-</script>
+{script_autoprint}
 </body>
 </html>"""
 

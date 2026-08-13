@@ -103,15 +103,20 @@ class PedidoClienteModel:
         return self._con_puntos(detalle)
 
     def _con_puntos(self, detalle: list[dict]) -> list[dict]:
+        """Adjunta los pares por talla usando el catálogo unificado (RD-1).
+
+        Conserva las claves históricas `punto`/`punto_id` (la talla y su id en
+        `tallas_catalogo`) para no romper a los consumidores existentes.
+        """
         if not detalle:
             return detalle
         ids = ",".join(str(d["id"]) for d in detalle)
         rows = self.db.fetch_all(
-            f"""SELECT dt.detalle_id, dt.pares, pc.punto, pc.id as punto_id, pc.orden
+            f"""SELECT dt.detalle_id, dt.pares, t.talla AS punto, t.id AS punto_id
                 FROM detalle_pedido_cliente_puntos dt
-                JOIN puntos_catalogo pc ON pc.id = dt.punto_id
+                JOIN tallas_catalogo t ON t.id = dt.talla_id
                 WHERE dt.detalle_id IN ({ids})
-                ORDER BY pc.orden"""
+                ORDER BY CAST(t.talla AS REAL), t.talla"""
         )
         por_detalle: dict[int, list[dict]] = {}
         for r in rows:
@@ -119,14 +124,16 @@ class PedidoClienteModel:
                 "punto_id": r["punto_id"],
                 "punto": r["punto"],
                 "pares": r["pares"],
-                "orden": r["orden"],
             })
         for d in detalle:
             d["puntos"] = por_detalle.get(d["id"], [])
         return detalle
 
     def listar_puntos(self) -> list[dict]:
-        return self.db.fetch_all("SELECT * FROM puntos_catalogo WHERE activo = 1 ORDER BY orden")
+        """Tallas activas del catálogo unificado (alias `punto` = talla)."""
+        return self.db.fetch_all(
+            "SELECT id, talla AS punto, activo FROM tallas_catalogo "
+            "WHERE activo = 1 ORDER BY CAST(talla AS REAL), talla")
 
     def crear(self, folio: str, cliente_id: int, fecha_pedido: str,
               fecha_programado: str = "", estatus: str = "pendiente",
@@ -151,7 +158,7 @@ class PedidoClienteModel:
         for p in (puntos or []):
             if p.get("pares", 0) > 0:
                 self.db.execute(
-                    "INSERT OR REPLACE INTO detalle_pedido_cliente_puntos (detalle_id, punto_id, pares) VALUES (?, ?, ?)",
+                    "INSERT OR REPLACE INTO detalle_pedido_cliente_puntos (detalle_id, talla_id, pares) VALUES (?, ?, ?)",
                     (detalle_id, p["punto_id"], p["pares"]),
                 )
         return detalle_id

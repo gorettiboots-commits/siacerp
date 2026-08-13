@@ -5,10 +5,11 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.preview_impresion import PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel
-from src.utils.programacion_print import abrir_programacion_html
+from src.utils.programacion_print import generar_html_programacion
 from src.utils.ui_helpers import crear_tarjeta
 from src.views.etiqueta_prueba_dialog import EtiquetaPruebaDialog
 from src.views.etiquetas_dialog import EtiquetasDialog
@@ -447,10 +448,15 @@ class ProgramacionView(QWidget):
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
     def _imprimir(self) -> None:
+        """Vista previa de impresión del reporte (PreviewImpresion)."""
         es_todas = self.cmb_semana.currentData() is None
         titulo = f"PROGRAMACIÓN SEMANAL — {self.cmb_semana.currentText()}"
-        abrir_programacion_html(self._lineas_actuales, titulo=titulo,
-                                incluir_semana=es_todas)
+        html = generar_html_programacion(
+            self._lineas_actuales, titulo=titulo,
+            incluir_semana=es_todas, auto_imprimir=False)
+        dlg = PreviewImpresion(html, titulo=titulo, parent=self)
+        dlg.cmb_orientacion.setCurrentText("Horizontal")
+        dlg.exec()
 
     def _imprimir_etiquetas(self) -> None:
         dlg = EtiquetasDialog(self.controller, self)
