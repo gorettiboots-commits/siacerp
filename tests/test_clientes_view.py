@@ -17,6 +17,7 @@ from src.views.clientes_view import (
     ClientesView, _aplicar_estilo_forms, _DialogCliente,
     _DialogLineaPedido, _DialogPedidoCliente,
 )
+from src.views.programar_pedido_dialog import ProgramarPedidoDialog
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
@@ -198,6 +199,38 @@ class TestLineaConTallas:
         dlg._save()
         assert dlg.pares == {}
         dlg.deleteLater()
+
+
+# ------------------------------------------- Corrida visible en programación
+class TestCorridaVisibleProgramacion:
+    def test_columna_corrida_muestra_rango_capturado(self, controller):
+        puntos = controller.listar_puntos()
+        assert len(puntos) >= 2, "se requieren al menos dos tallas"
+        t1, t2 = puntos[0], puntos[1]
+        cliente_id = controller.crear_cliente("Cliente Corrida")
+        pedido_id = controller.crear_pedido(
+            controller.siguiente_folio(), cliente_id, "2026-08-13",
+            estatus="pendiente",
+            detalle=[{"modelo": "MODELO PRUEBA", "piel": "PIEL",
+                      "color": "COLOR",
+                      "puntos": [{"punto_id": t1["id"], "pares": 3},
+                                 {"punto_id": t2["id"], "pares": 2}]}])
+        try:
+            prog = ProgramacionController()
+            dlg = ProgramarPedidoDialog(controller, prog, pedido_id)
+            recs = dlg._detalle_recs
+            assert recs and recs[0]["corrida_cap"]
+            assert "del" in recs[0]["corrida_cap"]
+            assert dlg._texto_corrida_rango(recs[0]) == recs[0]["corrida_cap"]
+            dlg.deleteLater()
+        finally:
+            controller.pedido_model.db.execute(
+                "DELETE FROM detalle_pedido_cliente WHERE pedido_id = ?",
+                (pedido_id,))
+            controller.pedido_model.db.execute(
+                "DELETE FROM pedidos_cliente WHERE id = ?", (pedido_id,))
+            controller.cliente_model.db.execute(
+                "DELETE FROM clientes WHERE id = ?", (cliente_id,))
 
 
 # ------------------------------------------------- Integración con el grid
