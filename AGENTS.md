@@ -65,7 +65,7 @@ requieren tarea aprobada y migración.
 | **RD-1** | **Unificar puntos y tallas** en un solo catálogo: **`tallas_catalogo`**. Son la misma cosa; en calzado se avanza de medio en medio punto. Se configura con generación en serie "de X a Y talla" (**corrida** = rango de tallas). **Sin campo `orden`**: el orden se deriva del valor numérico. Caso particular: la **compra de suela** se maneja por **puntos cerrados** (se capturan solo las tallas que apliquen en la matriz). | ✅ Aplicada (`tallas_catalogo`) |
 | **RD-2** | **Módulo Clientes y Pedidos** (próxima versión): pedidos de clientes que pueden **programarse** e integrarse en una **programación semanal**; la programación semanal alimentará las **órdenes de producción**. Alcance aún por definir con el cliente. Traerá sus propios estatus. | 🚧 Próximamente |
 | **RD-3** | **Diseñador e impresor de etiquetas**: herramienta existente en otra terminal de trabajo (fuera de este repositorio por ahora). | 🔧 Externo |
-| **RD-4** | **Git**: se hizo merge de `productivo1` → `main`; `main` = versión oficial hasta el primer release. Después: **rama por tarea** + PR hacia `productivo1` y `main`. El CI escucha ambas ramas. | ✅ Aplicada (commit e1341c0) |
+| **RD-4** | **Git**: dos líneas de equipo (`Goretti_Prd` para este equipo y otra rama para el segundo equipo) que se fusionan periódicamente a `main` (versión oficial). Trabajo diario en `Goretti_Prd`; cambios grandes vía rama por tarea hacia `Goretti_Prd`. | ✅ Aplicada |
 | **RD-5** | **Motor BD**: **PostgreSQL** como motor de producción; **SQLite** se conserva para desarrollo/local (se mantiene compatibilidad dual). Futuro: **Supabase** para sincronización de datos entre estaciones de trabajo. | 🎯 PostgreSQL ahora; Supabase futuro |
 | **RD-6** | **Pruebas**: todo control/componente aprobado desde el Sandbox **DEBE** incluir su prueba `pytest` antes de registrarse en el catálogo. | ✅ Vigente (regla C-07) |
 | **RD-7** | **Archivos de raíz** (`sitio web/`, `video.mp4`, `default.jpg`, `logo.png`) son **parte del proyecto** y se documentan (sección 3.1). `opencode.json` contiene **credenciales** y NO se sube a git. | ✅ Documentado |
@@ -369,6 +369,8 @@ lo apruebe.
 | `odoo_list` | Vista de listado con alternador tabla/lista/iconos (tarjetas), columnas ordenables y selección/doble clic configurable |
 | `matriz_tallas` | Matriz de tallas por bloques: encabezado negro/texto blanco, filas de captura, navegación Enter/Tab y celdas sin flechas numéricas |
 | `complexGrid` | Tabla de datos con búsqueda, filtros, agrupación, vistas lista/iconos/tabla, acciones por registro y exportación Excel/PDF/Imprimir |
+| `date_picker` | Selector de fecha con calendario emergente (formato dd/MM/yyyy, conversión ISO para BD) |
+| `campo_historico` | Campo de texto con histórico de capturas (`historico_campos`): al enfocar/clic despliega el histórico del campo y autocompleta; registra la captura al salir. Incluye `InstaladorHistorico` para aplicarlo a todo el sistema |
 
 ---
 
@@ -433,10 +435,14 @@ lo apruebe.
 
 ## 11. Git y repositorio
 
-- **[REGLAS G-01]** **Flujo git (decisión RD-4):** se hizo merge de
-  `productivo1` → `main`; `main` es la **versión oficial** hasta el primer
-  release. Después del release: **rama por tarea** (`feature/nombre`) + PR
-  hacia `productivo1` y `main`. El CI escucha `productivo1` y `main`.
+- **[REGLAS G-01]** **Flujo git:** la línea de trabajo de **este equipo** es
+  `Goretti_Prd` (NO es `main`). Existe un **segundo equipo** con su propia
+  línea (otra rama); periódicamente se hacen merges para pasar los cambios a
+  `main`, que es la **versión oficial**. Trabajo diario: commits directos en
+  `Goretti_Prd` (y, para cambios grandes, rama por tarea `feature/nombre`
+  hacia `Goretti_Prd`). La integración a `main` se hace mediante merge
+  periódico de `Goretti_Prd` (y de la línea del otro equipo) — no empujar a
+  `main` por cuenta propia sin orden del responsable.
 - **[REGLAS G-02]** **PROHIBIDO** subir `config.ini` (puede contener
   credenciales), `goretti_erp.db` o datos de producción.
 - **[REGLAS G-03]** Mensajes de commit en español, descriptivos del cambio

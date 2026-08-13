@@ -51,13 +51,20 @@ registrar_componente(
     "ordenables y selección/doble clic configurable.",
 )
 
-from src.components.tallas_matrix import MatrizTallasDialog  # noqa: E402
+from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget  # noqa: E402
 
 registrar_componente(
     "matriz_tallas",
     MatrizTallasDialog,
     "Matriz de tallas por bloques: encabezado negro/texto blanco, filas de "
     "captura con navegación Enter/Tab y celdas sin flechas numéricas.",
+)
+
+registrar_componente(
+    "matriz_tallas_widget",
+    MatrizTallasWidget,
+    "Control embebido de matriz de tallas por bloques (sin diálogo) con "
+    "captura por celdas, navegación Enter/Tab y señales de cambio.",
 )
 
 from src.components.complex_grid import ComplexGrid  # noqa: E402
@@ -78,4 +85,60 @@ registrar_componente(
     "Vista previa de impresión WYSIWYG para reportes HTML: hoja simulada con "
     "proporción real de página, zoom, tamaño de página, orientación, "
     "impresión y exportación a PDF por la misma vía que los reportes.",
+)
+
+from src.components.editor_etiqueta import LabelCanvas, PanelPropiedadesCampo  # noqa: E402
+
+registrar_componente(
+    "label_canvas",
+    LabelCanvas,
+    "Lienzo interactivo de diseño de etiqueta: render en tiempo real y "
+    "arrastre (drag & drop) de elementos con el mouse.",
+)
+
+registrar_componente(
+    "label_campo_props",
+    PanelPropiedadesCampo,
+    "Panel de propiedades del elemento de etiqueta: coordenadas, dimensiones, "
+    "borde, tipografía, alineación y visibilidad.",
+)
+
+from src.components.editor_etiqueta_widget import (  # noqa: E402
+    DialogoEditorEtiqueta, EditorEtiquetaWidget,
+)
+
+registrar_componente(
+    "editor_etiqueta",
+    EditorEtiquetaWidget,
+    "Creador/editor de etiquetas estilo Windows Forms: lienzo interactivo, "
+    "tamaño de lienzo en mm, controles de campos (texto/dato/duplicar/quitar) "
+    "y guardado de diseños con nombre en la base de datos (etiqueta_config).",
+)
+
+registrar_componente(
+    "editor_etiqueta_dialog",
+    DialogoEditorEtiqueta,
+    "Diálogo a pantalla completa con el editor de etiquetas aprobado; botón "
+    "Cerrar para salir. Ideal para abrir desde los módulos sin que los datos "
+    "se vean pequeños.",
+)
+
+from src.components.date_picker import DatePicker  # noqa: E402
+
+registrar_componente(
+    "date_picker",
+    DatePicker,
+    "Selector de fecha con calendario emergente: formato dd/MM/yyyy, "
+    "conversión ISO para base de datos (fecha_bd / establecer_fecha_bd).",
+)
+
+from src.components.campo_historico import CampoHistorico  # noqa: E402
+
+registrar_componente(
+    "campo_historico",
+    CampoHistorico,
+    "Campo de texto con histórico de capturas: al enfocar/hacer clic despliega "
+    "el histórico del campo y autocompleta mientras se escribe; registra la "
+    "captura al salir del campo. Incluye InstaladorHistorico para aplicarlo a "
+    "todo el sistema.",
 )

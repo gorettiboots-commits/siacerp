@@ -1,15 +1,12 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
+    QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTabWidget,
     QVBoxLayout, QWidget,
 )
 
+from src.components.complex_grid import ComplexGrid
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.odoo_list import OdooListView
-from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogInsumo, DialogMovimientoStock
 
 
@@ -29,6 +26,8 @@ class StockView(QWidget):
         self.btn_print.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.btn_export_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.btn_print_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
+        self.vista.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
+        self.grid_mov.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -53,23 +52,22 @@ class StockView(QWidget):
         self.btn_movimiento = QPushButton("Movimiento")
         self.btn_movimiento.setObjectName("btnWarning")
         self.btn_movimiento.clicked.connect(self._registrar_movimiento)
-        self.btn_stock_bajo = QPushButton("Alertas")
-        self.btn_stock_bajo.setObjectName("btnDanger")
-        self.btn_stock_bajo.clicked.connect(self._mostrar_stock_bajo)
 
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_stock_bajo)
         hlayout.addWidget(self.btn_movimiento)
         hlayout.addWidget(self.btn_nuevo)
 
         self.tabs = QTabWidget()
         self.tab_insumos = QWidget()
         self.tab_movimientos = QWidget()
+        self.tab_alertas = QWidget()
         self.tabs.addTab(self.tab_insumos, "Insumos")
         self.tabs.addTab(self.tab_movimientos, "Movimientos")
+        self.tabs.addTab(self.tab_alertas, "Alertas")
         self._setup_tab_insumos()
         self._setup_tab_movimientos()
+        self._setup_tab_alertas()
         layout.addWidget(header)
         layout.addWidget(self.tabs)
 
@@ -78,11 +76,6 @@ class StockView(QWidget):
         layout.setContentsMargins(0, 8, 0, 0)
 
         toolbar = QHBoxLayout()
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar insumo por código, nombre o categoría...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar)
-
         self.btn_editar = QPushButton("Editar")
         self.btn_editar.setObjectName("btnSecondary")
         self.btn_editar.clicked.connect(self._editar_insumo)
@@ -101,7 +94,6 @@ class StockView(QWidget):
         btn_refresh.setObjectName("btnPrimary")
         btn_refresh.clicked.connect(self._load_insumos)
 
-        toolbar.addWidget(self.txt_buscar)
         toolbar.addWidget(btn_refresh)
         toolbar.addStretch()
         toolbar.addWidget(self.btn_editar)
@@ -110,7 +102,15 @@ class StockView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.vista = OdooListView(["Código", "Nombre", "Categoría", "Unidad", "Stock Actual", "Stock Mínimo"])
+        self.vista = ComplexGrid()
+        self.vista.set_columnas([
+            {"key": "codigo", "titulo": "Código", "ancho": 120},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 220},
+            {"key": "categoria", "titulo": "Categoría", "ancho": 140},
+            {"key": "unidad_medida", "titulo": "Unidad", "ancho": 90},
+            {"key": "stock_actual", "titulo": "Stock Actual", "ancho": 110, "tipo": "numero"},
+            {"key": "stock_minimo", "titulo": "Stock Mínimo", "ancho": 110, "tipo": "numero"},
+        ])
         self.vista.set_renderers(
             fila=self._fila_insumo,
             claves=self._claves_insumo,
@@ -137,19 +137,47 @@ class StockView(QWidget):
         toolbar.addWidget(self.btn_print_mov)
         layout.addLayout(toolbar)
 
-        self.table_mov = QTableWidget()
-        self.table_mov.setColumnCount(6)
-        self.table_mov.setHorizontalHeaderLabels([
-            "Fecha", "Insumo", "Tipo", "Cantidad", "Referencia", "Observaciones"
+        self.grid_mov = ComplexGrid()
+        self.grid_mov.set_columnas([
+            {"key": "created_at", "titulo": "Fecha", "ancho": 150},
+            {"key": "insumo_nombre", "titulo": "Insumo", "ancho": 200},
+            {"key": "tipo_movimiento", "titulo": "Tipo", "ancho": 100},
+            {"key": "cantidad", "titulo": "Cantidad", "ancho": 100, "tipo": "numero"},
+            {"key": "referencia_tipo", "titulo": "Referencia", "ancho": 130},
+            {"key": "observaciones", "titulo": "Observaciones", "ancho": 240},
         ])
-        self.table_mov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_mov.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_mov.setAlternatingRowColors(True)
-        self.table_mov.horizontalHeader().setStretchLastSection(True)
-        self.table_mov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_mov)
-        self.table_mov.setStyleSheet(self.vista.table.styleSheet())
-        layout.addWidget(self.table_mov)
+        self.grid_mov.set_renderers(fila=self._fila_mov, claves=self._claves_mov)
+        layout.addWidget(self.grid_mov)
+
+    def _setup_tab_alertas(self) -> None:
+        layout = QVBoxLayout(self.tab_alertas)
+        layout.setContentsMargins(0, 8, 0, 0)
+
+        toolbar = QHBoxLayout()
+        btn_refresh_al = QPushButton("Actualizar")
+        btn_refresh_al.setObjectName("btnPrimary")
+        btn_refresh_al.clicked.connect(self._load_alertas)
+        toolbar.addWidget(btn_refresh_al)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        self.grid_alertas = ComplexGrid()
+        self.grid_alertas.set_columnas([
+            {"key": "codigo", "titulo": "Código", "ancho": 120},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 220},
+            {"key": "categoria", "titulo": "Categoría", "ancho": 140},
+            {"key": "unidad_medida", "titulo": "Unidad", "ancho": 90},
+            {"key": "stock_actual", "titulo": "Stock Actual", "ancho": 110, "tipo": "numero"},
+            {"key": "stock_minimo", "titulo": "Stock Mínimo", "ancho": 110, "tipo": "numero"},
+        ])
+        self.grid_alertas.set_renderers(
+            fila=self._fila_insumo,
+            claves=self._claves_insumo,
+            estilo=self._estilo_alertas,
+            tarjeta=self._tarjeta_alertas,
+            lista=self._lista_insumo,
+        )
+        layout.addWidget(self.grid_alertas)
 
     def _fila_insumo(self, ins: dict) -> list[str]:
         return [
@@ -194,37 +222,41 @@ class StockView(QWidget):
             f"{ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')}",
         )
 
+    def _fila_mov(self, m: dict) -> list[str]:
+        return [
+            m.get("created_at", ""),
+            m.get("insumo_nombre", ""),
+            m.get("tipo_movimiento", "").capitalize(),
+            str(m.get("cantidad", 0)),
+            m.get("referencia_tipo", "") or "",
+            m.get("observaciones", "") or "",
+        ]
+
+    def _claves_mov(self, m: dict) -> list:
+        return [
+            m.get("created_at", ""),
+            m.get("insumo_nombre", ""),
+            m.get("tipo_movimiento", ""),
+            float(m.get("cantidad", 0) or 0),
+            m.get("referencia_tipo", "") or "",
+            m.get("observaciones", "") or "",
+        ]
+
     def _load_insumos(self) -> None:
         try:
             insumos = self.controller.listar_insumos()
             self.vista.set_datos(insumos)
             self._load_movimientos()
+            self._load_alertas()
         except Exception as e:
             print(f"Error: {e}")
 
     def _load_movimientos(self) -> None:
         try:
             movs = self.controller.listar_movimientos()
-            self.table_mov.setRowCount(len(movs))
-            for i, m in enumerate(movs):
-                self.table_mov.setItem(i, 0, QTableWidgetItem(m.get("created_at", "")))
-                self.table_mov.setItem(i, 1, QTableWidgetItem(m.get("insumo_nombre", "")))
-                self.table_mov.setItem(i, 2, QTableWidgetItem(m.get("tipo_movimiento", "").capitalize()))
-                self.table_mov.setItem(i, 3, QTableWidgetItem(str(m.get("cantidad", 0))))
-                self.table_mov.setItem(i, 4, QTableWidgetItem(m.get("referencia_tipo", "") or ""))
-                self.table_mov.setItem(i, 5, QTableWidgetItem(m.get("observaciones", "") or ""))
+            self.grid_mov.set_datos(movs)
         except Exception as e:
             print(f"Error movimientos: {e}")
-
-    def _buscar(self, texto: str) -> None:
-        if not texto.strip():
-            self._load_insumos()
-            return
-        try:
-            resultados = self.controller.buscar_insumos(texto)
-            self.vista.set_datos(resultados)
-        except Exception as e:
-            print(f"Error búsqueda: {e}")
 
     def _nuevo_insumo(self) -> None:
         dlg = DialogInsumo(self.controller)
@@ -257,28 +289,35 @@ class StockView(QWidget):
         if dlg.exec():
             self._load_insumos()
 
-    def _mostrar_stock_bajo(self) -> None:
-        bajos = self.controller.stock_bajo()
-        if not bajos:
-            QMessageBox.information(self, "Stock", "No hay insumos con stock bajo.")
-            return
-        msg = "=== INSUMOS CON STOCK BAJO ===\n\n"
-        for ins in bajos:
-            msg += f"{ins['codigo']} - {ins['nombre']}: {ins['stock_actual']} / {ins['stock_minimo']} {ins['unidad_medida']}\n"
-        QMessageBox.warning(self, f"Alertas de Stock ({len(bajos)})", msg)
+    def _load_alertas(self) -> None:
+        try:
+            bajos = self.controller.stock_bajo()
+            self.grid_alertas.set_datos(bajos)
+        except Exception as e:
+            print(f"Error alertas: {e}")
+
+    def _estilo_alertas(self, ins: dict, item, col: int) -> None:
+        item.setForeground(Qt.red)
+
+    def _tarjeta_alertas(self, ins: dict) -> dict:
+        stock = ins.get("stock_actual", 0)
+        stock_min = ins.get("stock_minimo", 0)
+        unidad = ins.get("unidad_medida", "")
+        return {
+            "tile": "inventario",
+            "titulo": ins.get("nombre", ""),
+            "subtitulo": f"{ins.get('codigo', '')} · {ins.get('categoria', '')}",
+            "badge": f"{stock}/{stock_min} {unidad}",
+        }
 
     def _exportar_insumos(self) -> None:
-        path = export_table_to_excel(self.vista.table, "Insumos", self)
-        if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+        self.vista.exportar_excel()
 
     def _imprimir_insumos(self) -> None:
-        print_table(self.vista.table, "Insumos", self)
+        self.vista.imprimir()
 
     def _exportar_movimientos(self) -> None:
-        path = export_table_to_excel(self.table_mov, "Movimientos_Inventario", self)
-        if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+        self.grid_mov.exportar_excel()
 
     def _imprimir_movimientos(self) -> None:
-        print_table(self.table_mov, "Movimientos_Inventario", self)
+        self.grid_mov.imprimir()

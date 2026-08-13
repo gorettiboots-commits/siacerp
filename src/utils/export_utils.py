@@ -119,12 +119,19 @@ Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derech
 
 
 def _logo_base64() -> str:
-    logo_path = Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.png"
-    if not logo_path.exists():
-        return ""
+    """Logo del membrete en base64: prefiere `logonew.png` de la raíz del
+    proyecto (membrete actual); si no existe, usa `views/assets/logo.png`."""
+    raiz = Path(__file__).resolve().parent.parent.parent
+    candidatos = [
+        raiz / "logonew.png",
+        Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.png",
+    ]
     import base64
-    with open(str(logo_path), "rb") as f:
-        return base64.b64encode(f.read()).decode()
+    for ruta in candidatos:
+        if ruta.exists():
+            with open(str(ruta), "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    return ""
 
 
 def _fmt_fecha(fecha: str) -> str:
@@ -196,11 +203,19 @@ def _oc_totales(detalle: list[dict], solo_remision: bool) -> tuple[float, float,
 
 
 def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
+    """Recibo de OC con el diseño aprobado en el Sandbox (ondas menta/salvia).
+
+    Cabecera y pie con ondas superpuestas (curvas S) a todo lo ancho: menta
+    pálido #D4EDEA de fondo y salvia #A9C5C1 al frente, en hoja carta vertical.
+    Fondo #f0f0f0, tipografía sans-serif; los insumos quedan justificados a la
+    izquierda y los precios alineados a la derecha. El pie queda anclado al
+    fondo de la hoja. Incluye el membrete `logonew.png` de la raíz del proyecto
+    y el área de Observaciones cuando la orden las tiene.
+    """
     from datetime import datetime
 
     solo_remision = bool(datos.get("solo_remision"))
-    titulo = "REMI-SIÓN - ORDEN DE COMPRA" if solo_remision else \
-        "RECIBO DE COMPRA - ORDEN DE COMPRA"
+    titulo = "REMI-SIÓN - ORDEN DE COMPRA" if solo_remision else "RECIBO DE COMPRA"
     subtotal, iva, total = _oc_totales(detalle, solo_remision)
     columnas = _oc_columnas_tallas(detalle)
     logo_b64 = _logo_base64()
@@ -215,7 +230,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     logo_html = ""
     if logo_b64:
         logo_html = (f'<img src="data:image/png;base64,{logo_b64}" '
-                     f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
+                     f'style="max-width:110px;max-height:110px;vertical-align:middle;margin-right:10px"/>')
 
     th_tallas = "".join(
         f"<th>{_esc('#')}{_esc(c['talla'])}</th>" for c in columnas)
@@ -225,7 +240,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
         por_talla = {int(t["talla_id"]): int(t.get("pares", 0) or 0)
                      for t in d.get("tallas", [])}
         celdas = "".join(
-            f"<td class='td-num'>{por_talla.get(int(c['talla_id']), 0) or ''}</td>"
+            f"<td>{por_talla.get(int(c['talla_id']), 0) or ''}</td>"
             for c in columnas)
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
@@ -233,146 +248,165 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
         rows += f"""<tr>
             <td style='text-align:left'>{_esc(d.get('insumo_nombre', ''))}</td>
             {celdas}
-            <td class='td-num'>{cant}</td>
-            <td class='td-der'>${precio:,.2f}</td>
-            <td class='td-der'>${sub:,.2f}</td>
+            <td>{cant}</td>
+            <td style='text-align:right'>${precio:,.2f}</td>
+            <td style='text-align:right;font-weight:600'>${sub:,.2f}</td>
         </tr>"""
 
     filas_iva = ""
     if not solo_remision:
-        filas_iva = f"""<tr>
-            <td class='lbl'>IVA (16%)</td>
-            <td class='val'>${iva:,.2f}</td>
-        </tr>"""
+        filas_iva = (
+            f"<tr><td>IVA (16%)</td><td class='val'>${iva:,.2f}</td></tr>")
 
-    datos_proveedor = [l for l in [
+    lineas_proveedor = [l for l in [
         _esc(proveedor),
         (f"Tel: {_esc(telefono)}" if telefono else ""),
         (f"Email: {_esc(email)}" if email else ""),
         (f"RFC: {_esc(rfc)}" if rfc else ""),
         (f"Dirección: {_esc(direccion)}" if direccion else ""),
     ] if l]
-
     vendido_html = "".join(
-        f"<div class='{'empresa' if i == 0 else 'sub'}'>"
-        f"{l}</div>" for i, l in enumerate(datos_proveedor))
+        f"<div style='{'font-size:15px;font-weight:700;color:#2f4f3a' if i == 0 else 'color:#5b6b60;font-size:12px'}'>"
+        f"{l}</div>" for i, l in enumerate(lineas_proveedor))
 
-    info_pago = [l for l in [
-        _esc(proveedor),
-        (f"Tel: {_esc(telefono)}" if telefono else ""),
-        (f"Email: {_esc(email)}" if email else ""),
-    ] if l]
-    info_pago_html = "".join(f"<div>{l}</div>" for l in info_pago)
+    obs_html = ""
+    observaciones = str(datos.get("observaciones") or "").strip()
+    if observaciones:
+        obs_html = f"""<div class='bloque obs'>
+    <div class='lbl'>Observaciones</div>
+    <div class='texto'>{_esc(observaciones).replace(chr(10), '<br/>')}</div>
+  </div>"""
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset='utf-8'/><style>
-@page {{ margin: 14mm; }}
-body {{ font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #1f2937; margin: 0; }}
-.encabezado {{ border-bottom: 3px solid #1d4ed8; padding-bottom: 10px; }}
-.encabezado table {{ width: 100%; border-collapse: collapse; }}
-.encabezado td {{ vertical-align: middle; }}
-.marca {{ font-size: 26px; font-weight: bold; color: #1d4ed8; letter-spacing: 2px; }}
-.titulo {{ font-size: 17px; font-weight: bold; color: #1f2937; }}
-.titulo2 {{ font-size: 11px; color: #64748b; margin-top: 3px; }}
-.no-fecha {{ text-align: right; font-size: 12px; color: #1f2937; }}
-.no-fecha .num {{ font-size: 15px; font-weight: bold; color: #1d4ed8; }}
-.vendido {{ border: 1px solid #cbd5e1; border-left: 4px solid #1d4ed8; padding: 10px 14px; margin-top: 14px; }}
-.vendido .lbl {{ font-weight: bold; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }}
-.vendido .empresa {{ font-size: 15px; font-weight: bold; color: #1f2937; }}
-.vendido .sub {{ font-size: 12px; color: #64748b; }}
-table.items {{ width: 100%; border-collapse: collapse; margin-top: 14px; }}
-table.items th {{ background: #1d4ed8; color: #ffffff; padding: 7px 6px; font-size: 10px; text-align: center; border: 1px solid #1d4ed8; }}
-table.items td {{ border: 1px solid #e2e8f0; padding: 6px; font-size: 11px; }}
-table.items tr:nth-child(even) td {{ background: #f8fafc; }}
-.td-num {{ text-align: center; }}
-.td-der {{ text-align: right; }}
-.resumen {{ margin-top: 14px; margin-left: auto; width: 250px; border-collapse: collapse; }}
-.resumen td {{ padding: 5px 10px; font-size: 12px; border: 1px solid #e2e8f0; }}
-.resumen .lbl {{ color: #475569; }}
-.resumen .val {{ text-align: right; font-weight: bold; }}
-.resumen .fila-total td {{ background: #1d4ed8; color: #ffffff; font-size: 15px; font-weight: bold; }}
-.metodo {{ margin-top: 16px; font-size: 13px; }}
-.metodo b {{ color: #1d4ed8; }}
-.pago {{ border: 1px solid #cbd5e1; border-left: 4px solid #16a34a; padding: 10px 14px; margin-top: 10px; font-size: 12px; }}
-.pago .lbl {{ font-weight: bold; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }}
-.pie {{ margin-top: 26px; padding-top: 10px; border-top: 2px solid #1d4ed8; text-align: center; }}
-.pie .gracias {{ font-size: 14px; font-weight: bold; color: #1f2937; }}
-.pie .marca {{ font-size: 16px; font-weight: bold; color: #1d4ed8; letter-spacing: 2px; margin-top: 4px; }}
-.pie .leyenda {{ font-size: 9px; color: #94a3b8; margin-top: 4px; }}
+@page {{ margin: 0; }}
+html, body {{ font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #374151;
+              margin: 0; padding: 0; background: #f0f0f0;
+              height: 100%; }}
+.hoja {{ width: 100%; max-width: 820px; margin: 0 auto;
+        display: flex; flex-direction: column;
+        min-height: 100%; box-sizing: border-box; }}
+.cabecera {{ background: #D4EDEA; padding: 24px 30px 18px 30px; }}
+.cabecera table {{ width: 100%; border-collapse: collapse; }}
+.cabecera td {{ vertical-align: middle; }}
+.marca {{ font-size: 26px; font-weight: 800; color: #2f4f3a; letter-spacing: 2px; }}
+.titulo {{ font-size: 17px; font-weight: 700; color: #2f4f3a; }}
+.folio {{ font-size: 15px; font-weight: 700; color: #2f4f3a; }}
+.sec {{ font-size: 10px; color: #5b6b60; }}
+.bloque {{ background: #ffffff; border-radius: 10px; padding: 12px 16px;
+          margin: 12px 26px 0 26px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+          border-left: 4px solid #A9C5C1; }}
+.obs .texto {{ color: #374151; }}
+.lbl {{ font-weight: 700; color: #5b6b60; font-size: 11px; text-transform: uppercase;
+       letter-spacing: 1px; margin-bottom: 4px; }}
+table.items {{ width: calc(100% - 52px); margin: 16px 26px 0 26px;
+              border-collapse: collapse; table-layout: fixed; }}
+table.items th {{ background: linear-gradient(135deg, #A9C5C1 0%, #8FB5B1 100%);
+                 color: #ffffff; padding: 8px 10px; font-size: 10px; text-align: center;
+                 border: 1px solid #8FB5B1; white-space: nowrap;
+                 overflow: hidden; text-overflow: ellipsis; }}
+table.items th:first-child {{ text-align: left; width: 34%; }}
+table.items td {{ border: 1px solid #e4e7e2; padding: 7px 10px; font-size: 11px;
+                 text-align: center; background: #ffffff; overflow: hidden; }}
+table.items td:first-child {{ text-align: left; }}
+table.items tr:nth-child(even) td {{ background: #f7faf6; }}
+.resumen {{ margin: 16px 26px 0 26px; width: 260px; margin-left: auto;
+           border-collapse: collapse; }}
+.resumen td {{ padding: 5px 12px; font-size: 12px; border: 1px solid #e4e7e2;
+              background: #ffffff; }}
+.resumen .val {{ text-align: right; font-weight: 700; }}
+.resumen .fila-total td {{ background: linear-gradient(135deg, #A9C5C1 0%, #8FB5B1 100%);
+                          color: #ffffff; font-size: 15px; font-weight: 800; }}
+.pie-ancla {{ margin-top: auto; padding-top: 30px; }}
 </style></head><body>
-<div class='encabezado'>
-<table><tr>
-<td style='width:30%'>
-  <div>{logo_html}<span class='marca'>GORETTI</span></div>
-  <div class='titulo2'>Sistema Integral de Administración y Control</div>
-</td>
-<td style='width:40%;text-align:center'>
-  <div class='titulo'>{titulo}</div>
-</td>
-<td class='no-fecha' style='width:30%'>
-  <div>NO. <span class='num'>{_esc(datos.get('folio', ''))}</span></div>
-  <div>FECHA: <b>{_fmt_fecha(datos.get('fecha_emision', ''))}</b></div>
-  <div style='font-size:10px;color:#64748b'>Estatus: {_esc(estatus)}</div>
-</td>
-</tr></table>
-</div>
+<div class='hoja'>
 
-<div class='vendido'>
-  <div class='lbl'>Vendido a:</div>
-  {vendido_html}
-</div>
+  <!-- Cabecera: ondas superpuestas (menta de fondo, salvia al frente) -->
+  <div class='cabecera'>
+  <table><tr>
+  <td style='width:32%'>
+    <div>{logo_html}<span class='marca'>GORETTI</span></div>
+    <div class='sec'>SIAC ERP · Sistema Integral de Administración y Control</div>
+  </td>
+  <td style='width:36%;text-align:center'><span class='titulo'>{titulo}</span></td>
+  <td style='width:32%;text-align:right'>
+    <div>NO. <span class='folio'>{_esc(datos.get('folio', ''))}</span></div>
+    <div>FECHA: <b>{_fmt_fecha(datos.get('fecha_emision', ''))}</b></div>
+    <div class='sec'>Estatus: {_esc(estatus)}</div>
+  </td>
+  </tr></table>
+  </div>
+  <svg viewBox='0 0 1200 110' preserveAspectRatio='none'
+       style='display:block;width:100%;height:110px;margin-top:-44px;position:relative;z-index:1'>
+    <!-- Capa de fondo: menta pálido (#D4EDEA) -->
+    <path d='M0,40 C160,82 320,8 480,40 C640,82 800,8 960,40 C1120,82 1160,28 1200,50 L1200,110 L0,110 Z'
+          fill='#D4EDEA'/>
+    <!-- Capa de frente: salvia (#A9C5C1), curvas S superpuestas -->
+    <path d='M0,64 C160,106 320,32 480,64 C640,106 800,32 960,64 C1120,106 1160,52 1200,74 L1200,110 L0,110 Z'
+          fill='#A9C5C1'/>
+  </svg>
 
-<table class='items'>
-<tr>
-  <th style='text-align:left;min-width:170px'>NOMBRE</th>
-  {th_tallas}
-  <th>TOTAL PARES</th>
-  <th>VALOR UNITARIO</th>
-  <th>TOTAL</th>
-</tr>
-{rows}
-</table>
+  <div class='bloque'>
+    <div class='lbl'>Vendido a:</div>
+    {vendido_html}
+  </div>
 
-<table class='resumen'>
-<tr><td class='lbl'>Subtotal</td><td class='val'>${subtotal:,.2f}</td></tr>
-{filas_iva}
-<tr class='fila-total'><td>TOTAL</td><td>${total:,.2f}</td></tr>
-</table>
+  <table class='items'>
+  <tr>
+    <th style='min-width:170px'>NOMBRE</th>
+    {th_tallas}
+    <th>TOTAL PARES</th>
+    <th>VALOR UNITARIO</th>
+    <th>TOTAL</th>
+  </tr>
+  {rows}
+  </table>
 
-<div class='metodo'>Método de pago: <b>{_esc(datos.get('metodo_pago') or 'Transferencia bancaria')}</b></div>
+  <table class='resumen'>
+  <tr><td>Subtotal</td><td class='val'>${subtotal:,.2f}</td></tr>
+  {filas_iva}
+  <tr class='fila-total'><td>TOTAL</td><td>${total:,.2f}</td></tr>
+  </table>
 
-<div class='pago'>
-  <div class='lbl'>Información de Pago</div>
-  {info_pago_html}
-</div>
+  {obs_html}
 
-<div class='pie'>
-  <div class='gracias'>Gracias por su compra.</div>
-  <div class='marca'>GORETTI</div>
-  <div class='leyenda'>Generado por Goretti ERP el {ahora}</div>
+  <!-- Pie: ondas superpuestas, anclado al fondo de la hoja -->
+  <div class='pie-ancla'>
+  <svg viewBox='0 0 1200 90' preserveAspectRatio='none'
+       style='display:block;width:100%;height:90px'>
+    <!-- Capa de fondo: menta pálido (#D4EDEA) -->
+    <path d='M0,28 C160,-10 320,56 480,28 C640,-10 800,56 960,28 C1120,-10 1160,16 1200,6 L1200,90 L0,90 Z'
+          fill='#D4EDEA'/>
+    <!-- Capa de frente: salvia (#A9C5C1), curvas S superpuestas -->
+    <path d='M0,52 C160,14 320,80 480,52 C640,14 800,80 960,52 C1120,14 1160,40 1200,30 L1200,90 L0,90 Z'
+          fill='#A9C5C1'/>
+  </svg>
+  <div style='background:linear-gradient(135deg, #A9C5C1 0%, #D4EDEA 100%);
+              padding:6px 28px 22px 28px;'>
+    <div style='font-size:14px;font-weight:700;color:#2f4f3a'>Gracias por su compra.</div>
+    <div style='font-size:16px;font-weight:800;color:#2f4f3a;letter-spacing:2px;margin-top:2px'>GORETTI</div>
+    <div style='font-size:9px;color:#4a6b52;margin-top:4px'>Generado por Goretti ERP el {ahora}</div>
+  </div>
+  </div>
+
 </div>
 </body></html>"""
 
 
 def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> None:
-    path, _ = QFileDialog.getSaveFileName(
-        parent, "Guardar PDF - Orden de Compra",
-        f"OC_{datos.get('folio', '')}.pdf", "PDF (*.pdf)")
-    if not path:
-        return
+    """Abre la vista previa de impresión (componente aprobado `preview_impresion`)
+    del reporte de Orden de Compra. Desde el diálogo se puede imprimir o
+    exportar a PDF; el PDF se genera por la misma vía que la impresión
+    (QTextDocument), así que lo que se ve es lo que sale."""
+    from src.components.preview_impresion import previsualizar_html
 
-    doc = QTextDocument()
-    doc.setHtml(_oc_receipt_html(datos, detalle))
-    printer = QPrinter(QPrinter.HighResolution)
-    printer.setPageSize(QPageSize.Letter)
-    printer.setPageOrientation(QPageLayout.Landscape
-                               if len(_oc_columnas_tallas(detalle)) > 6
-                               else QPageLayout.Portrait)
-    printer.setOutputFormat(QPrinter.PdfFormat)
-    printer.setOutputFileName(path)
-    doc.print_(printer)
+    previsualizar_html(
+        _oc_receipt_html(datos, detalle),
+        titulo="Vista previa - Recibo de Orden de Compra",
+        parent=parent,
+    )
 
 
 def export_orden_compra_excel(datos: dict, detalle: list[dict], parent: QWidget) -> Optional[str]:

@@ -152,6 +152,62 @@ class DatabaseManager:
             print(f"Migración omitida: {e}")
 
         try:
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(programacion_semana)").fetchall()]
+            if 'fecha_inicio' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_semana ADD COLUMN fecha_inicio TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+                print("Migración: columna fecha_inicio agregada a programacion_semana.")
+        except Exception as e:
+            print(f"Migración fecha_inicio omitida: {e}")
+
+        try:
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(programacion_lineas)").fetchall()]
+            if 'folio_pedido' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_lineas ADD COLUMN folio_pedido TEXT NOT NULL DEFAULT ''")
+                conn.commit()
+                print("Migración: columna folio_pedido agregada a programacion_lineas.")
+        except Exception as e:
+            print(f"Migración folio_pedido omitida: {e}")
+
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(programacion_lineas)").fetchall()]
+            if 'pedido_id' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_lineas ADD COLUMN pedido_id INTEGER")
+                print("Migración: columna pedido_id agregada a programacion_lineas.")
+            if 'detalle_pedido_id' not in cols:
+                cursor.execute(
+                    "ALTER TABLE programacion_lineas ADD COLUMN detalle_pedido_id INTEGER")
+                print("Migración: columna detalle_pedido_id agregada a programacion_lineas.")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración pedido_id omitida: {e}")
+
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cols = [r[1] for r in cursor.execute("PRAGMA table_info(pedidos_cliente)").fetchall()]
+            if 'folio_pedido' not in cols:
+                cursor.execute(
+                    "ALTER TABLE pedidos_cliente ADD COLUMN folio_pedido TEXT NOT NULL DEFAULT ''")
+                print("Migración: columna folio_pedido agregada a pedidos_cliente.")
+            if 'suela' not in cols:
+                cursor.execute(
+                    "ALTER TABLE pedidos_cliente ADD COLUMN suela TEXT NOT NULL DEFAULT ''")
+                print("Migración: columna suela agregada a pedidos_cliente.")
+            if 'horma' not in cols:
+                cursor.execute(
+                    "ALTER TABLE pedidos_cliente ADD COLUMN horma TEXT NOT NULL DEFAULT ''")
+                print("Migración: columna horma agregada a pedidos_cliente.")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración folio_pedido/suela/horma omitida: {e}")
+
+        try:
             conn.commit()
             cursor.execute("PRAGMA foreign_keys=OFF")
 
@@ -270,6 +326,47 @@ class DatabaseManager:
             print(f"Migración tallas/pago omitida: {e}")
 
         self._migrar_tallas_unificadas()
+        self._migrar_pedidos_tallas()
+        self._migrar_fichas_tecnicas()
+
+    def _migrar_fichas_tecnicas(self) -> None:
+        """Crea las tablas de ficha técnica (kardex) si no existen.
+
+        Aditiva y no destructiva: solo `CREATE TABLE IF NOT EXISTS` para
+        bases que ya corrieron schema.sql antes de introducir las tablas.
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "CREATE TABLE IF NOT EXISTS fichas_tecnicas ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " modelo_id INTEGER NOT NULL REFERENCES modelos(id),"
+                " estilo_sistema TEXT, estilo_muestra TEXT, marca TEXT,"
+                " talla TEXT, genero TEXT, horma TEXT, moldura TEXT,"
+                " construccion TEXT, corrida TEXT, scallop TEXT, tacon TEXT,"
+                " notas TEXT, imagen BLOB, fuente_archivo TEXT,"
+                " activo INTEGER NOT NULL DEFAULT 1,"
+                " created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                " updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+            )
+            cursor.execute(
+                "CREATE TABLE IF NOT EXISTS ficha_tecnica_secciones ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " ficha_id INTEGER NOT NULL REFERENCES fichas_tecnicas(id),"
+                " nombre TEXT NOT NULL, orden INTEGER NOT NULL DEFAULT 0)"
+            )
+            cursor.execute(
+                "CREATE TABLE IF NOT EXISTS ficha_tecnica_detalle ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " seccion_id INTEGER NOT NULL REFERENCES ficha_tecnica_secciones(id),"
+                " componente TEXT, descripcion TEXT, proveedor TEXT,"
+                " comentarios TEXT, orden INTEGER NOT NULL DEFAULT 0)"
+            )
+            conn.commit()
+            print("Migración: tablas de ficha técnica creadas.")
+        except Exception as e:
+            print(f"Migración ficha técnica omitida: {e}")
 
     def _migrar_tallas_unificadas(self) -> None:
         """RD-1: fusiona `puntos_catalogo` + `tallas_corrida` en `tallas_catalogo`.
@@ -549,6 +646,142 @@ class DatabaseManager:
             conn.commit()
         except Exception as e:
             print(f"Migración logs omitida: {e}")
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) "
+                "VALUES ('programacion', 'crear', 'Crear líneas de programación'), "
+                "('programacion', 'eliminar', 'Eliminar líneas de la programación')")
+            conn.commit()
+        except Exception as e:
+            print(f"Migración permisos programación omitida: {e}")
+
+    def _migrar_pedidos_tallas(self) -> None:
+        """RD-1b: remapea `detalle_pedido_cliente_puntos` a `tallas_catalogo`.
+
+        El módulo de clientes (pedidos) quedó con el esquema antiguo
+        (`punto_id` -> `puntos_catalogo`) después de la unificación RD-1.
+        Reconstruye la tabla con `talla_id` -> `tallas_catalogo`, conservando
+        las filas cuyo `punto_id` exista en `tallas_catalogo` (los id de
+        catálogos regenerados que se descartaron no tienen talla recuperable).
+        Idempotente: si la tabla ya usa `talla_id`, no hace nada.
+        """
+        conn = self.connect()
+        cursor = conn.cursor()
+        try:
+            def tabla_existe(nombre: str) -> bool:
+                if self.engine == 'sqlite':
+                    return cursor.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                        (nombre,),
+                    ).fetchone() is not None
+                return cursor.execute(
+                    "SELECT 1 FROM information_schema.tables WHERE table_name=%s",
+                    (nombre,),
+                ).fetchone() is not None
+
+            if not tabla_existe('detalle_pedido_cliente_puntos'):
+                return
+
+            # Reintento seguro: si una corrida anterior falló a mitad, la tabla
+            # vieja quedó como *_old y schema.sql pudo recrear la principal.
+            if self.engine == 'sqlite' and tabla_existe(
+                    'detalle_pedido_cliente_puntos_old'):
+                cursor.execute("PRAGMA foreign_keys=OFF")
+                if not tabla_existe('detalle_pedido_cliente_puntos'):
+                    cursor.execute(
+                        "ALTER TABLE detalle_pedido_cliente_puntos_old "
+                        "RENAME TO detalle_pedido_cliente_puntos")
+                    print("Migración RD-1b: restaurada tabla tras reintento.")
+                else:
+                    filas = cursor.execute(
+                        "SELECT COUNT(*) FROM detalle_pedido_cliente_puntos"
+                    ).fetchone()[0]
+                    if filas == 0:
+                        cursor.execute("DROP TABLE detalle_pedido_cliente_puntos")
+                        cursor.execute(
+                            "ALTER TABLE detalle_pedido_cliente_puntos_old "
+                            "RENAME TO detalle_pedido_cliente_puntos")
+                        print("Migración RD-1b: restaurada tabla tras reintento.")
+                    else:
+                        cursor.execute("DROP TABLE detalle_pedido_cliente_puntos_old")
+                cursor.execute("PRAGMA foreign_keys=ON")
+                conn.commit()
+                return
+
+            if self.engine == 'sqlite':
+                cols = [r[1] for r in cursor.execute(
+                    "PRAGMA table_info(detalle_pedido_cliente_puntos)").fetchall()]
+                if 'talla_id' in cols:
+                    return
+                cursor.execute("PRAGMA foreign_keys=OFF")
+                cursor.execute(
+                    "ALTER TABLE detalle_pedido_cliente_puntos "
+                    "RENAME TO detalle_pedido_cliente_puntos_old")
+                cursor.execute("""
+                    CREATE TABLE detalle_pedido_cliente_puntos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        detalle_id INTEGER NOT NULL
+                            REFERENCES detalle_pedido_cliente(id) ON DELETE CASCADE,
+                        talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
+                        pares INTEGER NOT NULL DEFAULT 0,
+                        UNIQUE(detalle_id, talla_id),
+                        FOREIGN KEY (detalle_id) REFERENCES detalle_pedido_cliente(id),
+                        FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
+                    )
+                """)
+                cursor.execute("""
+                    INSERT INTO detalle_pedido_cliente_puntos
+                        (id, detalle_id, talla_id, pares)
+                    SELECT d.id, d.detalle_id, t.id, d.pares
+                    FROM detalle_pedido_cliente_puntos_old d
+                    JOIN tallas_catalogo t ON t.id = d.punto_id
+                """)
+                total_antes = cursor.execute(
+                    "SELECT COUNT(*) FROM detalle_pedido_cliente_puntos_old"
+                ).fetchone()[0]
+                conservadas = cursor.execute(
+                    "SELECT COUNT(*) FROM detalle_pedido_cliente_puntos"
+                ).fetchone()[0]
+                cursor.execute("DROP TABLE detalle_pedido_cliente_puntos_old")
+                cursor.execute("PRAGMA foreign_keys=ON")
+                conn.commit()
+                print(f"Migración RD-1b: detalle_pedido_cliente_puntos -> "
+                      f"tallas_catalogo ({conservadas}/{total_antes} filas conservadas).")
+            else:
+                # PostgreSQL: renombrar columna, re-apuntar a tallas_catalogo.
+                cols = [r[0] for r in cursor.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='detalle_pedido_cliente_puntos'")]
+                if 'talla_id' in cols:
+                    return
+                cursor.execute(
+                    "ALTER TABLE detalle_pedido_cliente_puntos "
+                    "RENAME COLUMN punto_id TO talla_id")
+                cursor.execute("""
+                    DELETE FROM detalle_pedido_cliente_puntos d
+                    WHERE NOT EXISTS (SELECT 1 FROM tallas_catalogo t
+                                      WHERE t.id = d.talla_id)
+                """)
+                cursor.execute(
+                    "ALTER TABLE detalle_pedido_cliente_puntos "
+                    "DROP CONSTRAINT IF EXISTS "
+                    "detalle_pedido_cliente_puntos_punto_id_fkey")
+                cursor.execute(
+                    "ALTER TABLE detalle_pedido_cliente_puntos "
+                    "ADD CONSTRAINT detalle_pedido_cliente_puntos_talla_id_fkey "
+                    "FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)")
+                conn.commit()
+                print("Migración RD-1b: detalle_pedido_cliente_puntos -> "
+                      "tallas_catalogo aplicado (PG).")
+        except Exception as e:
+            try:
+                if self.engine == 'sqlite':
+                    cursor.execute("PRAGMA foreign_keys=ON")
+            except Exception:
+                pass
+            print(f"Migración pedidos->tallas_catalogo omitida: {e}")
 
     def _migrar_passwords(self) -> None:
         from src.utils.security import es_hash_bcrypt, hash_contrasena

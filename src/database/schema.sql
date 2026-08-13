@@ -148,6 +148,58 @@ CREATE TABLE IF NOT EXISTS detalle_orden_compra_puntos (
     FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
 );
 
+-- -----------------------------------------------------------
+-- 2.1 CLIENTES Y PEDIDOS DE CLIENTE
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS clientes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rfc TEXT,
+    nombre TEXT NOT NULL,
+    nombre_comercial TEXT,
+    telefono TEXT,
+    email TEXT,
+    direccion TEXT,
+    activo INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pedidos_cliente (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio TEXT NOT NULL UNIQUE,
+    folio_pedido TEXT NOT NULL DEFAULT '',
+    cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+    fecha_pedido TEXT NOT NULL DEFAULT (datetime('now')),
+    fecha_programado TEXT,
+    estatus TEXT NOT NULL DEFAULT 'pendiente',
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    suela TEXT NOT NULL DEFAULT '',
+    horma TEXT NOT NULL DEFAULT '',
+    observaciones TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+);
+
+CREATE TABLE IF NOT EXISTS detalle_pedido_cliente (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pedido_id INTEGER NOT NULL REFERENCES pedidos_cliente(id) ON DELETE CASCADE,
+    modelo TEXT NOT NULL,
+    piel TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (pedido_id) REFERENCES pedidos_cliente(id)
+);
+
+-- Pares por talla por renglón del pedido de cliente (catálogo unificado RD-1)
+CREATE TABLE IF NOT EXISTS detalle_pedido_cliente_puntos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    detalle_id INTEGER NOT NULL REFERENCES detalle_pedido_cliente(id) ON DELETE CASCADE,
+    talla_id INTEGER NOT NULL REFERENCES tallas_catalogo(id),
+    pares INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(detalle_id, talla_id),
+    FOREIGN KEY (detalle_id) REFERENCES detalle_pedido_cliente(id),
+    FOREIGN KEY (talla_id) REFERENCES tallas_catalogo(id)
+);
+
 CREATE TABLE IF NOT EXISTS movimiento_inventario (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     insumo_id INTEGER NOT NULL REFERENCES insumos(id),
@@ -158,6 +210,64 @@ CREATE TABLE IF NOT EXISTS movimiento_inventario (
     observaciones TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (insumo_id) REFERENCES insumos(id)
+);
+
+-- -----------------------------------------------------------
+-- 2.2 PROGRAMACIÓN SEMANAL
+-- El folio_prog es el folio de programación asignado en el
+-- Excel (diferente al folio de pedido PED-XXXX).
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS programacion_semana (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL UNIQUE,
+    fecha_inicio TEXT NOT NULL DEFAULT '',
+    orden INTEGER NOT NULL DEFAULT 0,
+    activo INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS programacion_lineas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    semana_id INTEGER NOT NULL REFERENCES programacion_semana(id) ON DELETE CASCADE,
+    orden INTEGER NOT NULL DEFAULT 0,
+    folio_prog TEXT NOT NULL DEFAULT '',
+    folio_pedido TEXT NOT NULL DEFAULT '',
+    cliente TEXT NOT NULL,
+    modelo TEXT NOT NULL DEFAULT '',
+    piel TEXT NOT NULL DEFAULT '',
+    color TEXT NOT NULL DEFAULT '',
+    fecha_prog TEXT NOT NULL DEFAULT '',
+    tubo TEXT NOT NULL DEFAULT '',
+    chinela TEXT NOT NULL DEFAULT '',
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    estatus TEXT NOT NULL DEFAULT 'programado',
+    pedido_id INTEGER REFERENCES pedidos_cliente(id),
+    detalle_pedido_id INTEGER REFERENCES detalle_pedido_cliente(id),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (semana_id) REFERENCES programacion_semana(id)
+);
+
+CREATE TABLE IF NOT EXISTS programacion_linea_tallas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    linea_id INTEGER NOT NULL REFERENCES programacion_lineas(id) ON DELETE CASCADE,
+    talla TEXT NOT NULL,
+    orden REAL NOT NULL DEFAULT 0,
+    pares INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(linea_id, talla),
+    FOREIGN KEY (linea_id) REFERENCES programacion_lineas(id)
+);
+
+-- -----------------------------------------------------------
+-- 2.3 ETIQUETAS (impresión a etiquetadora)
+-- Reemplaza el diseño de Label Matrix (etiquetaa.qdf.qdf).
+-- Guarda el diseño de la etiqueta (tamaño y campos) en JSON.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS etiqueta_config (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- -----------------------------------------------------------
@@ -343,7 +453,17 @@ INSERT OR IGNORE INTO permisos (modulo, accion, descripcion) VALUES
     ('usuarios', 'crear', 'Crear usuarios'),
     ('usuarios', 'editar', 'Editar usuarios y permisos'),
     ('usuarios', 'eliminar', 'Desactivar usuarios'),
-    ('usuarios', 'exportar', 'Exportar e imprimir');
+    ('usuarios', 'exportar', 'Exportar e imprimir'),
+    ('clientes', 'ver', 'Ver el módulo de Clientes y Pedidos'),
+    ('clientes', 'crear', 'Crear clientes y pedidos de cliente'),
+    ('clientes', 'editar', 'Editar clientes y pedidos'),
+    ('clientes', 'eliminar', 'Desactivar clientes y cancelar pedidos'),
+    ('clientes', 'exportar', 'Exportar e imprimir pedidos'),
+    ('programacion', 'ver', 'Ver el módulo de Programación Semanal'),
+    ('programacion', 'crear', 'Crear líneas de programación'),
+    ('programacion', 'editar', 'Cambiar el estatus de líneas programadas'),
+    ('programacion', 'eliminar', 'Eliminar líneas de la programación'),
+    ('programacion', 'exportar', 'Exportar e imprimir la programación');
 
 INSERT OR IGNORE INTO unidades_medida (nombre, abreviatura) VALUES
     ('Pieza', 'pieza'),
@@ -365,3 +485,66 @@ INSERT OR IGNORE INTO colores_catalogo (nombre, codigo, orden) VALUES
     ('Blanco', 'BL', 3),
     ('Rojo', 'RJO', 4),
     ('Azul', 'AZL', 5);
+
+-- -----------------------------------------------------------
+-- Histórico de capturas en campos de texto
+-- Almacena los valores antes capturados en cada campo para que,
+-- al volver a capturar, el textbox sirva de selector/autocompletado.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS historico_campos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campo TEXT NOT NULL,
+    valor TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (campo, valor)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_campos_campo ON historico_campos (campo);
+
+-- -----------------------------------------------------------
+-- Ficha técnica / boletos técnicos (kardex) por modelo
+-- Amplía modelos/variantes/lista_materiales SIN modificarlos.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS fichas_tecnicas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    modelo_id INTEGER NOT NULL REFERENCES modelos(id),
+    estilo_sistema TEXT,
+    estilo_muestra TEXT,
+    marca TEXT,
+    talla TEXT,
+    genero TEXT,
+    horma TEXT,
+    moldura TEXT,
+    construccion TEXT,
+    corrida TEXT,
+    scallop TEXT,
+    tacon TEXT,
+    notas TEXT,
+    imagen BLOB,
+    fuente_archivo TEXT,
+    activo INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (modelo_id) REFERENCES modelos(id)
+);
+
+CREATE TABLE IF NOT EXISTS ficha_tecnica_secciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ficha_id INTEGER NOT NULL REFERENCES fichas_tecnicas(id),
+    nombre TEXT NOT NULL,
+    orden INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (ficha_id) REFERENCES fichas_tecnicas(id)
+);
+
+CREATE TABLE IF NOT EXISTS ficha_tecnica_detalle (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    seccion_id INTEGER NOT NULL REFERENCES ficha_tecnica_secciones(id),
+    componente TEXT,
+    descripcion TEXT,
+    proveedor TEXT,
+    comentarios TEXT,
+    orden INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (seccion_id) REFERENCES ficha_tecnica_secciones(id)
+);

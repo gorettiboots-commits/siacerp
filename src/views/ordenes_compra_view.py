@@ -1,18 +1,16 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
+from src.components.complex_grid import ComplexGrid
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import (
     export_orden_compra_excel, export_table_to_excel, print_orden_compra, print_table,
 )
-from src.utils.odoo_list import OdooListView
-from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogOrdenCompra, DialogProveedor, DialogRecibirOrden, DialogVerOrden
 
 
@@ -124,7 +122,15 @@ class OrdenesCompraView(QWidget):
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
 
-        self.vista = OdooListView(["Folio", "Tipo", "Proveedor", "Fecha", "Total", "Estatus"])
+        self.vista = ComplexGrid()
+        self.vista.set_columnas([
+            {"key": "folio", "titulo": "Folio", "ancho": 110},
+            {"key": "tipo", "titulo": "Tipo", "ancho": 120},
+            {"key": "proveedores", "titulo": "Proveedor", "ancho": 220},
+            {"key": "fecha_emision", "titulo": "Fecha", "ancho": 110},
+            {"key": "total", "titulo": "Total", "ancho": 110, "tipo": "numero"},
+            {"key": "estatus", "titulo": "Estatus", "ancho": 130},
+        ])
         self.vista.set_renderers(
             fila=self._fila_orden,
             claves=self._claves_orden,
@@ -132,6 +138,8 @@ class OrdenesCompraView(QWidget):
             tarjeta=self._tarjeta_orden,
             lista=self._lista_orden,
         )
+        self.vista.set_buscador_visible(False)
+        self.vista.set_exportar_visible(False)
         self.vista.doubleClicked.connect(self._ver_orden)
         layout.addWidget(self.vista)
 
@@ -170,20 +178,19 @@ class OrdenesCompraView(QWidget):
         toolbar.addWidget(self.btn_export_prov)
         layout.addLayout(toolbar)
 
-        self.table_prov = QTableWidget()
-        self.table_prov.setColumnCount(7)
-        self.table_prov.setHorizontalHeaderLabels(
-            ["RFC", "Nombre", "Nombre Comercial", "Teléfono", "Email", "Dirección", "ID"])
-        self.table_prov.setColumnHidden(6, True)
-        self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_prov.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_prov.setAlternatingRowColors(True)
-        self.table_prov.horizontalHeader().setStretchLastSection(True)
-        self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_prov)
-        self.table_prov.doubleClicked.connect(self._editar_proveedor)
-        self.table_prov.setStyleSheet(self.vista.table.styleSheet())
-        layout.addWidget(self.table_prov)
+        self.grid_prov = ComplexGrid()
+        self.grid_prov.set_columnas([
+            {"key": "rfc", "titulo": "RFC", "ancho": 120},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 200},
+            {"key": "nombre_comercial", "titulo": "Nombre Comercial", "ancho": 160},
+            {"key": "telefono", "titulo": "Teléfono", "ancho": 110},
+            {"key": "email", "titulo": "Email", "ancho": 180},
+            {"key": "direccion", "titulo": "Dirección", "ancho": 220},
+        ])
+        self.grid_prov.set_buscador_visible(False)
+        self.grid_prov.set_exportar_visible(False)
+        self.grid_prov.doubleClicked.connect(self._editar_proveedor)
+        layout.addWidget(self.grid_prov)
 
     def _load_ordenes(self) -> None:
         try:
@@ -243,15 +250,7 @@ class OrdenesCompraView(QWidget):
     def _load_proveedores(self) -> None:
         try:
             proveedores = self.controller.listar_proveedores()
-            self.table_prov.setRowCount(len(proveedores))
-            for i, p in enumerate(proveedores):
-                self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
-                self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            self.grid_prov.set_datos(proveedores)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -271,15 +270,7 @@ class OrdenesCompraView(QWidget):
             return
         try:
             resultados = self.controller.buscar_proveedores(texto)
-            self.table_prov.setRowCount(len(resultados))
-            for i, p in enumerate(resultados):
-                self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
-                self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            self.grid_prov.set_datos(resultados)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -357,7 +348,7 @@ class OrdenesCompraView(QWidget):
             print_orden_compra(datos, detalle, self)
 
     def _exportar_proveedores(self) -> None:
-        path = export_table_to_excel(self.table_prov, "Proveedores", self)
+        path = export_table_to_excel(self.grid_prov.table, "Proveedores", self)
         if path:
             QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
@@ -370,23 +361,20 @@ class OrdenesCompraView(QWidget):
             self._load_proveedores()
 
     def _editar_proveedor(self) -> None:
-        row = self.table_prov.currentRow()
-        if row < 0:
+        prov = self.grid_prov.registro_seleccionado()
+        if not prov:
             QMessageBox.information(self, "Seleccionar", "Seleccione un proveedor.")
             return
-        proveedor_id = int(self.table_prov.item(row, 6).text())
-        dlg = DialogProveedor(self.controller, proveedor_id)
+        dlg = DialogProveedor(self.controller, prov["id"])
         if dlg.exec():
             self._load_proveedores()
 
     def _desactivar_proveedor(self) -> None:
-        row = self.table_prov.currentRow()
-        if row < 0:
+        prov = self.grid_prov.registro_seleccionado()
+        if not prov:
             return
-        nombre = self.table_prov.item(row, 1).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{prov['nombre']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            proveedor_id = int(self.table_prov.item(row, 6).text())
-            self.controller.desactivar_proveedor(proveedor_id)
+            self.controller.desactivar_proveedor(prov["id"])
             self._load_proveedores()

@@ -92,6 +92,20 @@ _GLIFOS = {
           <path d="M16 24l16-8 16 8v18l-16 8-16-8z" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
           <path d="M16 24l16 8 16-8M32 32v18" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
         </svg>""",
+    "clientes": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <path d="M14 28h36l-4 26H18z" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M14 28L19 12h26l5 16" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M24 54v-16h16v16" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M24 34c2-6 14-6 16 0" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>""",
+    "programacion": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="12" y="10" width="40" height="46" rx="6" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <path d="M12 24h40" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <path d="M22 10v8M42 10v8" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round"/>
+          <path d="M22 32h4M30 32h4M38 32h4M22 40h4M30 40h4M38 40h4" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>""",
     "logout": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M26 14H16a4 4 0 0 0-4 4v28a4 4 0 0 0 4 4h10"

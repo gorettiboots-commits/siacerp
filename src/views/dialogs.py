@@ -2,12 +2,14 @@ from PySide6.QtCore import QBuffer, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
-    QDateEdit, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
+    QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.date_picker import DatePicker
+from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
@@ -678,158 +680,6 @@ class DialogProveedor(QDialog):
         self.accept()
 
 
-class DialogMatrizTallas(QDialog):
-    """Matriz de tallas de Órdenes de Compra con pares y precio por talla.
-
-    Adaptación de la matriz de Goretti_prep (pares + precio por talla) al
-    catálogo unificado tallas_catalogo (RD-1). Es un diálogo independiente:
-    no extiende el componente aprobado MatrizTallasDialog (que no maneja
-    precios) para no alterarlo; el componente sigue usándose en Producción.
-    """
-
-    def __init__(self, controller: OrdenesCompraController,
-                 inicial: dict[int, int] | None = None,
-                 precios_iniciales: dict[int, float] | None = None) -> None:
-        super().__init__()
-        self.controller = controller
-        self.setWindowTitle("Matriz de Tallas")
-        self.setMinimumSize(620, 420)
-        self.setModal(True)
-        self._matriz = dict(inicial or {})
-        self._precios = dict(precios_iniciales or {})
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
-        self._tallas = self.controller.listar_tallas()
-        self.spn_pares: dict[int, QSpinBox] = {}
-        self.spn_precios: dict[int, QDoubleSpinBox] = {}
-
-        filas: list[QWidget] = []
-        fila = QWidget()
-        fila_layout = QHBoxLayout(fila)
-        fila_layout.setContentsMargins(0, 0, 0, 0)
-        cols = 0
-        for t in self._tallas:
-            gb = QGroupBox(f"Talla {t['talla']}")
-            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
-            vb = QHBoxLayout(gb)
-            spn = QSpinBox()
-            spn.setRange(0, 9999)
-            spn.setValue(int(self._matriz.get(t["id"], 0)))
-            spn.setMinimumHeight(30)
-            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
-            spn.valueChanged.connect(self._actualizar_total)
-            self.spn_pares[t["id"]] = spn
-            vb.addWidget(spn)
-            spn_p = QDoubleSpinBox()
-            spn_p.setRange(0, 99999999)
-            spn_p.setDecimals(2)
-            spn_p.setPrefix("$")
-            spn_p.setValue(float(self._precios.get(t["id"], 0) or 0))
-            spn_p.setMinimumHeight(30)
-            spn_p.setButtonSymbols(QAbstractSpinBox.NoButtons)
-            spn_p.setStyleSheet("font-size: 13px;")
-            spn_p.valueChanged.connect(self._actualizar_total)
-            self.spn_precios[t["id"]] = spn_p
-            vb.addWidget(spn_p)
-            fila_layout.addWidget(gb)
-            cols += 1
-            if cols % 2 == 0:
-                filas.append(fila)
-                fila = QWidget()
-                fila_layout = QHBoxLayout(fila)
-                fila_layout.setContentsMargins(0, 0, 0, 0)
-        if cols % 2 != 0:
-            filas.append(fila)
-        for f in filas:
-            layout.addWidget(f)
-
-        corrida_box = QGroupBox("Corrida rápida de tallas")
-        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
-        corrida_layout = QHBoxLayout(corrida_box)
-        corrida_layout.setSpacing(8)
-
-        corrida_layout.addWidget(QLabel("De talla:"))
-        self.cmb_talla_desde = QComboBox()
-        self.cmb_talla_hasta = QComboBox()
-        for t in self._tallas:
-            self.cmb_talla_desde.addItem(t["talla"], t["id"])
-            self.cmb_talla_hasta.addItem(t["talla"], t["id"])
-        if self.cmb_talla_hasta.count() > 0:
-            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
-
-        corrida_layout.addWidget(self.cmb_talla_desde)
-        corrida_layout.addWidget(QLabel("a talla:"))
-        corrida_layout.addWidget(self.cmb_talla_hasta)
-        corrida_layout.addWidget(QLabel("con"))
-        self.spn_corrida = QSpinBox()
-        self.spn_corrida.setRange(0, 9999)
-        self.spn_corrida.setValue(10)
-        self.spn_corrida.setMinimumWidth(80)
-        corrida_layout.addWidget(self.spn_corrida)
-        corrida_layout.addWidget(QLabel("pares por talla"))
-
-        btn_corrida = QPushButton("Aplicar Corrida")
-        btn_corrida.setObjectName("btnPrimary")
-        btn_corrida.clicked.connect(self._aplicar_corrida)
-        corrida_layout.addWidget(btn_corrida)
-
-        btn_limpiar = QPushButton("Limpiar")
-        btn_limpiar.setObjectName("btnSecondary")
-        btn_limpiar.clicked.connect(self._limpiar_tallas)
-        corrida_layout.addWidget(btn_limpiar)
-
-        layout.addWidget(corrida_box)
-
-        self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
-        layout.addWidget(self.lbl_total)
-
-        self._actualizar_total()
-
-        btns = QHBoxLayout()
-        btns.addStretch()
-        btn_cancel = QPushButton("Cancelar")
-        btn_cancel.setObjectName("btnSecondary")
-        btn_cancel.clicked.connect(self.reject)
-        btn_aceptar = QPushButton("Aceptar")
-        btn_aceptar.setObjectName("btnSuccess")
-        btn_aceptar.clicked.connect(self.accept)
-        btns.addWidget(btn_cancel)
-        btns.addWidget(btn_aceptar)
-        layout.addLayout(btns)
-
-    def _aplicar_corrida(self) -> None:
-        idx_desde = self.cmb_talla_desde.currentIndex()
-        idx_hasta = self.cmb_talla_hasta.currentIndex()
-        if idx_desde > idx_hasta:
-            idx_desde, idx_hasta = idx_hasta, idx_desde
-        pares = self.spn_corrida.value()
-        for i, t in enumerate(self._puntos):
-            if idx_desde <= i <= idx_hasta:
-                self.spn_pares[t["id"]].setValue(pares)
-
-    def _limpiar_tallas(self) -> None:
-        for spn in self.spn_pares.values():
-            spn.setValue(0)
-
-    def _actualizar_total(self) -> None:
-        total = sum(spn.value() for spn in self.spn_pares.values())
-        importe = sum(self.spn_pares[pid].value() * self.spn_precios[pid].value()
-                      for pid in self.spn_pares)
-        self.lbl_total.setText(f"Total de pares: {total}    |    Importe: ${importe:,.2f}")
-
-    def get_matriz(self) -> dict[int, int]:
-        return {talla_id: spn.value() for talla_id, spn in self.spn_pares.items()
-                if spn.value() > 0}
-
-    def get_precios(self) -> dict[int, float]:
-        return {talla_id: spn.value() for talla_id, spn in self.spn_precios.items()
-                if spn.value() > 0}
-
 
 def _tipo_documento(tipo: str) -> str:
     if tipo == "factura":
@@ -1005,20 +855,26 @@ class DialogOrdenCompra(QDialog):
                 self._recalcular()
 
     def _configurar_tallas(self, row: int) -> None:
+        from src.components.tallas_matrix import MatrizTallasDialog
         prev = self._tallas_fila.get(row, {})
-        dlg = DialogMatrizTallas(
-            self.controller,
-            inicial={tid: v["pares"] for tid, v in prev.items()},
-            precios_iniciales={tid: v["precio"] for tid, v in prev.items()},
+        dlg = MatrizTallasDialog(
+            tallas=self.controller.listar_tallas(),
+            titulo="MATRIZ DE TALLAS (OC)",
+            con_precios=True,
+            parent=self,
         )
+        dlg.establecer_valores(
+            {str(tid): v["pares"] for tid, v in prev.items()})
+        dlg.establecer_precios(
+            {str(tid): v["precio"] for tid, v in prev.items()})
         if dlg.exec() == QDialog.Accepted:
-            matriz = dlg.get_matriz()
-            precios = dlg.get_precios()
+            valores = dlg.obtener_valores()  # dict[str, int] por talla_id
+            precios = dlg.obtener_precios()  # dict[str, float] por talla_id
             self._tallas_fila[row] = {
-                tid: {"pares": matriz[tid], "precio": precios.get(tid, 0.0)}
-                for tid in matriz
+                int(tid): {"pares": pares, "precio": float(precios.get(tid, 0) or 0)}
+                for tid, pares in valores.items() if pares > 0
             }
-            total_pares = sum(matriz.values())
+            total_pares = sum(v["pares"] for v in self._tallas_fila[row].values())
             btn = self.table_detalle.cell_widget(row, "tallas")
             if btn:
                 btn.setText(f"Editar Tallas ({total_pares} pr)")
@@ -1267,7 +1123,7 @@ class DialogVerOrden(QDialog):
         layout.addWidget(self.table)
 
         from src.utils.export_utils import export_orden_compra_excel, print_orden_compra
-        btn_print = QPushButton("Imprimir PDF")
+        btn_print = QPushButton("Vista Previa / Imprimir")
         btn_print.setObjectName("btnPrimary")
         btn_print.clicked.connect(lambda: print_orden_compra(oc, detalle, self))
 
@@ -1919,14 +1775,9 @@ class DialogOrdenProduccion(QDialog):
                 v["id"],
             )
 
-        self.dte_inicio = QDateEdit()
-        self.dte_inicio.setCalendarPopup(True)
         from PySide6.QtCore import QDate
-        self.dte_inicio.setDate(QDate.currentDate())
-
-        self.dte_entrega = QDateEdit()
-        self.dte_entrega.setCalendarPopup(True)
-        self.dte_entrega.setDate(QDate.currentDate().addDays(7))
+        self.dte_inicio = DatePicker()
+        self.dte_entrega = DatePicker(QDate.currentDate().addDays(7))
 
         self.cmb_prioridad = QComboBox()
         self.cmb_prioridad.addItems(["baja", "normal", "alta", "urgente"])
@@ -2030,8 +1881,8 @@ class DialogOrdenProduccion(QDialog):
 
         self.controller.crear_op(
             folio, self.cmb_variante.currentData(), matriz,
-            self.dte_inicio.date().toString("yyyy-MM-dd"),
-            self.dte_entrega.date().toString("yyyy-MM-dd"),
+            self.dte_inicio.fecha_bd(),
+            self.dte_entrega.fecha_bd(),
             self.cmb_prioridad.currentText(),
             self.txt_obs.toPlainText().strip(),
         )
@@ -2195,3 +2046,151 @@ class DialogAvanceEstacion(QDialog):
             procesados, defectuosos, self.txt_obs.toPlainText().strip(),
         )
         self.accept()
+
+
+class DialogFichaTecnica(QDialog):
+    """Vista de la ficha técnica (boleto técnico) de un modelo.
+
+    Muestra el encabezado (marca, talla, género, horma, moldura, construcción,
+    corrida, tacón), la imagen principal y las secciones de materiales con su
+    detalle. Solo lectura; la ficha se alimenta desde el importador GORETTI.
+    """
+
+    CAMPOS_ENCABEZADO = [
+        ("Marca", "marca"),
+        ("Talla", "talla"),
+        ("Género", "genero"),
+        ("Horma", "horma"),
+        ("Moldura", "moldura"),
+        ("Construcción", "construccion"),
+        ("Corrida", "corrida"),
+        ("Scallop", "scallop"),
+        ("Tacón", "tacon"),
+    ]
+
+    def __init__(self, controller: ProduccionController, modelo_id: int,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.modelo_id = modelo_id
+        self.ficha = controller.obtener_ficha_tecnica(modelo_id)
+        self.modelo = controller.obtener_modelo(modelo_id) or {}
+        self.setWindowTitle("Ficha Técnica")
+        self.resize(760, 640)
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 16)
+        layout.setSpacing(12)
+
+        titulo = QLabel(
+            f"Ficha Técnica — [{self.modelo.get('codigo', '')}] "
+            f"{self.modelo.get('nombre', '')}")
+        titulo.setObjectName("sectionTitle")
+        layout.addWidget(titulo)
+
+        if not self.ficha:
+            layout.addWidget(QLabel(
+                "Este modelo no tiene ficha técnica. Impórtela desde un archivo "
+                "GORETTI*.xlsx."))
+            btns = QHBoxLayout()
+            btns.addStretch()
+            btn_close = QPushButton("Cerrar")
+            btn_close.setObjectName("btnSecondary")
+            btn_close.clicked.connect(self.accept)
+            btns.addWidget(btn_close)
+            layout.addLayout(btns)
+            return
+
+        cuerpo = QScrollArea()
+        cuerpo.setWidgetResizable(True)
+        cont = QWidget()
+        clayout = QVBoxLayout(cont)
+        clayout.setContentsMargins(0, 0, 8, 0)
+        clayout.setSpacing(12)
+
+        encabezado_img = QHBoxLayout()
+        col_izq = QVBoxLayout()
+        grupo = QGroupBox("Datos generales")
+        form = QFormLayout(grupo)
+        for etiqueta, campo in self.CAMPOS_ENCABEZADO:
+            valor = self.ficha.get(campo) or ""
+            txt = QLineEdit(valor)
+            txt.setReadOnly(True)
+            form.addRow(etiqueta, txt)
+        col_izq.addWidget(grupo)
+        col_izq.addStretch()
+        encabezado_img.addLayout(col_izq, 1)
+
+        imagen = self.ficha.get("imagen")
+        if imagen:
+            qimg = QImage.fromData(imagen)
+            if not qimg.isNull():
+                lbl_img = QLabel()
+                pix = QPixmap.fromImage(qimg)
+                lbl_img.setPixmap(
+                    pix.scaledToWidth(240, Qt.SmoothTransformation))
+                lbl_img.setAlignment(Qt.AlignTop)
+                encabezado_img.addWidget(lbl_img, 0)
+
+        clayout.addLayout(encabezado_img)
+
+        for seccion in self.ficha.get("secciones", []):
+            clayout.addWidget(self._crear_tabla_seccion(seccion))
+
+        notas = self.ficha.get("notas") or ""
+        if notas:
+            grp_notas = QGroupBox("Notas y referencias")
+            lay_notas = QVBoxLayout(grp_notas)
+            lbl_notas = QLabel(notas)
+            lbl_notas.setWordWrap(True)
+            lay_notas.addWidget(lbl_notas)
+            clayout.addWidget(grp_notas)
+
+        clayout.addStretch()
+        cuerpo.setWidget(cont)
+        layout.addWidget(cuerpo, 1)
+
+        btns = QHBoxLayout()
+        fuente = self.ficha.get("fuente_archivo") or ""
+        if fuente:
+            lbl_fuente = QLabel(f"Fuente: {fuente}")
+            lbl_fuente.setObjectName("sectionSubtitle")
+            btns.addWidget(lbl_fuente)
+        btns.addStretch()
+        btn_close = QPushButton("Cerrar")
+        btn_close.setObjectName("btnSecondary")
+        btn_close.clicked.connect(self.accept)
+        btns.addWidget(btn_close)
+        layout.addLayout(btns)
+
+    def _crear_tabla_seccion(self, seccion: dict) -> QWidget:
+        grupo = QGroupBox(seccion.get("nombre", ""))
+        layout = QVBoxLayout(grupo)
+        detalle = seccion.get("detalle", [])
+        tabla = QTableWidget(len(detalle), 4)
+        tabla.setHorizontalHeaderLabels(
+            ["Componente", "Descripción", "Proveedor", "Comentarios"])
+        tabla.verticalHeader().setVisible(False)
+        tabla.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        tabla.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tabla.setAlternatingRowColors(True)
+        header = tabla.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        for fila, item in enumerate(detalle):
+            valores = [
+                item.get("componente") or "",
+                item.get("descripcion") or "",
+                item.get("proveedor") or "",
+                item.get("comentarios") or "",
+            ]
+            for col, valor in enumerate(valores):
+                celda = QTableWidgetItem(valor)
+                tabla.setItem(fila, col, celda)
+        layout.addWidget(tabla)
+        return grupo
+
