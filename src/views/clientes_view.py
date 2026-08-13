@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 
 from src.components.complex_grid import ComplexGrid
 from src.components.date_picker import DatePicker
-from src.components.tallas_matrix import MatrizTallasDialog
+from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
@@ -956,12 +956,13 @@ class _DialogPedidoCliente(QDialog):
         self._recalcular_total()
 
     def _agregar_linea(self) -> None:
-        dlg = _DialogLineaPedido(self)
+        dlg = _DialogLineaPedido(self.controller, self)
         if dlg.exec() == QDialog.Accepted:
             row = self.table_detalle.rowCount()
             self.table_detalle.insertRow(row)
-            self._puntos_fila[row] = {}
+            self._puntos_fila[row] = dict(dlg.pares)
             self._set_fila(row, dlg.modelo, dlg.piel, dlg.color)
+            self._actualizar_boton_tallas(row)
 
     def _configurar_tallas(self, row: int) -> None:
         puntos = self.controller.listar_puntos()
@@ -1047,23 +1048,26 @@ class _DialogPedidoCliente(QDialog):
 
 
 class _DialogLineaPedido(QDialog):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, controller: ClientesController | None = None,
+                 parent=None) -> None:
         super().__init__(parent)
+        self.controller = controller or ClientesController()
         self.setWindowTitle("Agregar Línea al Pedido")
-        self.setMinimumWidth(380)
+        self.setMinimumSize(700, 560)
         self.setModal(True)
         _aplicar_estilo_forms(self)
         self.modelo = ""
         self.piel = ""
         self.color = ""
+        self.pares: dict[int, int] = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setSpacing(14)
+        layout.setSpacing(12)
 
         form = QFormLayout()
-        form.setSpacing(10)
+        form.setSpacing(8)
         self.txt_modelo = QLineEdit()
         self.txt_modelo.setPlaceholderText("Ej: RENATO GALAN (obligatorio)")
         self.txt_piel = QLineEdit()
@@ -1074,6 +1078,12 @@ class _DialogLineaPedido(QDialog):
         form.addRow("Piel:", self.txt_piel)
         form.addRow("Color:", self.txt_color)
         layout.addLayout(form)
+
+        self.puntos = self.controller.listar_puntos()
+        self.matriz = MatrizTallasWidget(
+            puntos=self.puntos, titulo="PARES POR TALLA DE ESTA LÍNEA",
+            parent=self)
+        layout.addWidget(self.matriz, 1)
 
         btns = QHBoxLayout()
         btns.addStretch()
@@ -1086,12 +1096,20 @@ class _DialogLineaPedido(QDialog):
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_ok)
         layout.addLayout(btns)
+        self.txt_modelo.setFocus()
 
     def _save(self) -> None:
         modelo = self.txt_modelo.text().strip()
         if not modelo:
-            QMessageBox.warning(self, "Campo requerido", "El modelo es obligatorio.")
+            QMessageBox.warning(self, "Campo requerido",
+                                "El modelo es obligatorio.")
             return
+        valores = self.matriz.obtener_valores()
+        self.pares = {}
+        for p in self.puntos:
+            pares = int(valores.get(str(p["punto"]), 0) or 0)
+            if pares > 0:
+                self.pares[p["id"]] = pares
         self.modelo = modelo
         self.piel = self.txt_piel.text().strip()
         self.color = self.txt_color.text().strip()

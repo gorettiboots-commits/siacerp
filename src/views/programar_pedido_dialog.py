@@ -72,12 +72,12 @@ class ProgramarPedidoDialog(QDialog):
         self.vista = ComplexGrid()
         self.vista.set_columnas([
             {"key": "modelo", "titulo": "Modelo", "ancho": 200},
+            {"key": "corrida", "titulo": "Corrida", "ancho": 150},
             {"key": "piel", "titulo": "Piel", "ancho": 150},
             {"key": "color", "titulo": "Color", "ancho": 150},
             {"key": "det_total", "titulo": "Total", "ancho": 70, "tipo": "numero"},
             {"key": "prog_det", "titulo": "Programado", "ancho": 90, "tipo": "numero"},
             {"key": "rest_det", "titulo": "Restante", "ancho": 80, "tipo": "numero"},
-            {"key": "corrida", "titulo": "Corrida", "ancho": 150},
         ])
         self.vista.set_renderers(fila=self._fila, claves=self._claves)
         self.vista.set_acciones([
@@ -181,9 +181,10 @@ class ProgramarPedidoDialog(QDialog):
                 f"al {self._fmt_talla(parejas[-1][1])}")
 
     def _fila(self, d: dict) -> list[str]:
-        return [d.get("modelo", ""), d.get("piel", ""), d.get("color", ""),
+        return [d.get("modelo", ""), self._texto_corrida_rango(d),
+                d.get("piel", ""), d.get("color", ""),
                 str(d.get("det_total", 0)), str(d.get("prog_det", 0)),
-                str(d.get("rest_det", 0)), self._texto_corrida_rango(d)]
+                str(d.get("rest_det", 0))]
 
     def _claves(self, d: dict) -> list:
         corrida = self._corridas.get(d["detalle_id"])
@@ -191,10 +192,10 @@ class ProgramarPedidoDialog(QDialog):
             mins = min(self._valor_talla(t["talla"]) for t in corrida["tallas"])
         else:
             mins = (1, "")
-        return [d.get("modelo", "").lower(), d.get("piel", "").lower(),
-                d.get("color", "").lower(),
+        return [d.get("modelo", "").lower(), mins,
+                d.get("piel", "").lower(), d.get("color", "").lower(),
                 float(d.get("det_total", 0)), float(d.get("prog_det", 0)),
-                float(d.get("rest_det", 0)), mins]
+                float(d.get("rest_det", 0))]
 
     def _texto_corrida(self, d: dict) -> str:
         corrida = self._corridas.get(d["detalle_id"])

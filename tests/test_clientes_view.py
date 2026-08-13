@@ -172,6 +172,34 @@ class TestEstatusProgramado:
             self._limpiar(controller, datos)
 
 
+# ------------------------------------------------- Línea con captura de tallas
+class TestLineaConTallas:
+    def test_dialogo_linea_embebe_matriz_y_total_en_vivo(self, controller):
+        dlg = _DialogLineaPedido(controller)
+        assert hasattr(dlg, "matriz")
+        puntos = dlg.puntos
+        assert puntos, "tallas_catalogo debe tener tallas activas"
+        primera = puntos[0]
+        celda = dlg.matriz.celdas[str(primera["punto"])]
+        celda.setText("12")
+        assert dlg.matriz.lbl_total.text() == "Total de pares: 12"
+        dlg.txt_modelo.setText("MODELO PRUEBA")
+        dlg._save()
+        assert dlg.modelo == "MODELO PRUEBA"
+        assert dlg.pares.get(primera["id"]) == 12
+        dlg.deleteLater()
+
+    def test_dialogo_linea_excluye_pares_en_cero(self, controller):
+        dlg = _DialogLineaPedido(controller)
+        puntos = dlg.puntos
+        if puntos:
+            dlg.matriz.celdas[str(puntos[0]["punto"])].setText("0")
+        dlg.txt_modelo.setText("MODELO PRUEBA")
+        dlg._save()
+        assert dlg.pares == {}
+        dlg.deleteLater()
+
+
 # ------------------------------------------------- Integración con el grid
 class TestIntegracionConGrid:
     def test_vista_es_complex_grid(self, vista):
