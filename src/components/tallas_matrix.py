@@ -259,7 +259,7 @@ class MatrizTallasWidget(QWidget):
         tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
         for c in range(self.COLUMNAS):
             tabla.setColumnWidth(c, 60)
-        tabla.setFixedHeight(tabla.rowCount() * 38 + 6)
+        tabla.setFixedHeight(min(tabla.rowCount() * 38 + 6, 440))
 
         for b, tallas_bloque in enumerate(bloques_tallas):
             fila_encabezado = b * 2
@@ -325,7 +325,8 @@ class MatrizTallasDialog(QDialog):
         self.titulo = titulo
         self.setWindowTitle("Controles de tallas")
         self.setModal(True)
-        self.resize(720, 480)
+        self.setMinimumSize(700, 560)
+        self.resize(760, 620)
         self.widget = MatrizTallasWidget(
             puntos=puntos, titulo=titulo, parent=self, tallas=tallas)
         self.puntos = self.widget.puntos

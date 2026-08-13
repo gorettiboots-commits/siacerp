@@ -695,7 +695,7 @@ class DialogMatrizTallas(QDialog):
         super().__init__()
         self.controller = controller
         self.setWindowTitle("Matriz de Tallas")
-        self.setMinimumSize(620, 420)
+        self.setMinimumSize(720, 620)
         self.setModal(True)
         self._matriz = dict(inicial or {})
         self._precios = dict(precios_iniciales or {})
@@ -746,8 +746,18 @@ class DialogMatrizTallas(QDialog):
                 fila_layout.setContentsMargins(0, 0, 0, 0)
         if cols % 2 != 0:
             filas.append(fila)
+        contenedor_filas = QWidget()
+        contenedor_filas_layout = QVBoxLayout(contenedor_filas)
+        contenedor_filas_layout.setContentsMargins(0, 0, 0, 0)
+        contenedor_filas_layout.setSpacing(8)
         for f in filas:
-            layout.addWidget(f)
+            contenedor_filas_layout.addWidget(f)
+        scroll_filas = QScrollArea()
+        scroll_filas.setWidgetResizable(True)
+        scroll_filas.setWidget(contenedor_filas)
+        scroll_filas.setMinimumHeight(340)
+        scroll_filas.setMaximumHeight(500)
+        layout.addWidget(scroll_filas, 1)
 
         corrida_box = QGroupBox("Corrida rápida de tallas")
         corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")

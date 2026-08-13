@@ -85,8 +85,9 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("SIAC ERP")
-        self.setMinimumSize(1280, 800)
-        self.resize(1400, 900)
+        self.setMinimumSize(1100, 700)
+        disp = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1400, disp.width()), min(900, disp.height()))
 
         self._central = QWidget()
         self._central.setObjectName("centralContainer")
