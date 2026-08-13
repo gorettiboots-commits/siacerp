@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 
 from src.components.complex_grid import ComplexGrid
 from src.components.editor_etiqueta_widget import DialogoEditorEtiqueta
+from src.components.notificacion_flotante import notificar_flotante
 from src.components.preview_impresion import PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
@@ -453,7 +454,8 @@ class ProgramacionView(QWidget):
     def _exportar(self) -> None:
         path = export_table_to_excel(self.vista.table, "Programacion", self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)
 
     def _imprimir(self) -> None:
         """Vista previa de impresión del reporte (PreviewImpresion)."""

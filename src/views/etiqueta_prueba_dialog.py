@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.components.notificacion_flotante import notificar_flotante
 from src.utils.etiqueta_termica import (
     ANCHO_MM, ALTO_MM, configurar_printer, datos_prueba, etiqueta_termica_pdf,
     imprimir_etiqueta, render_etiqueta_termica, render_etiqueta_termica_pixmap,
@@ -75,9 +76,8 @@ class EtiquetaPruebaDialog(QDialog):
         if err:
             QMessageBox.critical(self, "Error al imprimir", err)
         else:
-            QMessageBox.information(
-                self, "Impresión",
-                "Etiqueta de prueba enviada a la impresora.")
+            notificar_flotante("Etiqueta de prueba enviada a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
 
     def _vista_previa(self) -> None:
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
@@ -94,4 +94,5 @@ class EtiquetaPruebaDialog(QDialog):
         if not path:
             return
         etiqueta_termica_pdf(path, self._datos)
-        QMessageBox.information(self, "PDF", f"Etiqueta guardada en:\n{path}")
+        notificar_flotante(f"Etiqueta guardada en:\n{path}",
+                           tipo="success", titulo="PDF", host=self)

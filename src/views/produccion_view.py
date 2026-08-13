@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import tiene
@@ -506,4 +507,5 @@ class ProduccionView(QWidget):
     def _exportar_tabla(self, table, nombre: str) -> None:
         path = export_table_to_excel(table, nombre, self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)

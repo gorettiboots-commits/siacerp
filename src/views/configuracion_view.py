@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
@@ -707,8 +708,8 @@ class _TabTallas(QWidget):
                     f"No se pudo vaciar la lista:\n{e}\n\n"
                     "Verifique que ninguna talla esté en uso en órdenes.")
                 return
-            QMessageBox.information(self, "Lista vaciada",
-                f"Se eliminaron {eliminados} tallas del catálogo.")
+            notificar_flotante(f"Se eliminaron {eliminados} tallas del catálogo.",
+                               tipo="success", titulo="Lista vaciada", host=self)
             self.recargar()
 
 
@@ -1076,7 +1077,8 @@ class _TabAccesos(QWidget):
             return
         concedidas = {f"{m}.{a}" for (m, a), chk in self._checks.items() if chk.isChecked()}
         self.controller.guardar_permisos(self._usuario_id, concedidas)
-        QMessageBox.information(self, "Guardado", "Permisos actualizados correctamente.")
+        notificar_flotante("Permisos actualizados correctamente.",
+                           tipo="success", titulo="Guardado", host=self)
 
     def _crear_usuario(self) -> None:
         dlg = _DialogUsuario(self.controller)
@@ -1095,7 +1097,8 @@ class _TabAccesos(QWidget):
             return
         dlg = _DialogPassword(self.controller, self._usuario_id)
         if dlg.exec() == QDialog.Accepted:
-            QMessageBox.information(self, "Listo", "Contraseña actualizada.")
+            notificar_flotante("Contraseña actualizada.",
+                               tipo="success", titulo="Listo", host=self)
 
     def _toggle_usuario(self) -> None:
         if not self._validar_seleccion():

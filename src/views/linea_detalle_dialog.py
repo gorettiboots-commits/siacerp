@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from src.components.editor_etiqueta import (
     DialogoPropiedadesCampo, LabelCanvas, normalizar_diseno,
 )
+from src.components.notificacion_flotante import notificar_flotante
 from src.components.tallas_matrix import MatrizTallasWidget
 from src.models.etiqueta_model import EtiquetaModel
 from src.utils.etiqueta_render import render_label
@@ -193,9 +194,10 @@ class LineaDetalleDialog(QDialog):
 
     def _guardar_plantilla(self) -> None:
         self.etiquetas.guardar_diseno(self._diseno)
-        QMessageBox.information(self, "Plantilla",
-                                "Plantilla de etiqueta guardada.\n"
-                                "Se cargará en las próximas aperturas.")
+        notificar_flotante(
+            "La plantilla de etiqueta quedó guardada. Se cargará en las "
+            "próximas aperturas.",
+            tipo="success", titulo="Plantilla guardada", host=self)
 
     # ---- Impresión / PDF (respeta el layout) ----
 
@@ -260,9 +262,8 @@ class LineaDetalleDialog(QDialog):
             QMessageBox.critical(self, "Error al imprimir",
                                  f"{type(e).__name__}: {e}")
             return
-        QMessageBox.information(
-            self, "Impresión",
-            f"Se enviaron {total} etiquetas a la impresora.")
+        notificar_flotante(f"Se enviaron {total} etiquetas a la impresora.",
+                           tipo="success", titulo="Impresión", host=self)
 
     def _imprimir_muestra(self) -> None:
         """Imprime una sola etiqueta de muestra con los datos actuales."""
@@ -288,8 +289,8 @@ class LineaDetalleDialog(QDialog):
             QMessageBox.critical(self, "Error al imprimir",
                                  f"{type(e).__name__}: {e}")
             return
-        QMessageBox.information(self, "Impresión",
-                                "Etiqueta de muestra enviada a la impresora.")
+        notificar_flotante("Etiqueta de muestra enviada a la impresora.",
+                           tipo="success", titulo="Impresión", host=self)
 
     def _guardar_pdf(self) -> None:
         talla = self._talla_seleccionada()

@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QSize, Qt, QUrl, QVariantAnimation
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QAction, QFont, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QApplication, QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMenuBar, QMessageBox, QPushButton, QSizePolicy,
-    QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
+    QMainWindow, QMenuBar, QMessageBox, QPushButton,
+    QStackedWidget, QStatusBar, QToolButton, QVBoxLayout, QWidget,
 )
 
 from src.controllers.accesos_controller import AccesosController
@@ -156,11 +156,11 @@ class MainWindow(QMainWindow):
 
     def _setup_main_container(self) -> None:
         self._main_container.setObjectName("mainContainer")
-        layout = QHBoxLayout(self._main_container)
+        layout = QVBoxLayout(self._main_container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._nav_panel = self._create_nav_panel()
+        self._nav_toolbar = self._create_nav_toolbar()
         self._content_area = QStackedWidget()
         self._content_area.setObjectName("contentArea")
 
@@ -180,7 +180,7 @@ class MainWindow(QMainWindow):
         self._content_area.addWidget(self._view_programacion)
         self._content_area.addWidget(self._view_sandbox)
 
-        layout.addWidget(self._nav_panel)
+        layout.addWidget(self._nav_toolbar)
         layout.addWidget(self._content_area, 1)
 
     def _create_video_splash(self) -> QWidget:
@@ -214,7 +214,7 @@ class MainWindow(QMainWindow):
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet("font-size: 14px; color: #94a3b8;")
         l.addWidget(sub)
-        hint = QLabel("Seleccione un módulo en el menú lateral")
+        hint = QLabel("Seleccione un módulo en la barra superior")
         hint.setAlignment(Qt.AlignCenter)
         hint.setStyleSheet("font-size: 12px; color: #64748b; padding-top: 24px;")
         l.addWidget(hint)
@@ -233,57 +233,40 @@ class MainWindow(QMainWindow):
         self._splash_stack = stack
         return stack
 
-    _NAV_W_ABIERTO = 216
-    _NAV_W_CERRADO = 58
+    def _create_nav_toolbar(self) -> QFrame:
+        """Barra superior horizontal de módulos (estilo toolbar del sandbox)."""
+        barra = QFrame()
+        barra.setObjectName("navToolbar")
+        barra.setFixedHeight(52)
+        # El fondo/bordes los define styles.qss (navToolbar) — sin override inline
 
-    def _create_nav_panel(self) -> QFrame:
-        panel = QFrame()
-        panel.setObjectName("navPanel")
-        panel.setFixedWidth(self._NAV_W_ABIERTO)
-        # El fondo del panel lo define styles.qss (navPanel) — sin override inline
-
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 14, 12, 16)
-        layout.setSpacing(2)
-
-        self.nav_toggle = QPushButton()
-        self.nav_toggle.setObjectName("navToggle")
-        self.nav_toggle.setIcon(mono_icon("toggle", 22, "#cbd5e1"))
-        self.nav_toggle.setIconSize(QSize(22, 22))
-        self.nav_toggle.setCursor(Qt.PointingHandCursor)
-        self.nav_toggle.setToolTip("Colapsar menú")
-        self.nav_toggle.clicked.connect(self._toggle_sidebar)
-        layout.addWidget(self.nav_toggle)
-
-        from pathlib import Path
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
-        self._logo_original = None
-        self._nav_logo_label = QLabel()
-        if logo_path.exists():
-            self._logo_original = QPixmap(str(logo_path)).scaled(
-                48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self._nav_logo_label.setPixmap(self._logo_original)
-        self._nav_logo_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self._nav_logo_label)
+        layout = QHBoxLayout(barra)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(4)
 
         self._nav_logo_text = QLabel("SIAC ERP")
         self._nav_logo_text.setObjectName("navBrand")
         self._nav_logo_text.setAlignment(Qt.AlignCenter)
         layout.addWidget(self._nav_logo_text)
 
-        self._nav_section = QLabel("MÓDULOS")
-        self._nav_section.setObjectName("navSectionLabel")
-        layout.addWidget(self._nav_section)
+        layout.addSpacing(12)
 
-        self.nav_ordenes = QPushButton("Órdenes de Compra")
-        self.nav_produccion = QPushButton("Producción")
-        self.nav_stock = QPushButton("Inventario")
-        self.nav_clientes = QPushButton("Clientes")
-        self.nav_programacion = QPushButton("Programación")
-        self.nav_sandbox = QPushButton("Sandbox")
+        self.nav_ordenes = QToolButton()
+        self.nav_ordenes.setText("Órdenes de Compra")
+        self.nav_produccion = QToolButton()
+        self.nav_produccion.setText("Producción")
+        self.nav_stock = QToolButton()
+        self.nav_stock.setText("Inventario")
+        self.nav_clientes = QToolButton()
+        self.nav_clientes.setText("Clientes")
+        self.nav_programacion = QToolButton()
+        self.nav_programacion.setText("Programación")
+        self.nav_sandbox = QToolButton()
+        self.nav_sandbox.setText("Sandbox")
 
-        self.nav_salir = QPushButton("Cerrar Sesión")
-        self.nav_salir.setObjectName("navButton")
+        self.nav_salir = QToolButton()
+        self.nav_salir.setText("Cerrar Sesión")
+        self.nav_salir.setObjectName("navTool")
 
         _iconos_nav = {
             "oc": self.nav_ordenes,
@@ -294,28 +277,25 @@ class MainWindow(QMainWindow):
             "sandbox": self.nav_sandbox,
         }
         for clave, btn in _iconos_nav.items():
-            btn.setObjectName("navButton")
+            btn.setObjectName("navTool")
+            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
-            btn.setMinimumHeight(36)
+            btn.setMinimumHeight(34)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setIcon(mono_icon(clave, 22))
-            btn.setIconSize(QSize(22, 22))
+            btn.setIcon(mono_icon(clave, 20, "#1F2937"))
+            btn.setIconSize(QSize(20, 20))
             btn.toggled.connect(
                 lambda checked, b=btn, k=clave:
-                b.setIcon(mono_icon(k, 22, "#ffffff" if checked else "#cbd5e1")))
+                b.setIcon(mono_icon(k, 20, "#ffffff" if checked else "#1F2937")))
             layout.addWidget(btn)
 
-        self.nav_salir.setIcon(mono_icon("logout", 22))
-        self.nav_salir.setIconSize(QSize(22, 22))
-        self.nav_salir.setMinimumHeight(36)
+        self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.nav_salir.setMinimumHeight(34)
         self.nav_salir.setCursor(Qt.PointingHandCursor)
-
-        divider = QFrame()
-        divider.setObjectName("navDivider")
-        layout.addWidget(divider)
-
-        layout.addWidget(self.nav_salir)
+        self.nav_salir.setIcon(mono_icon("logout", 20, "#1F2937"))
+        self.nav_salir.setIconSize(QSize(20, 20))
+        self.nav_salir.clicked.connect(self._logout)
 
         self.nav_sandbox.setVisible(False)
         self.nav_sandbox.clicked.connect(self._mostrar_sandbox)
@@ -326,14 +306,13 @@ class MainWindow(QMainWindow):
         ]:
             btn.clicked.connect(lambda checked, i=idx: self._switch_view(i))
 
-        self.nav_salir.clicked.connect(self._logout)
         layout.addStretch()
 
         self._nav_user_card = QFrame()
         self._nav_user_card.setObjectName("userCard")
         user_layout = QVBoxLayout(self._nav_user_card)
-        user_layout.setContentsMargins(10, 8, 10, 8)
-        user_layout.setSpacing(2)
+        user_layout.setContentsMargins(10, 2, 10, 2)
+        user_layout.setSpacing(0)
         self._lbl_user_name = QLabel("Sesión no iniciada")
         self._lbl_user_name.setObjectName("userName")
         self._lbl_user_role = QLabel("")
@@ -342,55 +321,10 @@ class MainWindow(QMainWindow):
         user_layout.addWidget(self._lbl_user_role)
         layout.addWidget(self._nav_user_card)
 
-        self._nav_version = QLabel("v1.0.0")
-        self._nav_version.setObjectName("navVersion")
-        self._nav_version.setStyleSheet("color: #475569; font-size: 11px; padding: 6px 0 0 0;")
-        self._nav_version.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self._nav_version)
+        layout.addSpacing(4)
+        layout.addWidget(self.nav_salir)
 
-        self._nav_abierto = True
-        self._nav_anim = QVariantAnimation(self)
-        self._nav_anim.setDuration(220)
-        self._nav_anim.setEasingCurve(QEasingCurve.InOutCubic)
-        self._nav_anim.valueChanged.connect(self._nav_redimensionar)
-
-        return panel
-
-    def _toggle_sidebar(self) -> None:
-        self._nav_abierto = not self._nav_abierto
-        destino = self._NAV_W_ABIERTO if self._nav_abierto else self._NAV_W_CERRADO
-        self._nav_anim.stop()
-        self._nav_anim.setStartValue(float(self._nav_panel.width()))
-        self._nav_anim.setEndValue(float(destino))
-        self._nav_anim.start()
-        self._aplicar_estado_nav()
-
-    def _nav_redimensionar(self, ancho: float) -> None:
-        self._nav_panel.setFixedWidth(int(ancho))
-
-    def _aplicar_estado_nav(self) -> None:
-        abierto = self._nav_abierto
-        self._nav_logo_text.setVisible(abierto)
-        self._nav_section.setVisible(abierto)
-        self._nav_user_card.setVisible(abierto)
-        self._nav_version.setVisible(abierto)
-        if self._logo_original:
-            tam = 48 if abierto else 36
-            self._nav_logo_label.setPixmap(self._logo_original.scaled(
-                tam, tam, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        for btn, texto in [
-            (self.nav_ordenes, "Órdenes de Compra"),
-            (self.nav_produccion, "Producción"),
-            (self.nav_stock, "Inventario"),
-            (self.nav_clientes, "Clientes"),
-            (self.nav_programacion, "Programación"),
-            (self.nav_sandbox, "Sandbox"),
-        ]:
-            btn.setText(texto if abierto else "")
-            btn.setToolTip("" if abierto else texto)
-        self.nav_salir.setText("Cerrar Sesión" if abierto else "")
-        self.nav_salir.setToolTip("" if abierto else "Cerrar Sesión")
-        self.nav_toggle.setToolTip("Colapsar menú" if abierto else "Expandir menú")
+        return barra
 
     def _setup_status_bar(self) -> None:
         self.status_bar = QStatusBar()

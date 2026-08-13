@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import (
@@ -309,7 +310,8 @@ class OrdenesCompraView(QWidget):
             return
         dlg = DialogRecibirOrden(self.controller, oc["id"])
         if dlg.exec():
-            QMessageBox.information(self, "Éxito", "Orden recibida. Stock actualizado.")
+            notificar_flotante("Orden recibida. Stock actualizado.",
+                               tipo="success", titulo="Éxito", host=self)
             self._load_ordenes()
 
     def _cancelar_orden(self) -> None:
@@ -336,7 +338,8 @@ class OrdenesCompraView(QWidget):
             detalle = self.controller.obtener_detalle_orden(oc["id"])
             path = export_orden_compra_excel(datos, detalle, self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)
 
     def _imprimir(self) -> None:
         oc = self.vista.registro_seleccionado()
@@ -350,7 +353,8 @@ class OrdenesCompraView(QWidget):
     def _exportar_proveedores(self) -> None:
         path = export_table_to_excel(self.grid_prov.table, "Proveedores", self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)
 
     def _gestionar_proveedores(self) -> None:
         self.tabs.setCurrentIndex(1)

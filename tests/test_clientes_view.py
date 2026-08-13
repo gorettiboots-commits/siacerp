@@ -67,13 +67,22 @@ class TestEstiloForms:
 
 # ------------------------------------------------- Acciones por registro
 class TestAccionesGrid:
-    def test_pedidos_registra_dos_acciones(self, vista):
-        assert len(vista.vista._acciones) == 2
+    def test_pedidos_registra_tres_acciones(self, vista):
+        assert len(vista.vista._acciones) == 3
         textos = [acc["texto"] for acc in vista.vista._acciones]
-        assert "Editar" in textos and "Cancelar" in textos
+        assert "Programar" in textos and "Editar" in textos and "Cancelar" in textos
 
     def test_pedidos_cancelar_deshabilitado_en_cancelado(self, vista):
-        acc = vista.vista._acciones[1]
+        acc = vista.vista._acciones[2]
+        assert acc["texto"] == "Cancelar"
+        fn = acc["habilitado"]
+        assert fn({"estatus": "surtido"}) is False
+        assert fn({"estatus": "cancelado"}) is False
+        assert fn({"estatus": "pendiente"}) is True
+
+    def test_pedidos_programar_deshabilitado_en_cancelado(self, vista):
+        acc = vista.vista._acciones[0]
+        assert acc["texto"] == "Programar"
         fn = acc["habilitado"]
         assert fn({"estatus": "surtido"}) is False
         assert fn({"estatus": "cancelado"}) is False

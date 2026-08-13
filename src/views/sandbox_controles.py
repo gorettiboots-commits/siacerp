@@ -29,8 +29,8 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.date_picker import DatePicker
+from src.components.notificacion_flotante import notificar_flotante
 from src.utils.icons import mono_icon
-from src.views.sandbox_notificaciones import notificar_flotante
 
 # ---------------------------------------------------------------- paleta ---
 # Colores extraídos de las imágenes de referencia del prompt de Sandbox.

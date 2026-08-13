@@ -28,9 +28,11 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QDesktopServices, QPageLayout, QPageSize
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QTextBrowser, QToolButton, QVBoxLayout, QWidget,
 )
+
+from src.components.notificacion_flotante import notificar_flotante
 
 # WebEngine se crea de forma perezosa dentro del diálogo (es pesado y solo
 # debe cargarse cuando el usuario abre el preview). Si no está disponible o
@@ -257,8 +259,8 @@ class PreviewImpresion(QDialog):
         printer = self._printer(para_pdf=True)
         printer.setOutputFileName(path)
         self._renderizar(printer)
-        QMessageBox.information(self, "PDF generado",
-                                f"El documento se exportó a:\n{path}")
+        notificar_flotante(f"El documento se exportó a:\n{path}",
+                           tipo="success", titulo="PDF generado", host=self)
         QDesktopServices.openUrl(path)
 
     def _renderizar(self, printer: QPrinter) -> None:

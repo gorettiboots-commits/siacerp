@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QVBoxLayout,
 )
 
+from src.components.notificacion_flotante import notificar_flotante
 from src.models.etiqueta_model import DATOS_ETIQUETA, EtiquetaModel
 from src.utils.etiqueta_render import render_label, render_label_pixmap
 
@@ -372,7 +373,8 @@ class EtiquetasDialog(QDialog):
     def _guardar_diseno(self) -> None:
         self._diseno = self._leer_diseno()
         self.etiquetas.guardar_diseno(self._diseno)
-        QMessageBox.information(self, "Diseño", "Diseño de etiqueta guardado.")
+        notificar_flotante("Diseño de etiqueta guardado.",
+                           tipo="success", titulo="Diseño", host=self)
 
     # ---- Impresión ----
 
@@ -422,8 +424,8 @@ class EtiquetasDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir", f"{type(e).__name__}: {e}")
             return
-        QMessageBox.information(self, "Impresión",
-                                f"Se enviaron {total} etiquetas a la impresora.")
+        notificar_flotante(f"Se enviaron {total} etiquetas a la impresora.",
+                           tipo="success", titulo="Impresión", host=self)
 
     def _imprimir_muestra(self) -> None:
         self._diseno = self._leer_diseno()
@@ -450,5 +452,5 @@ class EtiquetasDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir", f"{type(e).__name__}: {e}")
             return
-        QMessageBox.information(self, "Impresión",
-                                "Etiqueta de muestra enviada a la impresora.")
+        notificar_flotante("Etiqueta de muestra enviada a la impresora.",
+                           tipo="success", titulo="Impresión", host=self)

@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from src.components.complex_grid import ComplexGrid
 from src.components.date_picker import DatePicker
+from src.components.notificacion_flotante import notificar_flotante
 from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
@@ -40,6 +41,7 @@ class ClientesView(QWidget):
         super().__init__()
         self.controller = ClientesController()
         self._permiso_editar = True
+        self._permiso_programar = True
         _aplicar_estilo_forms(self)
         self._setup_ui()
         self._load_pedidos()
@@ -47,8 +49,8 @@ class ClientesView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self._permiso_editar = tiene(permisos, "clientes", "editar")
+        self._permiso_programar = tiene(permisos, "programacion", "editar")
         self.btn_nuevo_pedido.setEnabled(tiene(permisos, "clientes", "crear"))
-        self.btn_programas.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_nuevo_cli.setEnabled(tiene(permisos, "clientes", "crear"))
 
     def _setup_ui(self) -> None:
@@ -72,13 +74,8 @@ class ClientesView(QWidget):
         self.btn_nuevo_pedido.setObjectName("btnPrimary")
         self.btn_nuevo_pedido.clicked.connect(self._nuevo_pedido)
 
-        self.btn_programas = QPushButton("Programas")
-        self.btn_programas.setObjectName("btnPrimary")
-        self.btn_programas.clicked.connect(self._programar_pedido)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_programas)
         hlayout.addWidget(self.btn_nuevo_pedido)
 
         self.tabs = QTabWidget()
@@ -108,6 +105,10 @@ class ClientesView(QWidget):
         self.vista.set_renderers(fila=self._fila_pedido, claves=self._claves_pedido,
                                  estilo=self._estilo_pedido)
         self.vista.set_acciones([
+            {"texto": "Programar", "icono": "programacion", "color": "#0d9488",
+             "habilitado": lambda rec: self._permiso_programar
+             and rec.get("estatus") not in ("cancelado", "surtido"),
+             "callback": self._programar_pedido},
             {"texto": "Editar", "icono": "editar", "color": "#2A5FB0",
              "habilitado": lambda rec: self._permiso_editar,
              "callback": self._editar_pedido},
@@ -249,8 +250,9 @@ class ClientesView(QWidget):
             QMessageBox.warning(self, "Error", f"No se pudo cancelar: {e}")
         self._load_pedidos()
 
-    def _programar_pedido(self) -> None:
-        rec = self.vista.registro_seleccionado()
+    def _programar_pedido(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.vista.registro_seleccionado()
         if rec is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
             return
@@ -259,9 +261,9 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_pedidos()
             folios = ", ".join(dlg.folios_generados)
-            QMessageBox.information(
-                self, "Programado",
-                f"Se generaron los folios de programación: {folios}")
+            notificar_flotante(
+                f"Se generaron los folios de programación: {folios}",
+                tipo="success", titulo="Programado", host=self)
 
     # ---- Acciones de clientes ----
 
