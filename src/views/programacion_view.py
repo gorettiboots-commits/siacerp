@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.editor_etiqueta_widget import DialogoEditorEtiqueta
 from src.components.preview_impresion import PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
@@ -63,6 +64,7 @@ class ProgramacionView(QWidget):
         self.btn_print.setEnabled(tiene(permisos, "programacion", "exportar"))
         self.btn_etiquetas.setEnabled(tiene(permisos, "programacion", "exportar"))
         self.btn_etiqueta_prueba.setEnabled(tiene(permisos, "programacion", "exportar"))
+        self.btn_crear_etiqueta.setEnabled(tiene(permisos, "programacion", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -100,6 +102,11 @@ class ProgramacionView(QWidget):
         self.btn_etiqueta_prueba.setObjectName("btnSecondary")
         self.btn_etiqueta_prueba.clicked.connect(self._imprimir_etiqueta_prueba)
 
+        self.btn_crear_etiqueta = QPushButton("Crear Etiqueta")
+        self.btn_crear_etiqueta.setObjectName("btnPrimary")
+        self.btn_crear_etiqueta.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_crear_etiqueta.clicked.connect(self._crear_etiqueta)
+
         self.btn_export = QPushButton("Exportar Excel")
         self.btn_export.setObjectName("btnPrimary")
         self.btn_export.clicked.connect(self._exportar)
@@ -110,6 +117,7 @@ class ProgramacionView(QWidget):
         hlayout.addWidget(self.btn_print)
         hlayout.addWidget(self.btn_etiquetas)
         hlayout.addWidget(self.btn_etiqueta_prueba)
+        hlayout.addWidget(self.btn_crear_etiqueta)
         hlayout.addWidget(self.btn_export)
 
         layout.addWidget(header)
@@ -461,6 +469,11 @@ class ProgramacionView(QWidget):
     def _imprimir_etiquetas(self) -> None:
         dlg = EtiquetasDialog(self.controller, self)
         dlg.exec()
+
+    def _crear_etiqueta(self) -> None:
+        """Abre el editor de etiquetas aprobado a pantalla completa."""
+        dlg = DialogoEditorEtiqueta(self)
+        dlg.abrir_fullscreen()
 
     def _imprimir_etiqueta_prueba(self) -> None:
         dlg = EtiquetaPruebaDialog(self)

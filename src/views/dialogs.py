@@ -2,12 +2,13 @@ from PySide6.QtCore import QBuffer, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
-    QDateEdit, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
+    QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.date_picker import DatePicker
 from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
@@ -1920,14 +1921,9 @@ class DialogOrdenProduccion(QDialog):
                 v["id"],
             )
 
-        self.dte_inicio = QDateEdit()
-        self.dte_inicio.setCalendarPopup(True)
         from PySide6.QtCore import QDate
-        self.dte_inicio.setDate(QDate.currentDate())
-
-        self.dte_entrega = QDateEdit()
-        self.dte_entrega.setCalendarPopup(True)
-        self.dte_entrega.setDate(QDate.currentDate().addDays(7))
+        self.dte_inicio = DatePicker()
+        self.dte_entrega = DatePicker(QDate.currentDate().addDays(7))
 
         self.cmb_prioridad = QComboBox()
         self.cmb_prioridad.addItems(["baja", "normal", "alta", "urgente"])
@@ -2031,8 +2027,8 @@ class DialogOrdenProduccion(QDialog):
 
         self.controller.crear_op(
             folio, self.cmb_variante.currentData(), matriz,
-            self.dte_inicio.date().toString("yyyy-MM-dd"),
-            self.dte_entrega.date().toString("yyyy-MM-dd"),
+            self.dte_inicio.fecha_bd(),
+            self.dte_entrega.fecha_bd(),
             self.cmb_prioridad.currentText(),
             self.txt_obs.toPlainText().strip(),
         )

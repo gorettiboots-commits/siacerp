@@ -63,7 +63,7 @@ class ProgramarPedidoDialog(QDialog):
         form.addRow("", semana_row)
 
         self.lbl_folios = QLabel("")
-        self.lbl_folios.setStyleSheet("color: #4f46e5; font-weight: bold;")
+        self.lbl_folios.setStyleSheet("color: #1F4E79; font-weight: bold;")
         form.addRow("Folios Prog.:", self.lbl_folios)
         self.lbl_folio_pedido = QLabel("")
         form.addRow("Folio Pedido:", self.lbl_folio_pedido)
@@ -82,7 +82,7 @@ class ProgramarPedidoDialog(QDialog):
         self.vista.set_renderers(fila=self._fila, claves=self._claves)
         self.vista.set_acciones([
             {"texto": self._texto_corrida, "icono": "editar",
-             "color": "#4f46e5", "ancho_columna": 210,
+             "color": "#1F4E79", "ancho_columna": 44,
              "habilitado": self._habilitado_corrida,
              "callback": self._configurar_corrida},
         ])
@@ -93,7 +93,7 @@ class ProgramarPedidoDialog(QDialog):
 
         self.lbl_total_programar = QLabel("Total a programar: 0 pares")
         self.lbl_total_programar.setStyleSheet(
-            "font-weight: bold; font-size: 14px; color: #4f46e5;")
+            "font-weight: bold; font-size: 14px; color: #1F4E79;")
         layout.addWidget(self.lbl_total_programar)
 
         btns = QHBoxLayout()

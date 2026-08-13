@@ -485,3 +485,19 @@ INSERT OR IGNORE INTO colores_catalogo (nombre, codigo, orden) VALUES
     ('Blanco', 'BL', 3),
     ('Rojo', 'RJO', 4),
     ('Azul', 'AZL', 5);
+
+-- -----------------------------------------------------------
+-- Histórico de capturas en campos de texto
+-- Almacena los valores antes capturados en cada campo para que,
+-- al volver a capturar, el textbox sirva de selector/autocompletado.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS historico_campos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campo TEXT NOT NULL,
+    valor TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (campo, valor)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historico_campos_campo ON historico_campos (campo);

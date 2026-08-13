@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Goretti - Colección de Invierno</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&amp;family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ba1a1a",
+                        "on-background": "#1a1c1c",
+                        "error-container": "#ffdad6",
+                        "inverse-surface": "#2f3131",
+                        "on-error": "#ffffff",
+                        "outline-variant": "#debfc5",
+                        "on-primary-fixed-variant": "#8e0144",
+                        "surface-dim": "#dadada",
+                        "on-secondary-fixed": "#2e121f",
+                        "secondary-container": "#fecdde",
+                        "on-surface": "#1a1c1c",
+                        "on-primary-container": "#ffbccc",
+                        "on-tertiary-fixed-variant": "#574500",
+                        "primary-fixed": "#ffd9e1",
+                        "surface-container-highest": "#e2e2e2",
+                        "surface-tint": "#af255c",
+                        "surface-variant": "#e2e2e2",
+                        "on-secondary": "#ffffff",
+                        "surface-container": "#eeeeee",
+                        "on-tertiary-fixed": "#241a00",
+                        "on-secondary-container": "#7a5463",
+                        "on-tertiary-container": "#4f3e00",
+                        "tertiary-fixed-dim": "#e9c349",
+                        "on-primary": "#ffffff",
+                        "surface-container-high": "#e8e8e8",
+                        "tertiary-fixed": "#ffe088",
+                        "on-surface-variant": "#574146",
+                        "outline": "#8b7076",
+                        "surface-container-low": "#f3f3f3",
+                        "inverse-on-surface": "#f1f1f1",
+                        "tertiary": "#735c00",
+                        "on-tertiary": "#ffffff",
+                        "primary-container": "#a61d55",
+                        "on-secondary-fixed-variant": "#5f3d4a",
+                        "secondary-fixed": "#ffd9e5",
+                        "secondary": "#795462",
+                        "background": "#f9f9f9",
+                        "inverse-primary": "#ffb1c4",
+                        "surface-bright": "#f9f9f9",
+                        "secondary-fixed-dim": "#eabaca",
+                        "on-error-container": "#93000a",
+                        "primary": "#83003e",
+                        "on-primary-fixed": "#3f001a",
+                        "primary-fixed-dim": "#ffb1c4",
+                        "surface-container-lowest": "#ffffff",
+                        "surface": "#f9f9f9",
+                        "tertiary-container": "#cca830"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "8px",
+                        "container-padding": "24px",
+                        "gutter": "16px",
+                        "section-gap": "80px"
+                    },
+                    "fontFamily": {
+                        "secondary-lang": ["Montserrat"],
+                        "body-lg": ["Montserrat"],
+                        "label-sm": ["Montserrat"],
+                        "title-md": ["Playfair Display"],
+                        "body-md": ["Montserrat"],
+                        "display-lg": ["Playfair Display"],
+                        "headline-lg": ["Playfair Display"],
+                        "headline-lg-mobile": ["Playfair Display"]
+                    },
+                    "fontSize": {
+                        "secondary-lang": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "label-sm": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "title-md": ["24px", { "lineHeight": "1.4", "fontWeight": "500" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "1.2", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .glass-nav {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .soft-bloom-shadow {
+            box-shadow: 0px 4px 20px rgba(166, 29, 85, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased overflow-x-hidden">
+<!-- TopNavBar -->
+<nav class="docked full-width top-0 sticky backdrop-blur-md glass-nav bg-surface/80 dark:bg-surface-dim/80 shadow-sm z-50 transition-all duration-300">
+<div class="flex justify-between items-center w-full px-container-padding max-w-7xl mx-auto h-20">
+<!-- Brand Logo -->
+<div class="flex-shrink-0 flex items-center">
+<img alt="Goretti Logo" class="h-12 w-auto object-contain" src="img/logo.png"/>
+</div>
+<!-- Navigation Links (Desktop) -->
+<div class="hidden md:flex space-x-[32px] items-center font-label-sm text-label-sm uppercase tracking-wider">
+<a class="text-on-surface-variant dark:text-on-surface-variant/80 font-medium hover:text-primary transition-colors duration-300" href="#">Colecciones</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant/80 font-medium hover:text-primary transition-colors duration-300" href="#">Casual</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant/80 font-medium hover:text-primary transition-colors duration-300" href="#">Elegante</a>
+<a class="text-primary dark:text-primary-fixed-dim border-b-2 border-primary font-bold pb-1 hover:text-primary transition-colors duration-300 opacity-80 scale-95 duration-200" href="#">Invierno</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant/80 font-medium hover:text-primary transition-colors duration-300" href="#">Historia</a>
+</div>
+<!-- Actions -->
+<div class="flex items-center space-x-6 text-primary dark:text-primary-fixed-dim">
+<div class="hidden sm:flex items-center space-x-2 font-secondary-lang text-secondary-lang font-medium cursor-pointer hover:opacity-80 transition-opacity">
+<span class="font-bold">ES</span> <span class="text-on-surface-variant/50">/ EN</span>
+</div>
+<div class="flex items-center space-x-4">
+<button class="hover:text-primary-container transition-colors duration-300">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+<button class="hover:text-primary-container transition-colors duration-300 hidden sm:block">
+<span class="material-symbols-outlined" data-icon="favorite">favorite</span>
+</button>
+<button class="hover:text-primary-container transition-colors duration-300 hidden sm:block">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+</button>
+<button class="hover:text-primary-container transition-colors duration-300 relative">
+<span class="material-symbols-outlined" data-icon="shopping_bag">shopping_bag</span>
+<span class="absolute -top-1 -right-1 bg-primary-container text-on-primary-container text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">2</span>
+</button>
+</div>
+<!-- Mobile Menu Toggle -->
+<button class="md:hidden hover:text-primary-container transition-colors duration-300">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+</div>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main>
+<!-- Hero Section -->
+<section class="relative w-full h-[80vh] min-h-[600px] flex items-center justify-center bg-surface-variant overflow-hidden mb-section-gap">
+<div class="absolute inset-0 w-full h-full">
+<img class="w-full h-full object-cover object-center opacity-90" data-alt="A high-fashion editorial photograph of a young girl wearing stylish, premium pink winter boots from Goretti. She is standing in a luxurious, bright, softly lit indoor setting with elegant minimalist decor. The color palette features soft whites, blush pinks, and warm natural tones. The mood is sophisticated, playful, and nurturing, emphasizing the high-end quality of the footwear." src="img/hero.jpg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background/80 via-background/20 to-transparent"></div>
+</div>
+<div class="relative z-10 text-center px-container-padding max-w-3xl mx-auto flex flex-col items-center">
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-widest mb-4">Nueva Temporada</span>
+<h1 class="font-display-lg text-display-lg text-on-background mb-6 leading-tight">Colección de Invierno</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-8 max-w-xl">Pasos cálidos y elegantes para las aventuras más frías. Descubre la suavidad y el diseño de nuestra nueva línea.</p>
+<button class="bg-primary-container text-on-primary-container px-8 py-4 rounded-lg font-label-sm text-label-sm uppercase tracking-wide hover:bg-primary transition-colors duration-300 soft-bloom-shadow">
+                    Ver Colección
+                </button>
+</div>
+</section>
+<!-- Featured Categories (Bento Grid) -->
+<section class="px-container-padding max-w-7xl mx-auto mb-section-gap">
+<div class="text-center mb-12">
+<h2 class="font-headline-lg text-headline-lg md:text-headline-lg text-on-background mb-4">Encuentra su Estilo Ideal</h2>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl mx-auto">Diseños pensados para cada momento, desde juegos en el parque hasta celebraciones especiales.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter h-auto md:h-[600px]">
+<!-- Elegante (Large) -->
+<div class="md:col-span-2 relative rounded-xl overflow-hidden group cursor-pointer soft-bloom-shadow bg-surface-container h-[400px] md:h-full">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A close-up, premium product shot of an elegant pair of Goretti girls' boots in a soft champagne or metallic rose finish. The boots are placed on a minimalist pedestal against a clean, light-mode background with soft, diffused lighting. The image conveys luxury, soft geometry, and meticulous craftsmanship." src="img/elegante.jpg"/>
+<div class="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors duration-500"></div>
+<div class="absolute bottom-0 left-0 p-8 w-full flex justify-between items-end">
+<div>
+<h3 class="font-title-md text-title-md text-white mb-2">Elegante</h3>
+<span class="font-label-sm text-label-sm text-white/90 uppercase tracking-wider flex items-center group-hover:text-primary-fixed transition-colors">
+                                Explorar <span class="material-symbols-outlined ml-1 text-[16px]" data-icon="arrow_forward">arrow_forward</span>
+</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-gutter h-[800px] md:h-full">
+<!-- Casual -->
+<div class="flex-1 relative rounded-xl overflow-hidden group cursor-pointer soft-bloom-shadow bg-secondary-container">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A lifestyle photograph of a playful girl wearing casual, comfortable Goretti boots in a soft berry or rose color. She is walking on a clean, bright wooden floor indoors. The lighting is natural and bright, emphasizing a modern editorial style with generous whitespace and soft geometry." src="img/casual.jpg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+<div class="absolute bottom-0 left-0 p-6">
+<h3 class="font-title-md text-title-md text-white mb-1">Casual</h3>
+<span class="font-label-sm text-label-sm text-white/90 uppercase tracking-wider">Día a Día</span>
+</div>
+</div>
+<!-- Invierno -->
+<div class="flex-1 relative rounded-xl overflow-hidden group cursor-pointer soft-bloom-shadow bg-surface-container-high">
+<img class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="A premium close-up shot of winter-ready Goretti boots with faux fur lining and sturdy soles, presented in a clean, high-end studio setting. The color palette features whites, creams, and subtle berry accents. The lighting is soft and ambient, highlighting the textures and quality materials." src="img/invierno.jpg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+<div class="absolute bottom-0 left-0 p-6">
+<h3 class="font-title-md text-title-md text-white mb-1">Invierno</h3>
+<span class="font-label-sm text-label-sm text-white/90 uppercase tracking-wider">Máximo Abrigo</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Brand Story Section (Asymmetric Layout) -->
+<section class="bg-surface-container-lowest py-section-gap">
+<div class="max-w-7xl mx-auto px-container-padding flex flex-col md:flex-row items-center gap-12">
+<div class="w-full md:w-1/2 relative rounded-xl overflow-hidden soft-bloom-shadow h-[500px]">
+<img class="w-full h-full object-cover" data-alt="A beautiful, soft-focus editorial image showing the delicate craftsmanship of Goretti boots. Hands carefully lacing or adjusting a tiny pink boot in a bright, sunlit atelier with white walls and natural wood accents. The mood is nurturing, sophisticated, and deeply focused on premium quality and love for details." src="img/historia.jpg"/>
+</div>
+<div class="w-full md:w-1/2 flex flex-col justify-center items-start">
+<span class="material-symbols-outlined text-primary mb-4 text-4xl" data-icon="favorite">favorite</span>
+<h2 class="font-headline-lg text-headline-lg md:text-headline-lg text-on-background mb-6">Hecho con Amor para Pequeñas Aventureras</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant mb-6">
+                        En Goretti, creemos que cada paso cuenta. Diseñamos calzado que abraza la imaginación de la infancia con la sofisticación de la alta moda.
+                    </p>
+<p class="font-body-md text-body-md text-on-surface-variant mb-8">
+                        Utilizamos materiales premium, seleccionados por su suavidad y durabilidad, asegurando que sus pequeños pies estén protegidos y envueltos en comodidad en cada aventura. Sin ángulos duros, solo geometrías suaves y detalles encantadores.
+                    </p>
+<button class="border border-outline text-on-surface-variant px-6 py-3 rounded-lg font-label-sm text-label-sm uppercase tracking-wide hover:border-primary hover:text-primary transition-all duration-300">
+                        Nuestra Historia
+                    </button>
+</div>
+</div>
+</section>
+<!-- Newsletter Section -->
+<section class="bg-secondary-container py-16 px-container-padding text-center">
+<div class="max-w-2xl mx-auto">
+<h3 class="font-headline-lg text-headline-lg md:text-headline-lg text-on-secondary-container mb-4">Únete a la Familia Goretti</h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-8">Suscríbete para recibir acceso anticipado a nuevas colecciones, ofertas exclusivas e inspiración de estilo.</p>
+<form class="flex flex-col sm:flex-row gap-4 max-w-md mx-auto relative group">
+<div class="relative w-full">
+<input class="w-full bg-transparent border-0 border-b border-outline-variant focus:border-primary focus:ring-0 px-0 py-2 font-body-md text-on-surface placeholder-on-surface-variant/50 transition-colors" id="email" placeholder=" " type="email"/>
+<label class="absolute left-0 top-2 font-label-sm text-[10px] uppercase text-on-surface-variant/70 transition-all duration-300 pointer-events-none origin-left transform -translate-y-4 scale-75 group-focus-within:-translate-y-6 group-focus-within:scale-75 group-focus-within:text-primary peer-placeholder-shown:translate-y-0 peer-placeholder-shown:scale-100 peer-placeholder-shown:text-[12px]" for="email">Tu correo electrónico</label>
+</div>
+<button class="bg-primary text-on-primary px-6 py-2 rounded-lg font-label-sm text-label-sm uppercase tracking-wide whitespace-nowrap hover:bg-primary-container hover:text-on-primary-container transition-colors duration-300 soft-bloom-shadow" type="submit">
+                        Suscribirse
+                    </button>
+</form>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="full-width py-section-gap bg-surface-container dark:bg-surface-container-highest">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter px-container-padding max-w-7xl mx-auto">
+<!-- Brand Column -->
+<div class="col-span-1 md:col-span-1 flex flex-col items-start mb-8 md:mb-0">
+<span class="font-headline-lg text-headline-lg text-primary dark:text-primary-fixed mb-4">Goretti</span>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-xs">© 2024 Goretti. Hecho con amor para pequeñas aventureras.</p>
+<div class="flex space-x-4">
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#"><span class="material-symbols-outlined" data-icon="photo_camera">photo_camera</span></a>
+<a class="text-on-surface-variant hover:text-primary transition-colors" href="#"><span class="material-symbols-outlined" data-icon="facebook">qr_code_2</span></a>
+</div>
+</div>
+<!-- Links Columns -->
+<div class="col-span-1 flex flex-col space-y-4">
+<h4 class="font-title-md text-title-md text-on-background mb-2">Comprar</h4>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Colección de Invierno</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Elegante</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Casual</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Ver Todo</a>
+</div>
+<div class="col-span-1 flex flex-col space-y-4">
+<h4 class="font-title-md text-title-md text-on-background mb-2">Asistencia</h4>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Contacto</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Guía de Tallas</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Envíos y Devoluciones</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Preguntas Frecuentes</a>
+</div>
+<div class="col-span-1 flex flex-col space-y-4">
+<h4 class="font-title-md text-title-md text-on-background mb-2">Legal</h4>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Política de Privacidad</a>
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary hover:translate-x-1 transition-transform duration-200" href="#">Términos y Condiciones</a>
+</div>
+</div>
+</footer>
+<script>
+        // Simple input label animation logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const emailInput = document.getElementById('email');
+            if(emailInput) {
+                // Ensure placeholder logic works cleanly by adding a space if empty on load
+                if(emailInput.value === '') emailInput.placeholder = ' ';
+                
+                emailInput.addEventListener('focus', () => {
+                    emailInput.placeholder = '';
+                });
+                emailInput.addEventListener('blur', () => {
+                    if(emailInput.value === '') emailInput.placeholder = ' ';
+                });
+            }
+        });
+    </script>
+</body></html>

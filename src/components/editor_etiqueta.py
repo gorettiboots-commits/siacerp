@@ -58,11 +58,23 @@ def normalizar_campo(campo: dict, ancho_etiqueta: float = 76.0) -> dict:
     return c
 
 
-def normalizar_diseno(diseno: dict) -> dict:
+def normalizar_diseno(diseno: dict,
+                      ancho_mm: float | None = None,
+                      alto_mm: float | None = None) -> dict:
+    """Completa un diseño respetando el tamaño de lienzo.
+
+    Si `ancho_mm`/`alto_mm` se omiten, usa los del propio diseño (o las
+    constantes por defecto si no vienen), para que un diseño guardado con
+    otro tamaño de lienzo se conserve al recargarlo.
+    """
     d = dict(diseno)
-    d["ancho_mm"] = ANCHO_ETIQUETA_MM
-    d["alto_mm"] = ALTO_ETIQUETA_MM
-    d["campos"] = [normalizar_campo(c, ANCHO_ETIQUETA_MM) for c in d.get("campos", [])]
+    ancho = (float(ancho_mm) if ancho_mm is not None
+             else float(d.get("ancho_mm", ANCHO_ETIQUETA_MM)))
+    alto = (float(alto_mm) if alto_mm is not None
+            else float(d.get("alto_mm", ALTO_ETIQUETA_MM)))
+    d["ancho_mm"] = ancho
+    d["alto_mm"] = alto
+    d["campos"] = [normalizar_campo(c, ancho) for c in d.get("campos", [])]
     return d
 
 

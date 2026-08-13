@@ -12,13 +12,17 @@ Configuración (desde código):
     set_agrupacion(clave_columna | None)
     set_plantilla_excel(ruta, inicio="A3")
     set_reporte_config({...})
+
+Las acciones por fila se muestran como botones circulares compactos
+(objectName `btnFilaIcono`): el icono usa el color de la acción y el
+`texto` se muestra como tooltip.
 """
 
 from functools import partial
 from pathlib import Path
 
 from openpyxl import load_workbook
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
@@ -215,7 +219,8 @@ class ComplexGrid(QWidget):
     def set_acciones(self, acciones: list[dict]) -> None:
         """Acciones por registro. Cada dict: texto, icono, color, callback,
         habilitado y opcional ancho_columna. texto y habilitado aceptan un
-        callable que recibe el registro."""
+        callable que recibe el registro. El botón se dibuja circular compacto
+        con el icono en el color de la acción y el texto como tooltip."""
         self._acciones = list(acciones or [])
 
     def set_filtros(self, filtros: list) -> None:
@@ -357,7 +362,7 @@ class ComplexGrid(QWidget):
         for i, c in enumerate(self._col_config):
             t.setColumnWidth(i, c.get("ancho", 110))
         if self._acciones:
-            ancho = 44 * len(self._acciones) + 8
+            ancho = 36 * len(self._acciones) + 10
             for acc in self._acciones:
                 ancho = max(ancho, int(acc.get("ancho_columna", 0)))
             t.setColumnWidth(n_cols - 1, max(48, ancho))
@@ -427,10 +432,12 @@ class ComplexGrid(QWidget):
             texto = acc.get("texto", "")
             if callable(texto):
                 texto = texto(rec)
-            btn.setText(texto or "")
-            btn.setIcon(mono_icon(acc.get("icono", "mas"), 14,
+            btn.setObjectName("btnFilaIcono")
+            btn.setIcon(mono_icon(acc.get("icono", "mas") or "mas", 16,
                                   acc.get("color", "#4f46e5")))
-            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            btn.setIconSize(QSize(16, 16))
+            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+            btn.setToolTip(str(texto) if texto else acc.get("tooltip", ""))
             btn.setCursor(Qt.PointingHandCursor)
             habilitado = acc.get("habilitado", True)
             if callable(habilitado):

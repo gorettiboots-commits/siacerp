@@ -23,11 +23,12 @@ Secciones (paleta extraída de las imágenes de referencia):
 from PySide6.QtCore import QDate, QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
+    QComboBox, QFrame, QGroupBox, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QToolButton, QVBoxLayout, QWidget,
 )
 
+from src.components.date_picker import DatePicker
 from src.utils.icons import mono_icon
 from src.views.sandbox_notificaciones import notificar_flotante
 
@@ -421,10 +422,8 @@ class ControlesPreview(QWidget):
         self.spn_pares.setObjectName("ctlInput")
         self.spn_pares.setRange(0, 99999)
         self.spn_pares.setValue(0)
-        self.dte_fecha = QDateEdit(QDate.currentDate())
+        self.dte_fecha = DatePicker()
         self.dte_fecha.setObjectName("ctlInput")
-        self.dte_fecha.setCalendarPopup(True)
-        self.dte_fecha.setDisplayFormat("dd/MM/yyyy")
 
         def fila(label, widget):
             fila_lay = QHBoxLayout()

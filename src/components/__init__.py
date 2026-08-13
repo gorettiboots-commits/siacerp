@@ -102,3 +102,43 @@ registrar_componente(
     "Panel de propiedades del elemento de etiqueta: coordenadas, dimensiones, "
     "borde, tipografía, alineación y visibilidad.",
 )
+
+from src.components.editor_etiqueta_widget import (  # noqa: E402
+    DialogoEditorEtiqueta, EditorEtiquetaWidget,
+)
+
+registrar_componente(
+    "editor_etiqueta",
+    EditorEtiquetaWidget,
+    "Creador/editor de etiquetas estilo Windows Forms: lienzo interactivo, "
+    "tamaño de lienzo en mm, controles de campos (texto/dato/duplicar/quitar) "
+    "y guardado de diseños con nombre en la base de datos (etiqueta_config).",
+)
+
+registrar_componente(
+    "editor_etiqueta_dialog",
+    DialogoEditorEtiqueta,
+    "Diálogo a pantalla completa con el editor de etiquetas aprobado; botón "
+    "Cerrar para salir. Ideal para abrir desde los módulos sin que los datos "
+    "se vean pequeños.",
+)
+
+from src.components.date_picker import DatePicker  # noqa: E402
+
+registrar_componente(
+    "date_picker",
+    DatePicker,
+    "Selector de fecha con calendario emergente: formato dd/MM/yyyy, "
+    "conversión ISO para base de datos (fecha_bd / establecer_fecha_bd).",
+)
+
+from src.components.campo_historico import CampoHistorico  # noqa: E402
+
+registrar_componente(
+    "campo_historico",
+    CampoHistorico,
+    "Campo de texto con histórico de capturas: al enfocar/hacer clic despliega "
+    "el histórico del campo y autocompleta mientras se escribe; registra la "
+    "captura al salir del campo. Incluye InstaladorHistorico para aplicarlo a "
+    "todo el sistema.",
+)

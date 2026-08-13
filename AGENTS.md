@@ -369,6 +369,8 @@ lo apruebe.
 | `odoo_list` | Vista de listado con alternador tabla/lista/iconos (tarjetas), columnas ordenables y selección/doble clic configurable |
 | `matriz_tallas` | Matriz de tallas por bloques: encabezado negro/texto blanco, filas de captura, navegación Enter/Tab y celdas sin flechas numéricas |
 | `complexGrid` | Tabla de datos con búsqueda, filtros, agrupación, vistas lista/iconos/tabla, acciones por registro y exportación Excel/PDF/Imprimir |
+| `date_picker` | Selector de fecha con calendario emergente (formato dd/MM/yyyy, conversión ISO para BD) |
+| `campo_historico` | Campo de texto con histórico de capturas (`historico_campos`): al enfocar/clic despliega el histórico del campo y autocompleta; registra la captura al salir. Incluye `InstaladorHistorico` para aplicarlo a todo el sistema |
 
 ---
 

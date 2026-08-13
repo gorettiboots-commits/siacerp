@@ -1,16 +1,20 @@
-from PySide6.QtCore import QDate, Qt
+from pathlib import Path
+
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QFrame,
+    QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QTabWidget, QTextEdit, QVBoxLayout, QWidget,
+    QTabWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.date_picker import DatePicker
 from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
+from src.utils.icons import mono_icon
 from src.utils.table_utils import configurar_tabla_excel
 from src.views.programar_pedido_dialog import ProgramarPedidoDialog
 
@@ -27,11 +31,397 @@ def _fmt_estatus(estatus: str) -> str:
     return _ESTATUS.get(estatus, estatus.replace("_", " ").capitalize())
 
 
+_ASSETS = (Path(__file__).resolve().parent / "assets").as_posix()
+
+_QSS_FORMS = r"""
+QWidget {
+    background-color: #F0F0F0;
+    color: #000000;
+    font-size: 13px;
+}
+
+QLabel { color: #000000; }
+QLabel#sectionTitle { font-size: 18px; font-weight: bold; color: #000000; }
+QLabel#sectionSubtitle { font-size: 12px; color: #444444; }
+
+/* ---------- Botones clásicos (relieve 3D) ---------- */
+QPushButton {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #FCFCFC, stop:1 #E1E1E1);
+    border: 2px solid;
+    border-color: #FFFFFF #848484 #848484 #FFFFFF;
+    border-radius: 0px;
+    padding: 6px 16px;
+    font-weight: normal;
+    color: #000000;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #FDFDFD, stop:1 #EAEAEA);
+}
+QPushButton:pressed {
+    background: #DCDCDC;
+    border-color: #848484 #FFFFFF #FFFFFF #848484;
+}
+QPushButton:disabled {
+    background: #EFEFEF;
+    color: #8A8A8A;
+    border-color: #C8C8C8 #C8C8C8 #C8C8C8 #C8C8C8;
+}
+
+QPushButton#btnPrimary {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #4D80D0, stop:1 #2A5FB0);
+    border: 1px solid;
+    border-color: #6FA0E0 #1E4A8F #1E4A8F #6FA0E0;
+    color: #FFFFFF;
+    font-weight: bold;
+}
+QPushButton#btnPrimary:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #5C8FD9, stop:1 #3569BE);
+}
+QPushButton#btnPrimary:pressed { background: #23509C; }
+QPushButton#btnPrimary:disabled {
+    background: #B9CBE6; color: #E5EEFA; border-color: #9BB4D8;
+}
+
+QPushButton#btnSecondary {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #FCFCFC, stop:1 #E1E1E1);
+    border: 1px solid #A0A0A0;
+    color: #000000;
+    font-weight: normal;
+}
+QPushButton#btnSecondary:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #FDFDFD, stop:1 #EAEAEA);
+}
+
+QPushButton#btnSuccess {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #67B96A, stop:1 #3D9141);
+    border: 1px solid;
+    border-color: #8CCB8E #2E6E31 #2E6E31 #8CCB8E;
+    color: #FFFFFF;
+    font-weight: bold;
+}
+QPushButton#btnSuccess:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #77C47A, stop:1 #4AA14E);
+}
+QPushButton#btnSuccess:pressed { background: #337A36; }
+QPushButton#btnSuccess:disabled {
+    background: #C6E0C7; color: #F0F7F0; border-color: #A8CBA9;
+}
+
+QPushButton#btnDanger {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #D45B5B, stop:1 #A93A3A);
+    border: 1px solid;
+    border-color: #E08B8B #7E2626 #7E2626 #E08B8B;
+    color: #FFFFFF;
+    font-weight: bold;
+}
+QPushButton#btnDanger:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #DB6E6E, stop:1 #B74444);
+}
+QPushButton#btnDanger:pressed { background: #8F3030; }
+QPushButton#btnDanger:disabled {
+    background: #E3C2C2; color: #F7EAEA; border-color: #D0A2A2;
+}
+
+QPushButton#btnWarning {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #E8A93C, stop:1 #C77E18);
+    border: 1px solid;
+    border-color: #F0C578 #9C5F0E #9C5F0E #F0C578;
+    color: #000000;
+    font-weight: bold;
+}
+QPushButton#btnWarning:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #EFB750, stop:1 #D18A24);
+}
+QPushButton#btnWarning:pressed { background: #A96814; }
+QPushButton#btnWarning:disabled {
+    background: #E7D6AE; color: #F7EFDF; border-color: #D3BA88;
+}
+
+QPushButton#btnModo { border-radius: 0px; }
+QPushButton#btnModo:checked { background: #BBD4F7; border-color: #1E4A8F; }
+
+QPushButton#viewSwitch {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #FCFCFC, stop:1 #E1E1E1);
+    color: #000000;
+    border: 1px solid #A0A0A0;
+    border-radius: 0px;
+    padding: 4px 12px;
+    font-size: 12px;
+    min-height: 18px;
+}
+QPushButton#viewSwitch:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #FDFDFD, stop:1 #EAEAEA);
+}
+QPushButton#viewSwitch:checked {
+    background: #BBD4F7;
+    color: #000000;
+    border: 1px solid #1E4A8F;
+    font-weight: bold;
+}
+
+/* ---------- Entradas (sunken clásico) ---------- */
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit,
+QDateTimeEdit, QTextEdit {
+    background-color: #FFFFFF;
+    border: 1px solid #7F9DB9;
+    border-radius: 0px;
+    padding: 3px 6px;
+    color: #000000;
+    selection-background-color: #3399FF;
+    selection-color: #FFFFFF;
+    min-height: 20px;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus,
+QDateEdit:focus, QTimeEdit:focus, QDateTimeEdit:focus, QTextEdit:focus {
+    border: 1px solid #0078D7;
+    background-color: #FFFFFF;
+}
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover,
+QDateEdit:hover, QTimeEdit:hover, QDateTimeEdit:hover, QTextEdit:hover {
+    border: 1px solid #0078D7;
+}
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled,
+QDoubleSpinBox:disabled, QDateEdit:disabled, QTimeEdit:disabled,
+QDateTimeEdit:disabled {
+    background-color: #F0F0F0;
+    color: #808080;
+    border-color: #C0C0C0;
+}
+
+QComboBox::drop-down { border: none; width: 20px; }
+QComboBox::down-arrow {
+    image: url(@ASSETS@/chevron.svg);
+    width: 10px; height: 10px;
+}
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    border: 1px solid #7A7A7A;
+    color: #000000;
+    selection-background-color: #3399FF;
+    selection-color: #FFFFFF;
+    outline: none;
+}
+QComboBox QAbstractItemView::item { padding: 4px 8px; }
+
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    width: 18px;
+    border: 1px solid #A0A0A0;
+    background: #E8E8E8;
+}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid #000000;
+    margin-top: 4px;
+}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #000000;
+    margin-bottom: 4px;
+}
+
+/* ---------- Checkbox / Radio ---------- */
+QCheckBox, QRadioButton { spacing: 6px; color: #000000; }
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 15px; height: 15px;
+    border: 1px solid #7A7A7A;
+    background-color: #FFFFFF;
+}
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border: 1px solid #0078D7;
+}
+QCheckBox::indicator:checked {
+    background-color: #0078D7;
+    border: 1px solid #005A9E;
+    image: url(@ASSETS@/check.svg);
+}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background-color: #F0F0F0;
+    border-color: #C0C0C0;
+}
+QRadioButton::indicator:checked {
+    background-color: #FFFFFF;
+    border: 5px solid #0078D7;
+}
+
+/* ---------- GroupBox ---------- */
+QGroupBox {
+    background-color: #F0F0F0;
+    border: 1px solid #A0A0A0;
+    border-radius: 0px;
+    margin-top: 10px;
+    padding: 12px 8px 8px 8px;
+    font-weight: bold;
+    font-size: 13px;
+    color: #000000;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 4px;
+    background-color: #F0F0F0;
+}
+
+/* ---------- Tabs ---------- */
+QTabWidget::pane {
+    border: 1px solid #A0A0A0;
+    background-color: #F0F0F0;
+    top: -1px;
+}
+QTabBar::tab {
+    background: #E0E0E0;
+    border: 1px solid #A0A0A0;
+    border-bottom: none;
+    padding: 6px 18px;
+    color: #000000;
+    font-weight: normal;
+}
+QTabBar::tab:selected {
+    background: #F0F0F0;
+    color: #000000;
+    font-weight: bold;
+}
+QTabBar::tab:hover { background: #EAEAEA; }
+
+/* ---------- Tablas ---------- */
+QTableWidget, QTableView, QListWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #A0A0A0;
+    border-radius: 0px;
+    gridline-color: #D8D8D8;
+    color: #000000;
+}
+QTableWidget::item, QTableView::item, QListWidget::item {
+    padding: 3px 6px;
+    border: none;
+}
+QTableWidget::item:hover, QTableView::item:hover, QListWidget::item:hover {
+    background-color: #EAF3FF;
+}
+QTableWidget::item:selected, QTableView::item:selected, QListWidget::item:selected {
+    background-color: #3399FF;
+    color: #FFFFFF;
+}
+QHeaderView::section {
+    background-color: #E8E8E8;
+    border: none;
+    border-right: 1px solid #A0A0A0;
+    border-bottom: 1px solid #A0A0A0;
+    font-weight: bold;
+    color: #000000;
+    padding: 5px 6px;
+}
+QTableCornerButton::section {
+    background-color: #E8E8E8;
+    border: none;
+    border-right: 1px solid #A0A0A0;
+    border-bottom: 1px solid #A0A0A0;
+}
+
+/* ---------- Toolbar / toolbuttons ---------- */
+QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0px;
+    padding: 3px 8px;
+    color: #000000;
+}
+QToolButton:hover { background: #E0E0E0; }
+QToolButton:pressed { background: #C8C8C8; }
+
+/* ---------- Scrollbars clásicas ---------- */
+QScrollBar:vertical {
+    background: #F0F0F0;
+    width: 16px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #C8C8C8;
+    border: 1px solid #9C9C9C;
+    min-height: 22px;
+}
+QScrollBar::handle:vertical:hover { background: #B4B4B4; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 16px;
+    background: #E0E0E0;
+    border: 1px solid #9C9C9C;
+}
+QScrollBar:horizontal {
+    background: #F0F0F0;
+    height: 16px;
+}
+QScrollBar::handle:horizontal {
+    background: #C8C8C8;
+    border: 1px solid #9C9C9C;
+    min-width: 22px;
+}
+QScrollBar::handle:horizontal:hover { background: #B4B4B4; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 16px;
+    background: #E0E0E0;
+    border: 1px solid #9C9C9C;
+}
+QScrollBar::add-line:hover, QScrollBar::sub-line:hover { background: #D0D0D0; }
+
+/* ---------- ScrollArea / Stack ---------- */
+QScrollArea { border: none; background: transparent; }
+
+/* ---------- Calendario ---------- */
+QCalendarWidget QWidget { background-color: #FFFFFF; color: #000000; }
+QCalendarWidget QToolButton {
+    background: transparent;
+    border: none;
+    color: #000000;
+    font-weight: bold;
+    padding: 4px 8px;
+}
+QCalendarWidget QToolButton:hover { background: #E0E0E0; }
+QCalendarWidget QAbstractItemView {
+    background-color: #FFFFFF;
+    color: #000000;
+    selection-background-color: #3399FF;
+    selection-color: #FFFFFF;
+    border: none;
+}
+QCalendarWidget QWidget#qt_calendar_navigationbar { background-color: #F0F0F0; }
+QCalendarWidget QWidget#qt_calendar_weekday { color: #000000; font-weight: bold; }
+
+/* ---------- Mensajes ---------- */
+QMessageBox { background-color: #F0F0F0; }
+QMessageBox QLabel { color: #000000; }
+""".replace("@ASSETS@", _ASSETS)
+
+
+def _aplicar_estilo_forms(widget: QWidget) -> None:
+    """Aplica el estilo Windows Forms clásico al widget y sus descendientes."""
+    widget.setStyleSheet(_QSS_FORMS)
+
+
 class ClientesView(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.controller = ClientesController()
         self._permiso_editar = True
+        _aplicar_estilo_forms(self)
         self._setup_ui()
         self._load_pedidos()
         self._load_clientes()
@@ -99,9 +489,13 @@ class ClientesView(QWidget):
         self.vista.set_renderers(fila=self._fila_pedido, claves=self._claves_pedido,
                                  estilo=self._estilo_pedido)
         self.vista.set_acciones([
-            {"texto": "Editar", "icono": "editar", "color": "#4f46e5",
+            {"texto": "Editar", "icono": "editar", "color": "#2A5FB0",
              "habilitado": lambda rec: self._permiso_editar,
              "callback": self._editar_pedido},
+            {"texto": "Cancelar", "icono": "eliminar", "color": "#C00000",
+             "habilitado": lambda rec: self._permiso_editar
+             and rec.get("estatus") not in ("cancelado", "surtido"),
+             "callback": self._cancelar_pedido},
         ])
         self.vista.doubleClicked.connect(self._ver_pedido)
         layout.addWidget(self.vista)
@@ -128,6 +522,15 @@ class ClientesView(QWidget):
             {"key": "direccion", "titulo": "Dirección", "ancho": 220},
         ])
         self.grid_cli.set_renderers(estilo=self._estilo_cliente)
+        self.grid_cli.set_acciones([
+            {"texto": "Editar", "icono": "editar", "color": "#2A5FB0",
+             "habilitado": lambda rec: self._permiso_editar,
+             "callback": self._editar_cliente_rec},
+            {"texto": lambda rec: "Desactivar" if rec.get("activo") else "Activar",
+             "icono": "toggle", "color": "#C00000",
+             "habilitado": lambda rec: self._permiso_editar,
+             "callback": self._alternar_activo_cliente},
+        ])
         self.grid_cli.doubleClicked.connect(self._editar_cliente)
         layout.addWidget(self.grid_cli)
 
@@ -211,6 +614,22 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_pedidos()
 
+    def _cancelar_pedido(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.vista.registro_seleccionado()
+        if rec is None:
+            QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
+            return
+        if QMessageBox.question(
+                self, "Cancelar pedido",
+                f"¿Cancelar el pedido {rec.get('folio', '')}?") != QMessageBox.Yes:
+            return
+        try:
+            self.controller.cancelar_pedido(rec["id"])
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"No se pudo cancelar: {e}")
+        self._load_pedidos()
+
     def _programar_pedido(self) -> None:
         rec = self.vista.registro_seleccionado()
         if rec is None:
@@ -241,6 +660,23 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_clientes()
 
+    def _editar_cliente_rec(self, rec: dict) -> None:
+        dlg = _DialogCliente(self.controller, rec["id"])
+        if dlg.exec():
+            self._load_clientes()
+
+    def _alternar_activo_cliente(self, rec: dict) -> None:
+        if rec.get("activo"):
+            if QMessageBox.question(
+                    self, "Desactivar cliente",
+                    f"¿Desactivar al cliente '{rec.get('nombre', '')}'?") \
+                    != QMessageBox.Yes:
+                return
+            self.controller.desactivar_cliente(rec["id"])
+        else:
+            self.controller.reactivar_cliente(rec["id"])
+        self._load_clientes()
+
 
 class _DialogCliente(QDialog):
     def __init__(self, controller: ClientesController, cliente_id: int | None = None) -> None:
@@ -250,6 +686,7 @@ class _DialogCliente(QDialog):
         self.setWindowTitle("Nuevo Cliente" if cliente_id is None else "Editar Cliente")
         self.setMinimumWidth(420)
         self.setModal(True)
+        _aplicar_estilo_forms(self)
         self._setup_ui()
         if cliente_id:
             self._load_data()
@@ -291,6 +728,7 @@ class _DialogCliente(QDialog):
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_save)
         layout.addLayout(btns)
+        self.txt_nombre.setFocus()
 
     def _load_data(self) -> None:
         c = self.controller.obtener_cliente(self.cliente_id)
@@ -307,16 +745,22 @@ class _DialogCliente(QDialog):
         if not nombre:
             QMessageBox.warning(self, "Campo requerido", "El nombre del cliente es obligatorio.")
             return
+        rfc = self.txt_rfc.text().strip().upper()
+        email = self.txt_email.text().strip()
+        if email and "@" not in email:
+            QMessageBox.warning(self, "Datos inválidos",
+                                "El correo electrónico no parece válido.")
+            return
         try:
             if self.cliente_id:
                 self.controller.actualizar_cliente(
-                    self.cliente_id, nombre, self.txt_rfc.text().strip(),
+                    self.cliente_id, nombre, rfc,
                     self.txt_comercial.text().strip(), self.txt_telefono.text().strip(),
-                    self.txt_email.text().strip(), self.txt_direccion.text().strip())
+                    email, self.txt_direccion.text().strip())
             else:
                 self.controller.crear_cliente(
-                    nombre, self.txt_rfc.text().strip(), self.txt_comercial.text().strip(),
-                    self.txt_telefono.text().strip(), self.txt_email.text().strip(),
+                    nombre, rfc, self.txt_comercial.text().strip(),
+                    self.txt_telefono.text().strip(), email,
                     self.txt_direccion.text().strip())
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
@@ -332,7 +776,13 @@ class _DialogPedidoCliente(QDialog):
         self.setWindowTitle("Nuevo Pedido de Cliente" if pedido_id is None else "Editar Pedido")
         self.setMinimumSize(840, 640)
         self.setModal(True)
+        _aplicar_estilo_forms(self)
         self._puntos_fila: dict[int, dict[int, int]] = {}
+        self._prog = ProgramacionController()
+        self._tiene_programacion = False
+        if pedido_id:
+            self._tiene_programacion = \
+                self._prog.pares_programados_pedido(pedido_id) > 0
         self._setup_ui()
         if pedido_id:
             self._load_data()
@@ -352,19 +802,16 @@ class _DialogPedidoCliente(QDialog):
         self.txt_folio_pedido = QLineEdit()
         self.txt_folio_pedido.setPlaceholderText("Folio de pedido del cliente (opcional)")
 
-        self.dte_pedido = QDateEdit()
-        self.dte_pedido.setCalendarPopup(True)
-        self.dte_pedido.setDate(QDate.currentDate())
-
-        self.dte_programado = QDateEdit()
-        self.dte_programado.setCalendarPopup(True)
-        self.dte_programado.setDate(QDate.currentDate())
+        self.dte_pedido = DatePicker()
+        self.dte_programado = DatePicker()
         self.chk_sin_programar = QCheckBox("Sin fecha programada")
         self.chk_sin_programar.toggled.connect(
             lambda on: self.dte_programado.setEnabled(not on))
 
         self.cmb_estatus = QComboBox()
         for k in ("pendiente", "programado", "surtido"):
+            if k == "programado" and not self._tiene_programacion:
+                continue
             self.cmb_estatus.addItem(_ESTATUS[k], k)
 
         self.txt_suela = QLineEdit()
@@ -378,7 +825,6 @@ class _DialogPedidoCliente(QDialog):
         self.txt_obs.setMaximumHeight(60)
 
         grp_datos = QGroupBox("Datos del Pedido")
-        grp_datos.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
         grid_datos = QGridLayout(grp_datos)
         grid_datos.setHorizontalSpacing(16)
         grid_datos.setVerticalSpacing(10)
@@ -404,7 +850,6 @@ class _DialogPedidoCliente(QDialog):
         layout.addWidget(grp_datos)
 
         grp_ficha = QGroupBox("Ficha Técnica")
-        grp_ficha.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
         form_ficha = QFormLayout(grp_ficha)
         form_ficha.setSpacing(10)
         form_ficha.addRow("Suela:", self.txt_suela)
@@ -435,7 +880,7 @@ class _DialogPedidoCliente(QDialog):
         btn_remove.clicked.connect(self._quitar_linea)
 
         self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-size: 15px; font-weight: bold; color: #4f46e5;")
+        self.lbl_total.setStyleSheet("font-size: 15px; font-weight: bold; color: #1F4E79;")
 
         toolbar = QHBoxLayout()
         toolbar.addWidget(btn_add)
@@ -468,11 +913,10 @@ class _DialogPedidoCliente(QDialog):
         self.txt_folio_pedido.setText(pedido.get("folio_pedido", "") or "")
         self.txt_suela.setText(pedido.get("suela", "") or "")
         self.txt_horma.setText(pedido.get("horma", "") or "")
-        self.dte_pedido.setDate(QDate.fromString(pedido.get("fecha_pedido", "") or "",
-                                                 "yyyy-MM-dd"))
+        self.dte_pedido.establecer_fecha_bd(pedido.get("fecha_pedido", "") or "")
         prog = pedido.get("fecha_programado")
         if prog:
-            self.dte_programado.setDate(QDate.fromString(prog, "yyyy-MM-dd"))
+            self.dte_programado.establecer_fecha_bd(prog)
         else:
             self.chk_sin_programar.setChecked(True)
         idx = self.cmb_estatus.findData(pedido.get("estatus"))
@@ -491,8 +935,12 @@ class _DialogPedidoCliente(QDialog):
         self.table_detalle.setItem(row, 0, QTableWidgetItem(modelo))
         self.table_detalle.setItem(row, 1, QTableWidgetItem(piel))
         self.table_detalle.setItem(row, 2, QTableWidgetItem(color))
-        btn = QPushButton("Configurar Tallas")
-        btn.setObjectName("btnSecondary")
+        btn = QToolButton()
+        btn.setObjectName("btnFilaIcono")
+        btn.setIcon(mono_icon("tabla", 16, "#4f46e5"))
+        btn.setIconSize(QSize(16, 16))
+        btn.setToolTip("Configurar Tallas")
+        btn.setCursor(Qt.PointingHandCursor)
         btn.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
         self.table_detalle.setCellWidget(row, 3, btn)
         self.table_detalle.setItem(row, 4, QTableWidgetItem("0"))
@@ -503,7 +951,7 @@ class _DialogPedidoCliente(QDialog):
         total = sum(matriz.values())
         btn = self.table_detalle.cellWidget(row, 3)
         if btn:
-            btn.setText(f"Editar Tallas ({total} pr)")
+            btn.setToolTip(f"Configurar Tallas ({total} pr)")
         self.table_detalle.item(row, 4).setText(str(total))
         self._recalcular_total()
 
@@ -543,7 +991,7 @@ class _DialogPedidoCliente(QDialog):
     def _fecha_programado(self) -> str:
         if self.chk_sin_programar.isChecked():
             return ""
-        return self.dte_programado.date().toString("yyyy-MM-dd")
+        return self.dte_programado.fecha_bd()
 
     def _save(self) -> None:
         if self.cmb_cliente.currentData() is None:
@@ -570,9 +1018,15 @@ class _DialogPedidoCliente(QDialog):
             QMessageBox.warning(self, "Detalle vacío", "Agregue al menos una línea al pedido.")
             return
         cliente_id = self.cmb_cliente.currentData()
-        fecha_pedido = self.dte_pedido.date().toString("yyyy-MM-dd")
+        fecha_pedido = self.dte_pedido.fecha_bd()
         fecha_programado = self._fecha_programado()
         estatus = self.cmb_estatus.currentData()
+        if estatus == "programado" and not self._tiene_programacion:
+            QMessageBox.warning(
+                self, "Estatus no permitido",
+                "No se puede marcar 'Programado' a mano. Primero programe el "
+                "pedido en una semana para generar sus folios de programación.")
+            return
         obs = self.txt_obs.toPlainText().strip()
         folio_pedido = self.txt_folio_pedido.text().strip()
         suela = self.txt_suela.text().strip()
@@ -598,6 +1052,7 @@ class _DialogLineaPedido(QDialog):
         self.setWindowTitle("Agregar Línea al Pedido")
         self.setMinimumWidth(380)
         self.setModal(True)
+        _aplicar_estilo_forms(self)
         self.modelo = ""
         self.piel = ""
         self.color = ""
@@ -651,6 +1106,7 @@ class _DialogVerPedido(QDialog):
         self.setWindowTitle("Detalle del Pedido")
         self.setMinimumSize(720, 500)
         self.setModal(True)
+        _aplicar_estilo_forms(self)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -662,8 +1118,8 @@ class _DialogVerPedido(QDialog):
 
         info = QLabel()
         info.setWordWrap(True)
-        info.setStyleSheet("color: #334155; font-size: 12px; padding: 10px;"
-                           "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;")
+        info.setStyleSheet("color: #000000; font-size: 12px; padding: 10px;"
+                       "background: #FFFFE1; border: 1px solid #C0C0C0;")
         lineas = []
         if pedido:
             lineas.append(

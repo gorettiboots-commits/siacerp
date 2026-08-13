@@ -322,6 +322,29 @@ QPushButton#btnSecondary:disabled {
     border-color: #e2e8f0;
 }
 
+QToolButton#btnFilaIcono {
+    background-color: #eef2ff;
+    border: none;
+    border-radius: 13px;
+    min-width: 26px;
+    max-width: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    padding: 0px;
+}
+
+QToolButton#btnFilaIcono:hover {
+    background-color: #e0e7ff;
+}
+
+QToolButton#btnFilaIcono:pressed {
+    background-color: #c7d2fe;
+}
+
+QToolButton#btnFilaIcono:disabled {
+    background-color: transparent;
+}
+
 QPushButton#btnModo {
     background-color: #ffffff;
     border: 2px solid #cbd5e1;

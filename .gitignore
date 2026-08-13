@@ -10,6 +10,7 @@ env/
 *.db
 *.db-wal
 *.db-shm
+goretti_erp.db*
 *.sqlite
 *.sqlite3
 
