@@ -1,9 +1,9 @@
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from src.components.complex_grid import ComplexGrid
@@ -17,6 +17,7 @@ from src.utils.icons import tile_icon
 from src.utils.impresion_virtual import (
     guardar_impresora_virtual, impresora_virtual_habilitada,
 )
+from src.utils.table_utils import configurar_tabla_excel
 
 
 _SECCIONES = [
