@@ -71,6 +71,13 @@ _TILES = {
                 stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M37 16l-8 32" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
         </svg>""",
+    "impresion": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#0891b2"/>
+          <rect x="18" y="30" width="28" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <rect x="24" y="15" width="16" height="13" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <path d="M24 30v8h16v-8M26 38v8h12v-8" fill="#0891b2" stroke="#ffffff" stroke-width="3"/>
+        </svg>""",
 }
 
 _GLIFOS = {

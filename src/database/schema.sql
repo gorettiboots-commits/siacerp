@@ -500,4 +500,16 @@ CREATE TABLE IF NOT EXISTS historico_campos (
     UNIQUE (campo, valor)
 );
 
+-- -----------------------------------------------------------
+-- Configuración general del sistema (clave/valor)
+-- Preferencias de la aplicación gestionadas desde la sección
+-- de Configuración, por ejemplo la impresora virtual SIAC.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS configuracion_sistema (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_historico_campos_campo ON historico_campos (campo);

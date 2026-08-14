@@ -14,6 +14,9 @@ from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
 from src.utils.icons import tile_icon
+from src.utils.impresion_virtual import (
+    guardar_impresora_virtual, impresora_virtual_habilitada,
+)
 
 
 _SECCIONES = [
@@ -27,6 +30,8 @@ _SECCIONES = [
      "Colores y códigos cortos para variantes de insumo."),
     ("usuarios", "Usuarios y Accesos",
      "Usuarios del sistema y sus permisos por módulo."),
+    ("impresion", "Impresión",
+     "Impresora virtual SIAC para simular la impresión en pantalla."),
 ]
 
 
@@ -127,7 +132,7 @@ class DialogConfiguracion(QDialog):
         if not tiene(self.permisos, "configuracion", "ver"):
             secciones = [s for s in secciones if s[0] != "unidades"
                          and s[0] != "areas" and s[0] != "tallas"
-                         and s[0] != "colores"]
+                         and s[0] != "colores" and s[0] != "impresion"]
         if not tiene(self.permisos, "usuarios", "ver"):
             secciones = [s for s in secciones if s[0] != "usuarios"]
         self._secciones = secciones
@@ -198,6 +203,8 @@ class DialogConfiguracion(QDialog):
             return _TabColores(self.inv_controller, self.permisos)
         if key == "usuarios":
             return _TabAccesos(self.accesos_controller, self.permisos)
+        if key == "impresion":
+            return _TabImpresion(self.permisos)
         raise ValueError(f"Sección de configuración desconocida: {key}")
 
     def _navegar(self, index: int) -> None:
@@ -1262,3 +1269,49 @@ class _DialogPassword(QDialog):
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
             return
         self.accept()
+
+
+class _TabImpresion(QWidget):
+    """Preferencias de impresión: impresora virtual SIAC (simulación).
+
+    Al habilitarla, los diálogos de impresión del sistema ofrecen la opción
+    "Impresora virtual SIAC (simulación)" que muestra la salida en pantalla
+    en lugar de enviar el trabajo a una impresora física.
+    """
+
+    def __init__(self, permisos=None) -> None:
+        super().__init__()
+        self.permisos = permisos or set()
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        grupo = QGroupBox("Impresora virtual")
+        g = QVBoxLayout(grupo)
+        g.setSpacing(8)
+
+        self.chk_virtual = QCheckBox(
+            "Habilitar impresora virtual SIAC (simulación en pantalla)")
+        self.chk_virtual.toggled.connect(self._guardar)
+        g.addWidget(self.chk_virtual)
+
+        hint = QLabel(
+            "Cuando está habilitada, al imprimir podrá elegir la \"Impresora "
+            "virtual SIAC\": el sistema mostrará en pantalla una simulación "
+            "del resultado sin enviar el trabajo a una impresora física. "
+            "Las impresoras reales siguen disponibles para imprimir de verdad.")
+        hint.setObjectName("cfgHint")
+        hint.setWordWrap(True)
+        g.addWidget(hint)
+
+        layout.addWidget(grupo)
+        layout.addStretch()
+
+    def _guardar(self, habilitada: bool) -> None:
+        guardar_impresora_virtual(habilitada)
+
+    def recargar(self) -> None:
+        self.chk_virtual.setChecked(impresora_virtual_habilitada())

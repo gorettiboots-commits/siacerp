@@ -13,7 +13,7 @@ Muestra los datos de la línea y, en el área de impresión, permite:
 """
 from PySide6.QtCore import QSizeF, Qt
 from PySide6.QtGui import QPageSize, QPainter
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMessageBox, QPushButton, QVBoxLayout, QWidget,
@@ -23,6 +23,7 @@ from src.components.editor_etiqueta import (
     DialogoPropiedadesCampo, LabelCanvas, normalizar_diseno,
 )
 from src.components.notificacion_flotante import notificar_flotante
+from src.utils.impresion_virtual import dialogo_impresion
 from src.components.tallas_matrix import MatrizTallasWidget
 from src.models.etiqueta_model import EtiquetaModel
 from src.utils.etiqueta_render import render_label
@@ -232,23 +233,21 @@ class LineaDetalleDialog(QDialog):
             return
         total = sum(c for _, c in filas)
         printer = self._printer()
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._configurar_impresora(printer)
         printer.setDocName("Etiquetas SIAC")
-        try:
-            painter = QPainter(printer)
+
+        def pintar(p: QPrinter) -> None:
+            self._configurar_impresora(p)
+            painter = QPainter(p)
             if not painter.isActive():
                 raise RuntimeError(
                     "No se pudo iniciar el painter sobre la impresora. "
                     "Revisa el driver y que la cola de impresión no esté en error.")
-            px_per_mm = printer.resolution() / 25.4
+            px_per_mm = p.resolution() / 25.4
             n = 0
             for talla, cantidad in filas:
                 datos = self._datos_etiqueta(talla)
                 for _ in range(cantidad):
-                    if n > 0 and not printer.newPage():
+                    if n > 0 and not p.newPage():
                         raise RuntimeError(
                             "La impresora no aceptó una nueva página. "
                             "Revisa el driver y el tamaño del papel.")
@@ -258,39 +257,51 @@ class LineaDetalleDialog(QDialog):
                 raise RuntimeError(
                     "No se pudo cerrar el trabajo de impresión. "
                     "Revisa la cola de impresión de Windows.")
+
+        try:
+            estado = dialogo_impresion(printer, self, pintar)
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir",
                                  f"{type(e).__name__}: {e}")
             return
-        notificar_flotante(f"Se enviaron {total} etiquetas a la impresora.",
-                           tipo="success", titulo="Impresión", host=self)
+        if estado == "impreso":
+            notificar_flotante(f"Se enviaron {total} etiquetas a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
+        elif estado == "simulado":
+            notificar_flotante("Simulación en pantalla: no se envió a la impresora.",
+                               tipo="info", titulo="Impresora virtual", host=self)
 
     def _imprimir_muestra(self) -> None:
         """Imprime una sola etiqueta de muestra con los datos actuales."""
         printer = self._printer()
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
-        self._configurar_impresora(printer)
         printer.setDocName("Etiqueta muestra SIAC")
-        try:
-            painter = QPainter(printer)
+
+        def pintar(p: QPrinter) -> None:
+            self._configurar_impresora(p)
+            painter = QPainter(p)
             if not painter.isActive():
                 raise RuntimeError(
                     "No se pudo iniciar el painter sobre la impresora. "
                     "Revisa el driver y que la cola de impresión no esté en error.")
             render_label(painter, self._diseno, self._datos_etiqueta(),
-                         printer.resolution() / 25.4)
+                         p.resolution() / 25.4)
             if not painter.end():
                 raise RuntimeError(
                     "No se pudo cerrar el trabajo de impresión. "
                     "Revisa la cola de impresión de Windows.")
+
+        try:
+            estado = dialogo_impresion(printer, self, pintar)
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir",
                                  f"{type(e).__name__}: {e}")
             return
-        notificar_flotante("Etiqueta de muestra enviada a la impresora.",
-                           tipo="success", titulo="Impresión", host=self)
+        if estado == "impreso":
+            notificar_flotante("Etiqueta de muestra enviada a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
+        elif estado == "simulado":
+            notificar_flotante("Simulación en pantalla: no se envió a la impresora.",
+                               tipo="info", titulo="Impresora virtual", host=self)
 
     def _guardar_pdf(self) -> None:
         talla = self._talla_seleccionada()

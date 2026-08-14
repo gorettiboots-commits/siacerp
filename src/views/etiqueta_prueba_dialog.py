@@ -4,7 +4,7 @@ Muestra la vista previa de la etiqueta térmica 75x45 mm y permite enviarla
 directo a la etiquetadora (controlador de Windows) o guardarla como PDF.
 """
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog, QPrinter
+from PySide6.QtPrintSupport import QPrintPreviewDialog, QPrinter
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
     QVBoxLayout,
@@ -15,6 +15,7 @@ from src.utils.etiqueta_termica import (
     ANCHO_MM, ALTO_MM, configurar_printer, datos_prueba, etiqueta_termica_pdf,
     imprimir_etiqueta, render_etiqueta_termica, render_etiqueta_termica_pixmap,
 )
+from src.utils.impresion_virtual import dialogo_impresion
 
 _PREVIEW_W = 380
 _PREVIEW_H = 256
@@ -69,15 +70,23 @@ class EtiquetaPruebaDialog(QDialog):
     def _imprimir(self) -> None:
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         configurar_printer(printer)
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+
+        def pintar(p: QPrinter) -> None:
+            err = imprimir_etiqueta(p, self._datos)
+            if err:
+                raise RuntimeError(err)
+
+        try:
+            estado = dialogo_impresion(printer, self, pintar)
+        except Exception as e:
+            QMessageBox.critical(self, "Error al imprimir", str(e))
             return
-        err = imprimir_etiqueta(printer, self._datos)
-        if err:
-            QMessageBox.critical(self, "Error al imprimir", err)
-        else:
+        if estado == "impreso":
             notificar_flotante("Etiqueta de prueba enviada a la impresora.",
                                tipo="success", titulo="Impresión", host=self)
+        elif estado == "simulado":
+            notificar_flotante("Simulación en pantalla: no se envió a la impresora.",
+                               tipo="info", titulo="Impresora virtual", host=self)
 
     def _vista_previa(self) -> None:
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)

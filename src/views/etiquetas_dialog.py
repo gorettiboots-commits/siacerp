@@ -12,7 +12,7 @@ from functools import partial
 
 from PySide6.QtCore import QSize, QSizeF, Qt
 from PySide6.QtGui import QPageSize, QPainter, QPixmap
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog,
     QDoubleSpinBox, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from src.components.notificacion_flotante import notificar_flotante
 from src.models.etiqueta_model import DATOS_ETIQUETA, EtiquetaModel
 from src.utils.etiqueta_render import render_label, render_label_pixmap
+from src.utils.impresion_virtual import dialogo_impresion
 
 _PREVIEW_W = 380
 _PREVIEW_H = 256
@@ -401,31 +402,36 @@ class EtiquetasDialog(QDialog):
                    self._diseno.get("alto_mm", 51.0)),
             QPageSize.Unit.Millimeter))
         printer.setFullPage(True)
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
         printer.setDocName("Etiquetas SIAC")
-        try:
-            painter = QPainter(printer)
+
+        def pintar(p: QPrinter) -> None:
+            painter = QPainter(p)
             if not painter.isActive():
                 raise RuntimeError(
                     "No se pudo iniciar el painter sobre la impresora. "
                     "Revisa el driver y que la cola de impresión no esté en error.")
-            px_per_mm = printer.resolution() / 25.4
+            px_per_mm = p.resolution() / 25.4
             n = 0
             for talla, pares, copias in filas:
                 datos = self._datos_talla(talla, pares)
                 for _ in range(copias):
                     if n > 0:
-                        printer.newPage()
+                        p.newPage()
                     render_label(painter, self._diseno, datos, px_per_mm)
                     n += 1
             painter.end()
+
+        try:
+            estado = dialogo_impresion(printer, self, pintar)
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir", f"{type(e).__name__}: {e}")
             return
-        notificar_flotante(f"Se enviaron {total} etiquetas a la impresora.",
-                           tipo="success", titulo="Impresión", host=self)
+        if estado == "impreso":
+            notificar_flotante(f"Se enviaron {total} etiquetas a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
+        elif estado == "simulado":
+            notificar_flotante("Simulación en pantalla: no se envió a la impresora.",
+                               tipo="info", titulo="Impresora virtual", host=self)
 
     def _imprimir_muestra(self) -> None:
         self._diseno = self._leer_diseno()
@@ -436,21 +442,26 @@ class EtiquetasDialog(QDialog):
                    diseno.get("alto_mm", 51.0)),
             QPageSize.Unit.Millimeter))
         printer.setFullPage(True)
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
-            return
         printer.setDocName("Etiqueta muestra SIAC")
-        try:
-            painter = QPainter(printer)
+
+        def pintar(p: QPrinter) -> None:
+            painter = QPainter(p)
             if not painter.isActive():
                 raise RuntimeError(
                     "No se pudo iniciar el painter sobre la impresora. "
                     "Revisa el driver y que la cola de impresión no esté en error.")
-            px_per_mm = printer.resolution() / 25.4
+            px_per_mm = p.resolution() / 25.4
             render_label(painter, diseno, self._datos_muestra(), px_per_mm)
             painter.end()
+
+        try:
+            estado = dialogo_impresion(printer, self, pintar)
         except Exception as e:
             QMessageBox.critical(self, "Error al imprimir", f"{type(e).__name__}: {e}")
             return
-        notificar_flotante("Etiqueta de muestra enviada a la impresora.",
-                           tipo="success", titulo="Impresión", host=self)
+        if estado == "impreso":
+            notificar_flotante("Etiqueta de muestra enviada a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
+        elif estado == "simulado":
+            notificar_flotante("Simulación en pantalla: no se envió a la impresora.",
+                               tipo="info", titulo="Impresora virtual", host=self)

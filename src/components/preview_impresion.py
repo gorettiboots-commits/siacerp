@@ -26,13 +26,14 @@ sistema lo generan en `src/utils/export_utils.py` (`_oc_receipt_html`,
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QDesktopServices, QPageLayout, QPageSize
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QTextBrowser, QToolButton, QVBoxLayout, QWidget,
 )
 
 from src.components.notificacion_flotante import notificar_flotante
+from src.utils.impresion_virtual import dialogo_impresion
 
 # WebEngine se crea de forma perezosa dentro del diálogo (es pesado y solo
 # debe cargarse cuando el usuario abre el preview). Si no está disponible o
@@ -247,9 +248,10 @@ class PreviewImpresion(QDialog):
 
     def _imprimir(self) -> None:
         printer = self._printer()
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() == QDialog.Accepted:
-            self._renderizar(printer)
+        estado = dialogo_impresion(printer, self, self._renderizar)
+        if estado == "impreso":
+            notificar_flotante("El documento se envió a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
 
     def _exportar_pdf(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
