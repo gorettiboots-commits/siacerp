@@ -733,6 +733,186 @@ def export_pedido_cliente_excel(datos: dict, detalle: list[dict], parent: QWidge
     return path
 
 
+def exportar_programacion_excel(lineas: list[dict], titulo: str,
+                                incluir_semana: bool = False,
+                                parent: QWidget | None = None,
+                                grupos: list | None = None) -> Optional[str]:
+    """Exporta la programación a Excel replicando el formato del reporte que
+    imprime (generar_html_programacion): título morado sobre rosa, encabezado
+    morado, una columna por talla y fila final de totales en negrita.
+
+    `grupos`: lista opcional de (etiqueta, [lineas]) para insertar filas de
+    grupo moradas (segundo encabezado) cuando la tabla está agrupada."""
+    nombre = "".join(c for c in titulo if c.isalnum() or c in " _-") or "Programacion"
+    path, _ = QFileDialog.getSaveFileName(
+        parent, "Exportar Excel - Programación", f"{nombre}.xlsx", "Excel (*.xlsx)")
+    if not path:
+        return None
+    _write_programacion_excel(path, lineas, titulo, incluir_semana, grupos)
+    return path
+
+
+def _write_programacion_excel(path: str, lineas: list[dict], titulo: str,
+                              incluir_semana: bool, grupos: list | None) -> None:
+    from datetime import datetime
+
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    def tallas_ordenadas(ls: list[dict]) -> list[str]:
+        tallas: list[str] = []
+        vistos: set[str] = set()
+        for linea in ls:
+            for t in linea.get("tallas") or []:
+                talla = str(t.get("talla", "") or "").strip()
+                if talla and talla not in vistos:
+                    vistos.add(talla)
+                    tallas.append(talla)
+        tallas.sort(key=lambda x: (float(x), x))
+        return tallas
+
+    tallas = tallas_ordenadas(lineas)
+    total_por_talla: dict[str, int] = {talla: 0 for talla in tallas}
+    gran_total = 0
+
+    fijas = [
+        ("cliente", "CLIENTE"),
+        ("folio_prog", "FOLIO PROG."),
+        ("folio_pedido", "FOLIO PEDIDO"),
+        ("modelo", "MODELO"),
+        ("piel", "PIEL"),
+        ("color", "COLOR"),
+        ("fecha_prog", "FECHA PROG."),
+    ]
+
+    n_texto = len(fijas) + (1 if incluir_semana else 0)
+    n_cols = n_texto + len(tallas) + 1
+
+    morado = PatternFill(start_color="7C3AED", end_color="7C3AED", fill_type="solid")
+    rosa_total = PatternFill(start_color="FFE6FF", end_color="FFE6FF", fill_type="solid")
+    grupo_fill = PatternFill(start_color="7C3AED", end_color="7C3AED", fill_type="solid")
+    par_fill = PatternFill(start_color="FDF2FF", end_color="FDF2FF", fill_type="solid")
+    blanco = Font(color="FFFFFF", bold=True)
+    negrita = Font(bold=True)
+    thin = Side(style="thin", color="D946EF")
+    borde_total = Border(left=thin, right=thin, top=thin, bottom=thin)
+    fina = Side(style="thin", color="E5E7EB")
+    borde = Border(left=fina, right=fina, top=fina, bottom=fina)
+    centro = Alignment(horizontal="center", vertical="center")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "PROGRAMACIÓN"
+    last = n_cols
+
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last)
+    c = ws.cell(row=1, column=1, value=titulo)
+    c.font = Font(bold=True, size=15, color="7C3AED")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 26
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last)
+    c = ws.cell(row=2, column=1,
+                value=f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    c.font = Font(size=10, color="6B7280")
+    c.alignment = Alignment(horizontal="center", vertical="center")
+
+    fila = 4
+    encabezados = []
+    if incluir_semana:
+        encabezados.append("SEMANA")
+    encabezados += [t for _, t in fijas]
+    encabezados += tallas
+    encabezados.append("TOTAL PARES")
+    for j, h in enumerate(encabezados):
+        cc = ws.cell(row=fila, column=j + 1, value=h)
+        cc.font = blanco
+        cc.fill = morado
+        cc.alignment = centro
+        cc.border = borde
+    ws.row_dimensions[fila].height = 20
+    fila += 1
+
+    def escribir_linea(linea: dict) -> None:
+        nonlocal fila, gran_total
+        texto = []
+        if incluir_semana:
+            texto.append(linea.get("semana", ""))
+        base = {
+            "cliente": linea.get("cliente", ""),
+            "folio_prog": linea.get("folio_prog", ""),
+            "folio_pedido": linea.get("folio_pedido", ""),
+            "modelo": linea.get("modelo", ""),
+            "piel": linea.get("piel", ""),
+            "color": linea.get("color", ""),
+            "fecha_prog": linea.get("fecha_prog", "") or "",
+        }
+        texto += [base.get(key, "") for key, _ in fijas]
+        numeros = []
+        por_talla = {str(t.get("talla", "")): int(t.get("pares", 0) or 0)
+                     for t in linea.get("tallas") or []}
+        for talla in tallas:
+            pares = por_talla.get(talla, 0)
+            total_por_talla[talla] += pares
+            numeros.append(str(pares or ""))
+        total = int(linea.get("total_pares", 0) or 0)
+        gran_total += total
+        numeros.append(str(total))
+        valores = texto + numeros
+        for j, v in enumerate(valores):
+            cc = ws.cell(row=fila, column=j + 1, value=v)
+            cc.border = borde
+            cc.alignment = centro if j >= n_texto else Alignment(horizontal="left",
+                                                                 vertical="center")
+            cc.font = Font(size=10)
+        if fila % 2 == 0:
+            for j in range(1, last + 1):
+                ws.cell(row=fila, column=j).fill = par_fill
+        fila += 1
+
+    def escribir_grupo(etiqueta: str) -> None:
+        nonlocal fila
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
+        cc = ws.cell(row=fila, column=1, value=etiqueta)
+        cc.font = blanco
+        cc.fill = grupo_fill
+        cc.alignment = Alignment(horizontal="left", vertical="center")
+        fila += 1
+
+    if grupos:
+        for etiqueta, ls in grupos:
+            escribir_grupo(etiqueta)
+            for linea in ls:
+                escribir_linea(linea)
+    else:
+        for linea in lineas:
+            escribir_linea(linea)
+
+    fila_total = []
+    if incluir_semana:
+        fila_total.append("")
+    fila_total.append("TOTAL")
+    fila_total += [""] * (len(fijas) - 1)
+    fila_total += [str(total_por_talla.get(talla, 0)) for talla in tallas]
+    fila_total.append(str(gran_total))
+    for j, v in enumerate(fila_total):
+        cc = ws.cell(row=fila, column=j + 1, value=v)
+        cc.font = negrita
+        cc.fill = rosa_total
+        cc.border = borde_total
+        cc.alignment = centro if j >= n_texto else Alignment(horizontal="left",
+                                                             vertical="center")
+    fila += 1
+
+    ws.column_dimensions["A"].width = 34
+    for i in range(1, n_texto):
+        ws.column_dimensions[get_column_letter(i + 1)].width = 16
+    for i in range(len(tallas)):
+        ws.column_dimensions[get_column_letter(n_texto + 1 + i)].width = 9
+    ws.column_dimensions[get_column_letter(last)].width = 12
+
+    wb.save(path)
+
+
 def _write_pedido_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     from datetime import datetime
 

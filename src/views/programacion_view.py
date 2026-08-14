@@ -10,10 +10,9 @@ from src.components.notificacion_flotante import notificar_flotante
 from src.components.preview_impresion import PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import export_table_to_excel
+from src.utils.export_utils import exportar_programacion_excel
 from src.utils.programacion_print import generar_html_programacion
 from src.utils.ui_helpers import crear_tarjeta
-from src.views.etiqueta_prueba_dialog import EtiquetaPruebaDialog
 from src.views.etiquetas_dialog import EtiquetasDialog
 from src.views.linea_detalle_dialog import LineaDetalleDialog
 
@@ -59,13 +58,15 @@ class ProgramacionView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self._permiso_eliminar = tiene(permisos, "programacion", "eliminar")
-        self.btn_estatus.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_folio_pedido.setEnabled(tiene(permisos, "programacion", "editar"))
-        self.btn_export.setEnabled(tiene(permisos, "programacion", "exportar"))
-        self.btn_print.setEnabled(tiene(permisos, "programacion", "exportar"))
-        self.btn_etiquetas.setEnabled(tiene(permisos, "programacion", "exportar"))
-        self.btn_etiqueta_prueba.setEnabled(tiene(permisos, "programacion", "exportar"))
-        self.btn_crear_etiqueta.setEnabled(tiene(permisos, "programacion", "exportar"))
+        self.vista.set_boton_extra_habilitado("Exportar Excel",
+                                              tiene(permisos, "programacion", "exportar"))
+        self.vista.set_boton_extra_habilitado("Imprimir",
+                                              tiene(permisos, "programacion", "exportar"))
+        self.vista.set_boton_extra_habilitado("Crear Etiqueta",
+                                              tiene(permisos, "programacion", "exportar"))
+        self.vista.set_boton_extra_habilitado("Imprimir Etiquetas",
+                                              tiene(permisos, "programacion", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -87,39 +88,8 @@ class ProgramacionView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_estatus = QPushButton("Cambiar Estatus")
-        self.btn_estatus.setObjectName("btnSecondary")
-        self.btn_estatus.clicked.connect(self._cambiar_estatus)
-
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(self._imprimir)
-
-        self.btn_etiquetas = QPushButton("Imprimir Etiquetas")
-        self.btn_etiquetas.setObjectName("btnPrimary")
-        self.btn_etiquetas.clicked.connect(self._imprimir_etiquetas)
-
-        self.btn_etiqueta_prueba = QPushButton("Etiqueta de Prueba")
-        self.btn_etiqueta_prueba.setObjectName("btnSecondary")
-        self.btn_etiqueta_prueba.clicked.connect(self._imprimir_etiqueta_prueba)
-
-        self.btn_crear_etiqueta = QPushButton("Crear Etiqueta")
-        self.btn_crear_etiqueta.setObjectName("btnPrimary")
-        self.btn_crear_etiqueta.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_crear_etiqueta.clicked.connect(self._crear_etiqueta)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(self._exportar)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_estatus)
-        hlayout.addWidget(self.btn_print)
-        hlayout.addWidget(self.btn_etiquetas)
-        hlayout.addWidget(self.btn_etiqueta_prueba)
-        hlayout.addWidget(self.btn_crear_etiqueta)
-        hlayout.addWidget(self.btn_export)
 
         layout.addWidget(header)
 
@@ -134,6 +104,16 @@ class ProgramacionView(QWidget):
         self.vista.set_buscador_visible(False)
         self.vista.set_exportar_visible(False)
         self.vista.set_agrupar_visible(False)
+        self.vista.set_botones_extra([
+            {"texto": "Exportar Excel", "object_name": "btnSuccess", "icono": "exportar",
+             "color": "#ffffff", "callback": self._exportar},
+            {"texto": "Imprimir", "object_name": "btnPrimary", "icono": "imprimir",
+             "color": "#ffffff", "callback": self._imprimir},
+            {"texto": "Crear Etiqueta", "object_name": "btnWarning", "icono": "mas",
+             "color": "#000000", "callback": self._crear_etiqueta},
+            {"texto": "Imprimir Etiquetas", "object_name": "btnDanger", "icono": "imprimir",
+             "color": "#ffffff", "callback": self._imprimir_etiquetas},
+        ])
         self.vista.set_renderers(fila=self._fila_linea, claves=self._claves_linea,
                                  estilo=self._estilo_linea, lista=self._lista_linea,
                                  tarjeta=self._tarjeta_linea)
@@ -145,6 +125,11 @@ class ProgramacionView(QWidget):
         ])
         self.vista.set_grupo_fn(self._grupo_label)
         self.vista.doubleClicked.connect(self._ver_detalle)
+        header = self.vista.table.horizontalHeader()
+        header.setStyleSheet(
+            "QHeaderView::section { background-color:#4f46e5; color:#ffffff; "
+            "border:none; border-right:1px solid #a0a0a0; "
+            "border-bottom:1px solid #a0a0a0; font-weight:bold; padding:5px 6px; }")
         layout.addWidget(self.vista)
 
     def _setup_toolbar(self) -> None:
@@ -376,31 +361,6 @@ class ProgramacionView(QWidget):
                "folio_pedido": 115, "modelo": 90, "piel": 110,
                "color": 130, "fecha_prog": 100, "total": 60}
 
-    def _cambiar_estatus(self) -> None:
-        rec = self.vista.registro_seleccionado()
-        if rec is None:
-            QMessageBox.information(self, "Seleccionar",
-                                    "Seleccione una línea de la programación.")
-            return
-        linea_id = rec["id"]
-        linea = self.controller.obtener_linea(linea_id)
-        if not linea:
-            return
-        actual = linea.get("estatus", "programado")
-        opciones = [_ESTATUS[v] for v in _ESTATUS]
-        seleccion, ok = QInputDialog.getItem(
-            self, "Cambiar Estatus",
-            f"Línea {linea.get('folio_prog', '')} - {linea.get('cliente', '')} "
-            f"({linea.get('modelo', '')})",
-            opciones, 0, False)
-        if not ok:
-            return
-        nuevo = [v for v, label in _ESTATUS.items() if label == seleccion][0]
-        if nuevo == actual:
-            return
-        self.controller.cambiar_estatus(linea_id, nuevo)
-        self._recargar_tabla()
-
     def _asignar_folio_pedido(self) -> None:
         rec = self.vista.registro_seleccionado()
         if rec is None:
@@ -452,10 +412,27 @@ class ProgramacionView(QWidget):
         self._on_semana_cambiada()
 
     def _exportar(self) -> None:
-        path = export_table_to_excel(self.vista.table, "Programacion", self)
+        es_todas = self.cmb_semana.currentData() is None
+        titulo = f"PROGRAMACIÓN SEMANAL — {self.cmb_semana.currentText()}"
+        grupos = None
+        if self._factor_actual:
+            agrupadas: dict = {}
+            for l in self._lineas_actuales:
+                valor = self._valor_agrupar(l, self._factor_actual)
+                agrupadas.setdefault(valor, []).append(l)
+            orden = sorted(agrupadas.keys(), key=lambda v: str(v).lower())
+            grupos = [(self._grupo_label(v, agrupadas[v]), agrupadas[v])
+                      for v in orden]
+        path = exportar_programacion_excel(
+            self._lineas_actuales, titulo=titulo, incluir_semana=es_todas,
+            parent=self, grupos=grupos)
         if path:
             notificar_flotante(f"Excel guardado en:\n{path}",
                                tipo="success", titulo="Exportado", host=self)
+
+    @staticmethod
+    def _valor_agrupar(l: dict, key: str):
+        return l.get(key, "")
 
     def _imprimir(self) -> None:
         """Vista previa de impresión del reporte (PreviewImpresion)."""
@@ -476,10 +453,6 @@ class ProgramacionView(QWidget):
         """Abre el editor de etiquetas aprobado a pantalla completa."""
         dlg = DialogoEditorEtiqueta(self)
         dlg.abrir_fullscreen()
-
-    def _imprimir_etiqueta_prueba(self) -> None:
-        dlg = EtiquetaPruebaDialog(self)
-        dlg.exec()
 
     def _ver_detalle(self) -> None:
         rec = self.vista.registro_seleccionado()
