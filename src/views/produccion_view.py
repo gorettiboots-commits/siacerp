@@ -11,7 +11,7 @@ from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel, print_table
 from src.views.dialogs import (
-    DialogBOM, DialogModelo, DialogOrdenProduccion,
+    DialogBOM, DialogFichaTecnica, DialogModelo, DialogOrdenProduccion,
     DialogSeguimientoOP, DialogVariante,
 )
 
@@ -36,6 +36,7 @@ class ProduccionView(QWidget):
         self.btn_editar_m.setEnabled(tiene(self._permisos, "produccion", "editar"))
         self.btn_desactivar_m.setEnabled(tiene(self._permisos, "produccion", "eliminar"))
         self.btn_export_m.setEnabled(tiene(self._permisos, "produccion", "exportar"))
+        self.btn_ficha_m.setEnabled(tiene(self._permisos, "produccion", "editar"))
         self.btn_nuevo_v.setEnabled(tiene(self._permisos, "produccion", "crear"))
         self.btn_editar_v.setEnabled(tiene(self._permisos, "produccion", "editar"))
         self.btn_desactivar_v.setEnabled(tiene(self._permisos, "produccion", "eliminar"))
@@ -234,11 +235,15 @@ class ProduccionView(QWidget):
         self.btn_export_m = QPushButton("Exportar Excel")
         self.btn_export_m.setObjectName("btnPrimary")
         self.btn_export_m.clicked.connect(lambda: self._exportar_tabla(self.grid_modelos.table, "Modelos"))
+        self.btn_ficha_m = QPushButton("Ficha Técnica")
+        self.btn_ficha_m.setObjectName("btnSecondary")
+        self.btn_ficha_m.clicked.connect(self._ficha_tecnica)
         mtoolbar.addWidget(self.txt_buscar_m)
         mtoolbar.addStretch()
         mtoolbar.addWidget(self.btn_nuevo_m)
         mtoolbar.addWidget(self.btn_editar_m)
         mtoolbar.addWidget(self.btn_desactivar_m)
+        mtoolbar.addWidget(self.btn_ficha_m)
         mtoolbar.addWidget(self.btn_export_m)
         mlayout.addLayout(mtoolbar)
 
@@ -456,6 +461,14 @@ class ProduccionView(QWidget):
         if resp == QMessageBox.Yes:
             self.controller.desactivar_modelo(m["id"])
             self._load_catalogos()
+
+    def _ficha_tecnica(self) -> None:
+        m = self.grid_modelos.registro_seleccionado()
+        if m is None:
+            QMessageBox.information(self, "Seleccionar", "Seleccione un modelo.")
+            return
+        dlg = DialogFichaTecnica(self.inv_controller, self.controller, m["id"])
+        dlg.exec()
 
     def _nueva_variante(self) -> None:
         dlg = DialogVariante(self.controller)

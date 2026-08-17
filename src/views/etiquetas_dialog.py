@@ -30,6 +30,25 @@ from src.utils.impresion_virtual import dialogo_impresion
 _MARGEN_MM = 4.0
 
 
+def crear_diseno_fleje(diseno_base: dict, texto: str) -> dict:
+    """Diseño de etiqueta 'fleje': solo el texto centrado a lo ancho total."""
+    ancho = float(diseno_base.get("ancho_mm", 76.0))
+    alto = float(diseno_base.get("alto_mm", 51.0))
+    return {
+        "ancho_mm": ancho,
+        "alto_mm": alto,
+        "campos": [{
+            "tipo": "texto", "texto": texto,
+            "x_mm": _MARGEN_MM, "y_mm": _MARGEN_MM,
+            "ancho_mm": ancho - 2 * _MARGEN_MM,
+            "alto_mm": alto - 2 * _MARGEN_MM,
+            "size": 14, "bold": True, "cursiva": False,
+            "auto_fit": True,
+            "alineacion": "centro", "borde_visible": False, "visible": True,
+        }],
+    }
+
+
 def _imprimir_copias(parent, filas: list[tuple[dict, dict, int]]) -> int:
     """Envía a impresión las copias indicadas.
 
@@ -149,20 +168,7 @@ class DialogEtiquetasFlejes(QDialog):
             self._agregar_partida()
 
     def _diseno_fleje(self, texto: str) -> dict:
-        ancho = float(self._diseno_base.get("ancho_mm", 76.0))
-        alto = float(self._diseno_base.get("alto_mm", 51.0))
-        return {
-            "ancho_mm": ancho,
-            "alto_mm": alto,
-            "campos": [{
-                "tipo": "texto", "texto": texto,
-                "x_mm": _MARGEN_MM, "y_mm": _MARGEN_MM,
-                "ancho_mm": ancho - 2 * _MARGEN_MM,
-                "alto_mm": alto - 2 * _MARGEN_MM,
-                "size": 14, "bold": True, "cursiva": False,
-                "alineacion": "centro", "borde_visible": False, "visible": True,
-            }],
-        }
+        return crear_diseno_fleje(self._diseno_base, texto)
 
     def _imprimir(self) -> None:
         filas = []

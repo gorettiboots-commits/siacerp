@@ -56,22 +56,9 @@ def export_table_to_excel(table: QTableWidget, titulo: str, parent: QWidget) -> 
 
 
 def print_table(table: QTableWidget, titulo: str, parent: QWidget) -> None:
-    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-    printer.setPageSize(QPageSize(QPageSize.Letter))
-    printer.setPageOrientation(QPageLayout.Orientation.Landscape)
-
-    dlg = QFileDialog()
-    path, _ = QFileDialog.getSaveFileName(parent, f"Guardar PDF - {titulo}", f"{titulo}.pdf",
-                                           "PDF (*.pdf)")
-    if not path:
-        return
-    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
-    printer.setOutputFileName(path)
-
+    from src.components.preview_impresion import previsualizar_html
     html = _table_to_html(table, titulo)
-    doc = QTextDocument()
-    doc.setHtml(html)
-    doc.print_(printer)
+    previsualizar_html(html, titulo=titulo, parent=parent)
 
 
 def _table_to_html(table: QTableWidget, titulo: str) -> str:
@@ -119,12 +106,27 @@ Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derech
 
 
 def _logo_base64() -> str:
+    try:
+        from src.models.empresa_model import EmpresaModel
+        logo = EmpresaModel().obtener('logo')
+        if logo:
+            return logo
+    except Exception:
+        pass
     logo_path = Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.jpeg"
     if not logo_path.exists():
         return ""
     import base64
     with open(str(logo_path), "rb") as f:
         return base64.b64encode(f.read()).decode()
+
+
+def _nombre_empresa() -> str:
+    try:
+        from src.models.empresa_model import EmpresaModel
+        return EmpresaModel().nombre_empresa()
+    except Exception:
+        return "SIAC ERP"
 
 
 def _fmt_fecha(fecha: str) -> str:
@@ -305,7 +307,7 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 <div class='encabezado'>
 <table><tr>
 <td style='width:30%'>
-  <div>{logo_html}<span class='marca'>GORETTI</span></div>
+  <div>{logo_html}<span class='marca'>{_nombre_empresa().upper()}</span></div>
   <div class='titulo2'>Sistema Integral de AdministraciÃ³n y Control</div>
 </td>
 <td style='width:40%;text-align:center'>
@@ -350,28 +352,17 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 
 <div class='pie'>
   <div class='gracias'>Gracias por su compra.</div>
-  <div class='marca'>GORETTI</div>
-  <div class='leyenda'>Generado por Goretti ERP el {ahora}</div>
+  <div class='marca'>{_nombre_empresa().upper()}</div>
+  <div class='leyenda'>Generado por {_nombre_empresa()} el {ahora}</div>
 </div>
 </body></html>"""
 
 
 def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> None:
-    path, _ = QFileDialog.getSaveFileName(
-        parent, "Guardar PDF - Orden de Compra",
-        f"OC_{datos.get('folio', '')}.pdf", "PDF (*.pdf)")
-    if not path:
-        return
-
-    doc = QTextDocument()
-    doc.setHtml(_oc_receipt_html(datos, detalle))
-    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-    printer.setPageSize(QPageSize(QPageSize.Letter))
-    printer.setPageOrientation(QPageLayout.Orientation.Landscape if len(_oc_columnas_tallas(detalle)) > 6
-                           else QPageLayout.Orientation.Portrait)
-    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
-    printer.setOutputFileName(path)
-    doc.print_(printer)
+    from src.components.preview_impresion import previsualizar_html
+    folio = datos.get('folio', '')
+    titulo = f"Orden de Compra {folio}" if folio else "Orden de Compra"
+    previsualizar_html(_oc_receipt_html(datos, detalle), titulo=titulo, parent=parent)
 
 
 def export_orden_compra_excel(datos: dict, detalle: list[dict], parent: QWidget) -> Optional[str]:
@@ -543,13 +534,13 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
-    c = ws.cell(row=fila, column=1, value="GORETTI")
+    c = ws.cell(row=fila, column=1, value=_nombre_empresa().upper())
     c.font = Font(bold=True, size=16, color="1D4ED8")
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
     c = ws.cell(row=fila, column=1,
-                value=f"Generado por Goretti ERP el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                value=f"Generado por {_nombre_empresa()} el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     c.font = Font(size=9, color="94A3B8")
     c.alignment = Alignment(horizontal="center")
 
@@ -573,21 +564,10 @@ def _pedido_totales(detalle: list[dict]) -> int:
 
 
 def print_pedido_cliente(datos: dict, detalle: list[dict], parent: QWidget) -> None:
-    path, _ = QFileDialog.getSaveFileName(
-        parent, "Guardar PDF - Pedido de Cliente",
-        f"PED_{datos.get('folio', '')}.pdf", "PDF (*.pdf)")
-    if not path:
-        return
-
-    doc = QTextDocument()
-    doc.setHtml(_pedido_html(datos, detalle))
-    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
-    printer.setPageSize(QPageSize(QPageSize.Letter))
-    printer.setPageOrientation(QPageLayout.Orientation.Landscape if len(_oc_columnas_puntos(detalle)) > 6
-                           else QPageLayout.Orientation.Portrait)
-    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
-    printer.setOutputFileName(path)
-    doc.print_(printer)
+    from src.components.preview_impresion import previsualizar_html
+    folio = datos.get('folio', '')
+    titulo = f"Pedido de Cliente {folio}" if folio else "Pedido de Cliente"
+    previsualizar_html(_pedido_html(datos, detalle), titulo=titulo, parent=parent)
 
 
 def _pedido_html(datos: dict, detalle: list[dict]) -> str:
@@ -680,7 +660,7 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 <div class='encabezado'>
 <table><tr>
 <td style='width:30%'>
-  <div>{logo_html}<span class='marca'>GORETTI</span></div>
+  <div>{logo_html}<span class='marca'>{_nombre_empresa().upper()}</span></div>
   <div class='titulo2'>Sistema Integral de AdministraciÃ³n y Control</div>
 </td>
 <td style='width:40%;text-align:center'>
@@ -717,8 +697,8 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 </table>
 
 <div class='pie'>
-  <div class='marca'>GORETTI</div>
-  <div class='leyenda'>Generado por Goretti ERP el {ahora}</div>
+  <div class='marca'>{_nombre_empresa().upper()}</div>
+  <div class='leyenda'>Generado por {_nombre_empresa()} el {ahora}</div>
 </div>
 </body></html>"""
 
@@ -1036,13 +1016,13 @@ def _write_pedido_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
-    c = ws.cell(row=fila, column=1, value="GORETTI")
+    c = ws.cell(row=fila, column=1, value=_nombre_empresa().upper())
     c.font = Font(bold=True, size=16, color="1D4ED8")
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
     c = ws.cell(row=fila, column=1,
-                value=f"Generado por Goretti ERP el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                value=f"Generado por {_nombre_empresa()} el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     c.font = Font(size=9, color="94A3B8")
     c.alignment = Alignment(horizontal="center")
 

@@ -388,6 +388,23 @@ QToolButton#btnFilaIcono:disabled {
     border-color: transparent;
 }
 
+/* Icono tile de fila: sin fondo circular para apreciar el tile */
+QToolButton#btnFilaIconoTile {
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+}
+QToolButton#btnFilaIconoTile:hover {
+    background-color: transparent;
+}
+QToolButton#btnFilaIconoTile:pressed {
+    background-color: transparent;
+}
+QToolButton#btnFilaIconoTile:disabled {
+    background-color: transparent;
+    border-color: transparent;
+}
+
 /* ============================================================
    BARRA DE NAVEGACIÓN (toolbar superior horizontal)
    Estilo del toolbar de componentes del sistema (sandbox).

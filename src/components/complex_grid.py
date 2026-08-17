@@ -13,9 +13,9 @@ Configuración (desde código):
     set_plantilla_excel(ruta, inicio="A3")
     set_reporte_config({...})
 
-Las acciones por fila se muestran como botones circulares compactos
-(objectName `btnFilaIcono`): el icono usa el color de la acción y el
-`texto` se muestra como tooltip.
+Las acciones por fila se muestran como botones de icono tile
+(objectName `btnFilaIconoTile`): el glifo blanco sobre el color de la
+acción, sin fondo circular, y el `texto` se muestra como tooltip.
 """
 
 from functools import partial
@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.icons import mono_icon
+from src.utils.icons import mono_icon, tile_icon_color
 from src.utils.odoo_list import _ItemOrdenable, _Tarjeta
 from src.utils.table_utils import configurar_tabla_excel
 
@@ -114,6 +114,10 @@ class ComplexGrid(QWidget):
         self._txt_buscar.setMinimumWidth(220)
         self._txt_buscar.textChanged.connect(self._on_buscar)
         bar.addWidget(self._txt_buscar)
+
+        self._lay_izquierda = QHBoxLayout()
+        self._lay_izquierda.setSpacing(8)
+        bar.addLayout(self._lay_izquierda)
 
         self._lbl_estado = QLabel("")
         self._lbl_estado.setObjectName("sectionSubtitle")
@@ -252,6 +256,10 @@ class ComplexGrid(QWidget):
         for b in self._botones_extra:
             if b.text() == texto:
                 b.setEnabled(habilitado)
+
+    def set_widget_izquierda(self, widget: QWidget) -> None:
+        """Agrega un widget en la parte izquierda de la barra (junto al buscador)."""
+        self._lay_izquierda.addWidget(widget)
 
     def set_acciones(self, acciones: list[dict]) -> None:
         """Acciones por registro. Cada dict: texto, icono, color, callback,
@@ -436,7 +444,7 @@ class ComplexGrid(QWidget):
         r = t.rowCount()
         t.insertRow(r)
         if self._acciones:
-            t.setRowHeight(r, t.verticalHeader().defaultSectionSize() * 2)
+            t.setRowHeight(r, max(t.verticalHeader().defaultSectionSize() * 2, 40))
         fila = self._fila_fn(rec) if self._fila_fn else self._fila_por_defecto(rec)
         claves = self._claves_fn(rec) if self._claves_fn else None
         for c, cfg in enumerate(self._col_config):
@@ -469,10 +477,10 @@ class ComplexGrid(QWidget):
             texto = acc.get("texto", "")
             if callable(texto):
                 texto = texto(rec)
-            btn.setObjectName("btnFilaIcono")
-            btn.setIcon(mono_icon(acc.get("icono", "mas") or "mas", 16,
-                                  acc.get("color", "#4f46e5")))
-            btn.setIconSize(QSize(16, 16))
+            btn.setObjectName("btnFilaIconoTile")
+            btn.setIcon(tile_icon_color(acc.get("icono", "mas") or "mas", 30,
+                                         acc.get("color", "#4f46e5")))
+            btn.setIconSize(QSize(30, 30))
             btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
             btn.setToolTip(str(texto) if texto else acc.get("tooltip", ""))
             btn.setCursor(Qt.PointingHandCursor)

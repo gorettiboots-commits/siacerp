@@ -87,11 +87,37 @@ def _dibujar_label_valor(painter: QPainter, campo: dict, label: str,
                      valor)
 
 
+def _calcular_size_fit(painter: QPainter, campo: dict, texto: str,
+                        rect: QRectF, px_per_mm: float,
+                        default_size: float) -> float:
+    """Calcula el tamaño de fuente (pt) que ajusta el texto al ancho del rect.
+
+    Busca binaria entre 4pt y 200pt para que el texto quepa justo en el
+    ancho del rectángulo (ancho de etiqueta menos borde)."""
+    max_size = rect.height() / (0.3528 * px_per_mm)
+    lo, hi = 4.0, min(max_size, 200.0)
+    best = lo
+    for _ in range(20):
+        mid = (lo + hi) / 2.0
+        f = _fuente(campo, mid, px_per_mm)
+        painter.setFont(f)
+        w = painter.fontMetrics().horizontalAdvance(texto)
+        if w <= rect.width():
+            best = mid
+            lo = mid
+        else:
+            hi = mid
+    return best
+
+
 def _dibujar_plano(painter: QPainter, campo: dict, texto: str,
                    rect: QRectF, px_per_mm: float) -> None:
     if not texto:
         return
-    painter.setFont(_fuente(campo, campo.get("size", 12), px_per_mm))
+    size = float(campo.get("size", 12))
+    if campo.get("auto_fit"):
+        size = _calcular_size_fit(painter, campo, texto, rect, px_per_mm, size)
+    painter.setFont(_fuente(campo, size, px_per_mm))
     al = _ALINEACION.get(campo.get("alineacion", "izquierda"),
                          Qt.AlignmentFlag.AlignLeft)
     painter.drawText(rect, al | Qt.AlignmentFlag.AlignVCenter, texto)

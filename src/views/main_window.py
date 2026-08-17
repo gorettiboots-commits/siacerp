@@ -124,6 +124,18 @@ class MainWindow(QMainWindow):
         self._config_action = QAction("Configuración", self)
         self._config_action.triggered.connect(self._mostrar_configuracion)
         archivo_menu.addAction(self._config_action)
+        archivo_menu.addSeparator()
+        self._crear_etiqueta_action = QAction("Crear Etiqueta", self)
+        self._crear_etiqueta_action.triggered.connect(self._crear_etiqueta)
+        archivo_menu.addAction(self._crear_etiqueta_action)
+        self._imprimir_etiquetas_action = QAction("Imprimir Etiquetas", self)
+        self._imprimir_etiquetas_action.triggered.connect(self._imprimir_etiquetas)
+        archivo_menu.addAction(self._imprimir_etiquetas_action)
+        archivo_menu.addSeparator()
+        self._cola_impresion_action = QAction("Cola de Impresión", self)
+        self._cola_impresion_action.triggered.connect(self._mostrar_cola_impresion)
+        archivo_menu.addAction(self._cola_impresion_action)
+        archivo_menu.addSeparator()
         salir_action = QAction("Salir", self)
         salir_action.triggered.connect(self.close)
         archivo_menu.addAction(salir_action)
@@ -150,6 +162,25 @@ class MainWindow(QMainWindow):
         if self._stack.currentWidget() == self._main_container:
             dlg = AcercaDeDialog(self)
             dlg.exec()
+
+    def _mostrar_cola_impresion(self) -> None:
+        if self._stack.currentWidget() != self._main_container:
+            return
+        from src.controllers.impresiones_controller import ImpresionesController
+        from src.views.cola_impresion_view import DialogColaImpresion
+        dlg = DialogColaImpresion(ImpresionesController(), self)
+        dlg.exec()
+
+    def _crear_etiqueta(self) -> None:
+        from src.components.editor_etiqueta_widget import DialogoEditorEtiqueta
+        dlg = DialogoEditorEtiqueta(self)
+        dlg.abrir_fullscreen()
+
+    def _imprimir_etiquetas(self) -> None:
+        from src.views.etiquetas_dialog import EtiquetasDialog
+        from src.controllers.programacion_controller import ProgramacionController
+        dlg = EtiquetasDialog(ProgramacionController(), self)
+        dlg.exec()
 
     def _setup_login(self) -> None:
         pass
@@ -200,9 +231,21 @@ class MainWindow(QMainWindow):
         l = QVBoxLayout(logo_page)
         l.addStretch()
         logo_label = QLabel()
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
-        if logo_path.exists():
-            logo_label.setPixmap(QPixmap(str(logo_path)).scaled(
+        logo_pixmap = None
+        try:
+            from src.models.empresa_model import EmpresaModel
+            logo_bytes = EmpresaModel().obtener_logo_bytes()
+            if logo_bytes:
+                logo_pixmap = QPixmap()
+                logo_pixmap.loadFromData(logo_bytes)
+        except Exception:
+            pass
+        if logo_pixmap is None or logo_pixmap.isNull():
+            logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
+            if logo_path.exists():
+                logo_pixmap = QPixmap(str(logo_path))
+        if logo_pixmap is not None and not logo_pixmap.isNull():
+            logo_label.setPixmap(logo_pixmap.scaled(
                 160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo_label.setAlignment(Qt.AlignCenter)
         l.addWidget(logo_label)
@@ -225,8 +268,20 @@ class MainWindow(QMainWindow):
         audio = QAudioOutput(stack)
         player.setAudioOutput(audio)
         player.setVideoOutput(video)
-        ruta_video = Path(__file__).resolve().parents[2] / "video.mp4"
-        if ruta_video.exists():
+        ruta_video = None
+        try:
+            from src.models.empresa_model import EmpresaModel
+            ruta_cfg = EmpresaModel().obtener('video_splash')
+            if ruta_cfg and Path(ruta_cfg).exists():
+                ruta_video = Path(ruta_cfg)
+        except Exception:
+            pass
+        if ruta_video is None:
+            ruta_default = (
+                Path(__file__).resolve().parents[2] / "video.mp4")
+            if ruta_default.exists():
+                ruta_video = ruta_default
+        if ruta_video is not None:
             player.setSource(QUrl.fromLocalFile(str(ruta_video)))
             player.mediaStatusChanged.connect(self._on_video_status)
         self._splash_player = player
@@ -360,11 +415,18 @@ class MainWindow(QMainWindow):
         self._config_action.setEnabled(
             tiene(self._permisos, "configuracion", "ver")
             or tiene(self._permisos, "usuarios", "ver"))
+        self._cola_impresion_action.setEnabled(
+            bool(self._current_user)
+            and (tiene(self._permisos, "produccion", "ver")
+                 or tiene(self._permisos, "programacion", "ver")))
         self._view_ordenes.set_permisos(self._permisos)
         self._view_produccion.set_permisos(self._permisos)
         self._view_stock.set_permisos(self._permisos)
         self._view_clientes.set_permisos(self._permisos)
         self._view_programacion.set_permisos(self._permisos)
+        tiene_prog_export = tiene(self._permisos, "programacion", "exportar")
+        self._crear_etiqueta_action.setEnabled(tiene_prog_export)
+        self._imprimir_etiquetas_action.setEnabled(tiene_prog_export)
 
     def _on_login(self, credentials: dict) -> None:
         user = AccesosController().autenticar(
@@ -403,6 +465,9 @@ class MainWindow(QMainWindow):
         set_usuario_actual(None)
         self._permisos = set()
         self._config_action.setEnabled(False)
+        self._crear_etiqueta_action.setEnabled(False)
+        self._imprimir_etiquetas_action.setEnabled(False)
+        self._cola_impresion_action.setEnabled(False)
         self._stack.setCurrentWidget(self._login_view)
         for w in self._stack.findChildren(LoginView):
             w.txt_user.clear()
