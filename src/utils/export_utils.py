@@ -106,16 +106,13 @@ Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derech
 
 
 def _logo_base64() -> str:
-    try:
-        from src.models.empresa_model import EmpresaModel
-        logo = EmpresaModel().obtener('logo')
-        if logo:
-            return logo
-    except Exception:
-        pass
-    logo_path = Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.jpeg"
-    if not logo_path.exists():
-        return ""
+    """Logo del membrete en base64: prefiere `logonew.png` de la raíz del
+    proyecto (membrete actual); si no existe, usa `views/assets/logo.png`."""
+    raiz = Path(__file__).resolve().parent.parent.parent
+    candidatos = [
+        raiz / "logonew.png",
+        Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.png",
+    ]
     import base64
     for ruta in candidatos:
         if ruta.exists():
@@ -130,14 +127,6 @@ def _nombre_empresa() -> str:
         return EmpresaModel().nombre_empresa()
     except Exception:
         return "GORETTI"
-
-
-def _nombre_empresa() -> str:
-    try:
-        from src.models.empresa_model import EmpresaModel
-        return EmpresaModel().nombre_empresa()
-    except Exception:
-        return "SIAC ERP"
 
 
 def _fmt_fecha(fecha: str) -> str:
@@ -228,7 +217,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     logo_html = ""
     if logo_b64:
         logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
-                     f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
+                     f'style="max-width:110px;max-height:110px;vertical-align:middle;margin-right:10px"/>')
 
     th_tallas = "".join(
         f"<th>{_esc('#')}{_esc(c['talla'])}</th>" for c in columnas)
@@ -361,6 +350,8 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 {filas_iva}
 <tr class='fila-total'><td>TOTAL</td><td>${total:,.2f}</td></tr>
 </table>
+
+{obs_html}
 
 <div class='metodo'>MÃ©todo de pago: <b>{_esc(datos.get('metodo_pago') or 'Transferencia bancaria')}</b></div>
 
@@ -608,7 +599,7 @@ def _pedido_html(datos: dict, detalle: list[dict]) -> str:
     logo_html = ""
     if logo_b64:
         logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
-                     f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
+                     f'style="max-width:110px;max-height:110px;vertical-align:middle;margin-right:10px"/>')
 
     th_tallas = "".join(
         f"<th>{_esc('#')}{_esc(c['punto'])}</th>" for c in columnas)

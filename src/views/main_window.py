@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        self._nav_toolbar = self._create_nav_toolbar()
+        self._tool_bar = self._create_tool_bar()
         self._content_area = QStackedWidget()
         self._content_area.setObjectName("contentArea")
 
@@ -211,7 +211,7 @@ class MainWindow(QMainWindow):
         self._content_area.addWidget(self._view_programacion)
         self._content_area.addWidget(self._view_sandbox)
 
-        layout.addWidget(self._nav_toolbar)
+        layout.addWidget(self._tool_bar)
         layout.addWidget(self._content_area, 1)
 
     def _create_video_splash(self) -> QWidget:
@@ -288,16 +288,27 @@ class MainWindow(QMainWindow):
         self._splash_stack = stack
         return stack
 
-    def _create_nav_toolbar(self) -> QFrame:
-        """Barra superior horizontal de módulos (estilo toolbar del sandbox)."""
-        barra = QFrame()
-        barra.setObjectName("navToolbar")
-        barra.setFixedHeight(52)
-        # El fondo/bordes los define styles.qss (navToolbar) — sin override inline
+    _TB_ALTO = 64
 
-        layout = QHBoxLayout(barra)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(4)
+    def _create_tool_bar(self) -> QFrame:
+        """Barra de herramientas superior (estilo del Sandbox) que reemplaza
+        la sidebar colapsable. Botón por módulo con ícono arriba y texto debajo;
+        el activo se resalta en teal oscuro."""
+        bar = QFrame()
+        bar.setObjectName("navToolbar")
+        bar.setFixedHeight(self._TB_ALTO)
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(6)
+
+        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        if logo_path.exists():
+            logo_btn = QLabel()
+            logo_btn.setPixmap(QPixmap(str(logo_path)).scaled(
+                36, 36, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo_btn.setAlignment(Qt.AlignCenter)
+            logo_btn.setFixedSize(44, 52)
+            lay.addWidget(logo_btn)
 
         self.nav_ordenes = self._modulo_btn(
             "oc", "OC", mono_icon("oc", 26, "#1892D4"), 0)
@@ -310,53 +321,12 @@ class MainWindow(QMainWindow):
         self.nav_programacion = self._modulo_btn(
             "programacion", "Programación", mono_icon("programacion", 26, "#22A8C6"), 4)
 
-        layout.addSpacing(12)
-
-        self.nav_ordenes = QToolButton()
-        self.nav_ordenes.setText("Órdenes de Compra")
-        self.nav_produccion = QToolButton()
-        self.nav_produccion.setText("Producción")
-        self.nav_stock = QToolButton()
-        self.nav_stock.setText("Inventario")
-        self.nav_clientes = QToolButton()
-        self.nav_clientes.setText("Clientes")
-        self.nav_programacion = QToolButton()
-        self.nav_programacion.setText("Programación")
-        self.nav_sandbox = QToolButton()
-        self.nav_sandbox.setText("Sandbox")
-
-        self.nav_salir = QToolButton()
-        self.nav_salir.setText("Cerrar Sesión")
-        self.nav_salir.setObjectName("navTool")
-
-        _iconos_nav = {
-            "oc": self.nav_ordenes,
-            "produccion": self.nav_produccion,
-            "inventario": self.nav_stock,
-            "clientes": self.nav_clientes,
-            "programacion": self.nav_programacion,
-            "sandbox": self.nav_sandbox,
-        }
-        for clave, btn in _iconos_nav.items():
-            btn.setObjectName("navTool")
-            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-            btn.setCheckable(True)
-            btn.setAutoExclusive(True)
-            btn.setMinimumHeight(34)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setIcon(mono_icon(clave, 20, "#1F2937"))
-            btn.setIconSize(QSize(20, 20))
-            btn.toggled.connect(
-                lambda checked, b=btn, k=clave:
-                b.setIcon(mono_icon(k, 20, "#ffffff" if checked else "#1F2937")))
-            layout.addWidget(btn)
-
-        self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.nav_salir.setMinimumHeight(34)
-        self.nav_salir.setCursor(Qt.PointingHandCursor)
-        self.nav_salir.setIcon(mono_icon("logout", 20, "#1F2937"))
-        self.nav_salir.setIconSize(QSize(20, 20))
-        self.nav_salir.clicked.connect(self._logout)
+        lay.addWidget(self.nav_ordenes)
+        lay.addWidget(self.nav_produccion)
+        lay.addWidget(self.nav_stock)
+        lay.addWidget(self.nav_clientes)
+        lay.addWidget(self.nav_programacion)
+        lay.addStretch()
 
         # Botón Sandbox (solo admin) y cierre de sesión a la derecha.
         self.nav_sandbox = QToolButton()
@@ -372,31 +342,32 @@ class MainWindow(QMainWindow):
         self.nav_sandbox.clicked.connect(self._mostrar_sandbox)
         lay.addWidget(self.nav_sandbox)
 
-        for btn, idx in [
-            (self.nav_ordenes, 0), (self.nav_produccion, 1), (self.nav_stock, 2),
-            (self.nav_clientes, 3), (self.nav_programacion, 4),
-        ]:
-            btn.clicked.connect(lambda checked, i=idx: self._switch_view(i))
+        self.nav_salir = QToolButton()
+        self.nav_salir.setObjectName("navTool")
+        self.nav_salir.setText("Salir")
+        self.nav_salir.setIcon(mono_icon("logout", 26, "#C93744"))
+        self.nav_salir.setIconSize(QSize(26, 26))
+        self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.nav_salir.setFixedSize(78, 52)
+        self.nav_salir.setCursor(Qt.PointingHandCursor)
+        self.nav_salir.clicked.connect(self._logout)
+        lay.addWidget(self.nav_salir)
 
-        layout.addStretch()
+        return bar
 
-        self._nav_user_card = QFrame()
-        self._nav_user_card.setObjectName("userCard")
-        user_layout = QVBoxLayout(self._nav_user_card)
-        user_layout.setContentsMargins(10, 2, 10, 2)
-        user_layout.setSpacing(0)
-        self._lbl_user_name = QLabel("Sesión no iniciada")
-        self._lbl_user_name.setObjectName("userName")
-        self._lbl_user_role = QLabel("")
-        self._lbl_user_role.setObjectName("userRole")
-        user_layout.addWidget(self._lbl_user_name)
-        user_layout.addWidget(self._lbl_user_role)
-        layout.addWidget(self._nav_user_card)
-
-        layout.addSpacing(4)
-        layout.addWidget(self.nav_salir)
-
-        return barra
+    def _modulo_btn(self, clave: str, texto: str, icono, idx: int) -> QToolButton:
+        btn = QToolButton()
+        btn.setObjectName("navTool")
+        btn.setText(texto)
+        btn.setIcon(icono)
+        btn.setIconSize(QSize(26, 26))
+        btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        btn.setCheckable(True)
+        btn.setAutoExclusive(True)
+        btn.setFixedSize(88, 52)
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.clicked.connect(lambda checked=False, i=idx: self._switch_view(i))
+        return btn
 
     def _setup_status_bar(self) -> None:
         self.status_bar = QStatusBar()
