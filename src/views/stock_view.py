@@ -7,7 +7,31 @@ from PySide6.QtWidgets import (
 from src.components.complex_grid import ComplexGrid
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
-from src.views.dialogs import DialogInsumo, DialogMovimientoStock
+from src.views.dialogs import (
+    DialogInsumo, DialogMovimientoMultiPartida, DialogMovimientoStock,
+)
+
+
+class MovimientosGrid(ComplexGrid):
+    """ComplexGrid personalizado para movimientos de inventario.
+
+    Sobreescribe imprimir() para generar documentos MVI cuando el
+    registro seleccionado pertenece a un grupo de movimientos.
+    """
+
+    def __init__(self, controller: InventarioController,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._mov_controller = controller
+
+    def imprimir(self) -> None:
+        registro = self.registro_seleccionado()
+        if registro and registro.get("referencia_tipo") == "movimiento":
+            from src.utils.movimiento_print import imprimir_movimiento_documento
+            imprimir_movimiento_documento(
+                registro["referencia_id"], self)
+        else:
+            super().imprimir()
 
 
 class StockView(QWidget):
@@ -24,8 +48,8 @@ class StockView(QWidget):
         self.btn_eliminar.setEnabled(tiene(permisos, "inventario", "eliminar"))
         self.btn_export.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.btn_print.setEnabled(tiene(permisos, "inventario", "exportar"))
+        self.btn_kardex.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.btn_export_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
-        self.btn_print_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.vista.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
         self.grid_mov.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
 
@@ -90,6 +114,9 @@ class StockView(QWidget):
         self.btn_print = QPushButton("Imprimir")
         self.btn_print.setObjectName("btnSecondary")
         self.btn_print.clicked.connect(self._imprimir_insumos)
+        self.btn_kardex = QPushButton("Kardex")
+        self.btn_kardex.setObjectName("btnSecondary")
+        self.btn_kardex.clicked.connect(self._imprimir_kardex)
 
         btn_refresh = QPushButton("Actualizar")
         btn_refresh.setObjectName("btnPrimary")
@@ -99,6 +126,7 @@ class StockView(QWidget):
         toolbar.addStretch()
         toolbar.addWidget(self.btn_editar)
         toolbar.addWidget(self.btn_eliminar)
+        toolbar.addWidget(self.btn_kardex)
         toolbar.addWidget(self.btn_export)
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
@@ -130,15 +158,11 @@ class StockView(QWidget):
         self.btn_export_mov = QPushButton("Exportar Excel")
         self.btn_export_mov.setObjectName("btnPrimary")
         self.btn_export_mov.clicked.connect(self._exportar_movimientos)
-        self.btn_print_mov = QPushButton("Imprimir")
-        self.btn_print_mov.setObjectName("btnSecondary")
-        self.btn_print_mov.clicked.connect(self._imprimir_movimientos)
         toolbar.addStretch()
         toolbar.addWidget(self.btn_export_mov)
-        toolbar.addWidget(self.btn_print_mov)
         layout.addLayout(toolbar)
 
-        self.grid_mov = ComplexGrid()
+        self.grid_mov = MovimientosGrid(self.controller)
         self.grid_mov.set_columnas([
             {"key": "created_at", "titulo": "Fecha", "ancho": 150},
             {"key": "insumo_nombre", "titulo": "Insumo", "ancho": 200},
@@ -255,8 +279,20 @@ class StockView(QWidget):
 
     def _registrar_movimiento(self) -> None:
         ins = self.vista.registro_seleccionado()
-        dlg = DialogMovimientoStock(self.controller, ins["id"] if ins else None)
+        dlg = DialogMovimientoMultiPartida(
+            self.controller, ins["id"] if ins else None)
         if dlg.exec():
+            mov_id = dlg.obtener_movimiento_id()
+            if mov_id:
+                resp = QMessageBox.question(
+                    self, "Imprimir documento",
+                    "Movimiento registrado. Desea imprimir el documento?",
+                    QMessageBox.Yes | QMessageBox.No)
+                if resp == QMessageBox.Yes:
+                    from src.utils.movimiento_print import (
+                        imprimir_movimiento_documento,
+                    )
+                    imprimir_movimiento_documento(mov_id, self)
             self._load_insumos()
 
     def _mostrar_stock_bajo(self) -> None:
@@ -278,5 +314,14 @@ class StockView(QWidget):
     def _exportar_movimientos(self) -> None:
         self.grid_mov.exportar_excel()
 
-    def _imprimir_movimientos(self) -> None:
-        self.grid_mov.imprimir()
+    def _imprimir_kardex(self) -> None:
+        from src.utils.kardex_print import imprimir_kardex
+        ins = self.vista.registro_seleccionado()
+        if not ins:
+            QMessageBox.information(self, "Seleccionar", "Seleccione un insumo.")
+            return
+        movimientos = self.controller.listar_kardex(ins["id"])
+        if not movimientos:
+            QMessageBox.information(self, "Kardex", "El insumo no tiene movimientos.")
+            return
+        imprimir_kardex(ins, movimientos, self)

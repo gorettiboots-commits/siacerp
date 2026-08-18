@@ -27,13 +27,6 @@ Como diálogo:
     if dlg.exec():
         valores = dlg.obtener_valores()  # -> {"3": 42, "4": 0, ...} por talla
 
-    # Con precios por talla (p. ej. en órdenes de compra / inventario):
-    dlg = MatrizTallas(puntos, con_precios=True)
-    dlg.establecer_precios({"3": 25.5})
-    if dlg.exec():
-        pares = dlg.obtener_valores()     # {"3": 42, ...}
-        precios = dlg.obtener_precios()   # {"3": 25.5, ...}
-
 También acepta filas del catálogo unificado `tallas_catalogo` (con "id" y
 "talla"): en ese caso las celdas se indexan por el id de la talla.
 """
@@ -99,56 +92,15 @@ class CeldaMatriz(QLineEdit):
         super().keyPressEvent(event)
 
 
-class CeldaPrecio(QLineEdit):
-    """Celda de captura de precio: solo decimales, sin borde, Enter/Tab.
-
-    Se muestra con el prefijo "$" (ver `_crear_celda_precio`): el texto de la
-    celda solo contiene el número (con 2 decimales al precargar), por lo que
-    `obtener_precios()` parsea sin conflictos.
-    """
-
-    siguiente = Signal()
-    anterior = Signal()
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setValidator(QDoubleValidator(0, 99999999, 2, self))
-        self.setAlignment(Qt.AlignCenter)
-        self.setMinimumHeight(34)
-        self.setMaximumWidth(80)
-        self.setStyleSheet(
-            "QLineEdit { border: none; background: transparent; padding: 0px;"
-            " font-size: 11px; color: #1e293b; }"
-            "QLineEdit:focus { background-color: #f1f5f9; }"
-        )
-
-    def keyPressEvent(self, event) -> None:
-        key = event.key()
-        if key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab):
-            self.siguiente.emit()
-            event.accept()
-            return
-        if key == Qt.Key_Backtab:
-            self.anterior.emit()
-            event.accept()
-            return
-        super().keyPressEvent(event)
-
-
 class MatrizTallasWidget(QWidget):
     """Matriz de tallas por bloques reutilizable como control embebido.
 
-    Modo por defecto: captura solo pares por talla (usado en Producción).
-    Con `con_precios=True` agrega una fila de precio por talla (usado en
-    Órdenes de Compra e inventario).
-
     Propiedades públicas (referencia directa por talla):
-        tallas              list[dict]                           — datos usados.
-        puntos              list[dict]                           — alias de tallas.
-        encabezado_general  QLabel                               — encabezado general.
-        encabezados         dict[str, QLabel]                    — encabezado por talla.
-        celdas              dict[str, CeldaMatriz]               — celda de pares por talla.
-        celdas_precios      dict[str, CeldaPrecio]               — celda de precio por talla.
+        tallas              list[dict]                       — datos usados.
+        puntos              list[dict]                       — alias de tallas.
+        encabezado_general  QLabel                           — encabezado general.
+        encabezados         dict[str, QLabel]                — encabezado por talla.
+        celdas              dict[str, CeldaMatriz]           — celda de captura por talla.
         bloques             list[list[tuple[dict, CeldaMatriz]]] — estructura por bloque.
 
     Señales:
@@ -157,10 +109,8 @@ class MatrizTallasWidget(QWidget):
                                   con el punto (talla) de esa celda.
 
     Métodos públicos:
-        obtener_valores() -> dict[str, int]      — pares capturados por talla.
-        establecer_valores(dict[str, int])       — precarga pares por talla.
-        obtener_precios() -> dict[str, float]    — precios por talla (si con_precios).
-        establecer_precios(dict[str, float])     — precarga precios por talla.
+        obtener_valores() -> dict[str, int]  — valores capturados por talla.
+        establecer_valores(dict[str, int])   — precarga valores por talla.
     """
 
     valoresCambiados = Signal()
@@ -171,16 +121,12 @@ class MatrizTallasWidget(QWidget):
 
     def __init__(self, puntos: list[dict] | None = None, titulo: str = "TALLAS",
                  parent: QWidget | None = None,
-                 tallas: list[dict] | None = None,
-                 con_precios: bool = False) -> None:
+                 tallas: list[dict] | None = None) -> None:
         super().__init__(parent)
         self.titulo = titulo
-        self.con_precios = con_precios
         filas = puntos if puntos is not None else tallas
         self.puntos = list(filas) if filas is not None else TallasModel().listar()
         self.tallas = self.puntos
-        self.setMinimumHeight(30)
-        self.setMaximumWidth(600) if not con_precios else self.setMaximumWidth(760)
         self.bloques: list[list[tuple[dict, CeldaMatriz]]] = []
         self._celdas: list[CeldaMatriz] = []
         self._celdas_precio: list[CeldaPrecio] = []
@@ -376,13 +322,11 @@ class MatrizTallasWidget(QWidget):
         tabla.horizontalHeader().setVisible(False)
         tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         tabla.setSelectionMode(QTableWidget.NoSelection)
-        tabla.verticalHeader().setDefaultSectionSize(34)
+        tabla.verticalHeader().setDefaultSectionSize(38)
         tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Fixed)
-        if self.con_precios:
-            tabla.setColumnWidth(0, 74)
-        for c in range(col_inicio, n_columnas):
-            tabla.setColumnWidth(c, 85 if self.con_precios else 60)
-        tabla.setFixedHeight(tabla.rowCount() * 34 + 6)
+        for c in range(self.COLUMNAS):
+            tabla.setColumnWidth(c, 60)
+        tabla.setFixedHeight(min(tabla.rowCount() * 38 + 6, 440))
 
         for b, tallas_bloque in enumerate(bloques_tallas):
             fila_encabezado = b * filas_por_bloque
@@ -394,14 +338,12 @@ class MatrizTallasWidget(QWidget):
                 tabla.setCellWidget(fila_precio, 0, self._etiqueta_fila("PRECIO ($)"))
             bloque: list[tuple[dict, CeldaMatriz]] = []
             for c, p in enumerate(tallas_bloque):
-                col = c + col_inicio
                 etiqueta = self._etiqueta_encabezado(_etiqueta_talla(p))
-                tabla.setCellWidget(fila_encabezado, col, etiqueta)
+                tabla.setCellWidget(fila_encabezado, c, etiqueta)
                 self.encabezados[_etiqueta_talla(p)] = etiqueta
 
                 celda = CeldaMatriz()
-                celda.installEventFilter(self)
-                tabla.setCellWidget(fila_captura, col, celda)
+                tabla.setCellWidget(fila_captura, c, celda)
                 self.celdas[_clave_talla(p)] = celda
                 celda.textChanged.connect(self._actualizar_total)
                 self._celdas.append(celda)
@@ -431,8 +373,8 @@ class MatrizTallasWidget(QWidget):
     def _celda_finalizada(self, punto) -> None:
         self.celdaSeleccionada.emit(str(punto))
 
-    def _mover(self, indice: int, delta: int, celdas) -> None:
-        siguiente = celdas[(indice + delta) % len(celdas)]
+    def _mover(self, indice: int, delta: int) -> None:
+        siguiente = self._celdas[(indice + delta) % len(self._celdas)]
         siguiente.setFocus()
         siguiente.selectAll()
 
@@ -450,54 +392,33 @@ class MatrizTallasWidget(QWidget):
             if celda is not None:
                 celda.setText(str(int(valor)))
 
-    def obtener_precios(self) -> dict[str, float]:
-        """Devuelve los precios capturados por talla (los vacíos como 0)."""
-        return {
-            talla_id: float(celda.text().strip() or 0)
-            for talla_id, celda in self.celdas_precios.items()
-        }
-
-    def establecer_precios(self, precios: dict) -> None:
-        """Precarga precios por talla (acepta clave str o int)."""
-        for talla_id, valor in precios.items():
-            celda = self.celdas_precios.get(str(talla_id))
-            if celda is not None:
-                celda.setText(f"{float(valor):.2f}")
-
 
 class MatrizTallasDialog(QDialog):
     """Matriz de tallas por bloques presentada como diálogo.
 
     Envuelve `MatrizTallasWidget` y conserva la API pública de la versión
     anterior (puntos, encabezado_general, encabezados, celdas, bloques,
-    obtener_valores, establecer_valores). Con `con_precios=True` agrega la
-    captura de precio por talla (usado en Órdenes de Compra e inventario).
+    obtener_valores, establecer_valores).
     """
 
     def __init__(self, puntos: list[dict] | None = None, titulo: str = "TALLAS",
                  parent: QWidget | None = None,
-                 tallas: list[dict] | None = None,
-                 con_precios: bool = False) -> None:
+                 tallas: list[dict] | None = None) -> None:
         super().__init__(parent)
         self.titulo = titulo
-        self.con_precios = con_precios
         self.setWindowTitle("Controles de tallas")
         self.setModal(True)
-        # Con precios se agregan la columna de etiquetas de fila y el prefijo
-        # "$", por lo que la matriz necesita más ancho.
-        self.resize(1060, 520) if con_precios else self.resize(720, 480)
+        self.setMinimumSize(700, 560)
+        self.resize(760, 620)
         self.widget = MatrizTallasWidget(
-            puntos=puntos, titulo=titulo, parent=self, tallas=tallas,
-            con_precios=con_precios)
+            puntos=puntos, titulo=titulo, parent=self, tallas=tallas)
         self.puntos = self.widget.puntos
         self.tallas = self.widget.tallas
         self.bloques = self.widget.bloques
         self.encabezado_general = self.widget.encabezado_general
         self.encabezados = self.widget.encabezados
         self.celdas = self.widget.celdas
-        self.celdas_precios = self.widget.celdas_precios
         self.tabla = getattr(self.widget, "tabla", None)
-        self.lbl_total = self.widget.lbl_total
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -536,15 +457,6 @@ class MatrizTallasDialog(QDialog):
 
     def establecer_valores(self, valores: dict[str, int]) -> None:
         self.widget.establecer_valores(valores)
-
-    def obtener_precios(self) -> dict[str, float]:
-        return self.widget.obtener_precios()
-
-    def establecer_precios(self, precios: dict[str, float]) -> None:
-        self.widget.establecer_precios(precios)
-
-    def _limpiar_tallas(self) -> None:
-        self.widget._limpiar_tallas()
 
     def _mostrar_resumen(self) -> None:
         partes = []

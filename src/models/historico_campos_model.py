@@ -32,7 +32,7 @@ class HistoricoCamposModel:
         """Devuelve los valores históricos de un campo, del más reciente al más antiguo."""
         return self.db.fetch_all(
             "SELECT valor FROM historico_campos WHERE campo = ? "
-            "ORDER BY updated_at DESC, id ASC LIMIT ?",
+            "ORDER BY updated_at DESC, id DESC LIMIT ?",
             (campo, limite),
         )
 

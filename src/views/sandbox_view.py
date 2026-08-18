@@ -4,8 +4,10 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.tallas_matrix import MatrizTallasDialog
+from src.views.sandbox_catalogo import CatalogoControles
 from src.views.sandbox_complex_grid import ComplexGridDemo
 from src.views.sandbox_controles import ControlesPreview
+from src.views.sandbox_editor_etiqueta import EditorEtiquetaPreview
 from src.views.sandbox_notificaciones import NotificacionesDemo
 from src.views.sandbox_preview_impresion import PreviewImpresionDemo
 
@@ -36,8 +38,10 @@ class SandboxView(QWidget):
         layout.addWidget(subtitulo)
 
         tabs = QTabWidget()
+        tabs.addTab(CatalogoControles(self), "Catálogo de controles")
         tabs.addTab(self._crear_tab_componentes(), "Componentes")
         tabs.addTab(ControlesPreview(self), "Controles del sistema (prototipo)")
+        tabs.addTab(EditorEtiquetaPreview(self), "Editor de etiquetas (prototipo)")
         layout.addWidget(tabs, 1)
 
     def _crear_tab_componentes(self) -> QWidget:

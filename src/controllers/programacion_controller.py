@@ -1,11 +1,13 @@
 from datetime import date, datetime, timedelta
 
+from src.models.clientes_model import PedidoClienteModel
 from src.models.programacion_model import ProgramacionModel
 
 
 class ProgramacionController:
     def __init__(self) -> None:
         self.model = ProgramacionModel()
+        self.pedido_model = PedidoClienteModel()
 
     def listar_semanas(self) -> list[dict]:
         return self.model.listar_semanas()
@@ -42,6 +44,9 @@ class ProgramacionController:
 
     def folios_pedido_semana(self, semana_id: int) -> list[dict]:
         return self.model.folios_pedido_semana(semana_id)
+
+    def asignar_folio_prog(self, linea_id: int, folio_prog: str) -> None:
+        self.model.asignar_folio_prog(linea_id, folio_prog)
 
     def asignar_folio_pedido(self, linea_id: int, folio_pedido: str) -> None:
         self.model.asignar_folio_pedido(linea_id, folio_pedido)
@@ -101,4 +106,5 @@ class ProgramacionController:
             folios.append(folio)
         if folios:
             self.model.sincronizar_estatus_pedido(pedido_id, total_pedido)
+            self.pedido_model.cambiar_estatus(pedido_id, "programado")
         return folios
