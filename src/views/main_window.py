@@ -313,6 +313,8 @@ class MainWindow(QMainWindow):
         lay.setSpacing(6)
 
         logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        if not logo_path.exists():
+            logo_path = Path(__file__).resolve().parent.parent.parent / "logonew.png"
         if logo_path.exists():
             logo_btn = QLabel()
             logo_btn.setPixmap(QPixmap(str(logo_path)).scaled(
@@ -332,24 +334,13 @@ class MainWindow(QMainWindow):
         self.nav_programacion = self._modulo_btn(
             "programacion", "Programación", mono_icon("programacion", 26, "#22A8C6"), 4)
 
-        lay.addWidget(self.nav_ordenes)
-        lay.addWidget(self.nav_produccion)
-        lay.addWidget(self.nav_stock)
-        lay.addWidget(self.nav_clientes)
-        lay.addWidget(self.nav_programacion)
-        lay.addStretch()
-
-        # Botón Sandbox (solo admin) y cierre de sesión a la derecha.
-        self.nav_sandbox = QToolButton()
-        self.nav_sandbox.setObjectName("navTool")
-        self.nav_sandbox.setText("Sandbox")
+        # --- Estilos/colores de botones módulo (izquierda) ---
         _iconos_nav = {
-            "oc": ("navToolOC", "#2563eb"),
-            "produccion": ("navToolProduccion", "#7c3aed"),
-            "inventario": ("navToolInventario", "#0d9488"),
-            "clientes": ("navToolClientes", "#16a34a"),
-            "programacion": ("navToolProgramacion", "#ea580c"),
-            "sandbox": ("ToolSandbox", "#ca8a04"),
+            "oc": ("navToolOC", "#1892D4"),
+            "produccion": ("navToolProduccion", "#16A34A"),
+            "inventario": ("navToolInventario", "#E3C14D"),
+            "clientes": ("navToolClientes", "#77307E"),
+            "programacion": ("navToolProgramacion", "#22A8C6"),
         }
         for clave, btn in [
             ("oc", self.nav_ordenes),
@@ -357,7 +348,6 @@ class MainWindow(QMainWindow):
             ("inventario", self.nav_stock),
             ("clientes", self.nav_clientes),
             ("programacion", self.nav_programacion),
-            ("sandbox", self.nav_sandbox),
         ]:
             obj_name, color = _iconos_nav[clave]
             btn.setObjectName(obj_name)
@@ -373,9 +363,25 @@ class MainWindow(QMainWindow):
                 b.setIcon(mono_icon(k, 26, "#ffffff" if checked else c)))
             lay.addWidget(btn)
 
+        # --- Spacer: módulos a la izquierda, Sandbox/Salir a la derecha ---
+        lay.addStretch()
+
+        # Botón Sandbox (solo admin)
+        self.nav_sandbox = QToolButton()
+        self.nav_sandbox.setObjectName("navToolSandbox")
+        self.nav_sandbox.setText("Sandbox")
+        self.nav_sandbox.setIcon(mono_icon("sandbox", 26, "#ca8a04"))
+        self.nav_sandbox.setIconSize(QSize(26, 26))
+        self.nav_sandbox.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.nav_sandbox.setCheckable(True)
+        self.nav_sandbox.setAutoExclusive(True)
+        self.nav_sandbox.setFixedSize(78, 58)
+        self.nav_sandbox.setCursor(Qt.PointingHandCursor)
         self.nav_sandbox.setVisible(False)
         self.nav_sandbox.clicked.connect(self._mostrar_sandbox)
+        lay.addWidget(self.nav_sandbox)
 
+        # Cierre de sesión
         self.nav_salir = QToolButton()
         self.nav_salir.setText("Cerrar Sesión")
         self.nav_salir.setObjectName("navToolSalir")
