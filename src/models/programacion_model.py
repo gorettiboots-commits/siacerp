@@ -130,6 +130,13 @@ class ProgramacionModel:
             (estatus, linea_id),
         )
 
+    def asignar_folio_prog(self, linea_id: int, folio_prog: str) -> None:
+        self.db.execute(
+            "UPDATE programacion_lineas SET folio_prog = ?, "
+            "updated_at = datetime('now') WHERE id = ?",
+            (folio_prog.strip(), linea_id),
+        )
+
     def asignar_folio_pedido(self, linea_id: int, folio_pedido: str) -> None:
         self.db.execute(
             "UPDATE programacion_lineas SET folio_pedido = ?, "

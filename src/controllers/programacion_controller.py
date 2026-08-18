@@ -45,6 +45,9 @@ class ProgramacionController:
     def folios_pedido_semana(self, semana_id: int) -> list[dict]:
         return self.model.folios_pedido_semana(semana_id)
 
+    def asignar_folio_prog(self, linea_id: int, folio_prog: str) -> None:
+        self.model.asignar_folio_prog(linea_id, folio_prog)
+
     def asignar_folio_pedido(self, linea_id: int, folio_pedido: str) -> None:
         self.model.asignar_folio_pedido(linea_id, folio_pedido)
 

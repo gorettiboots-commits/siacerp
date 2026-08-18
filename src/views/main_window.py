@@ -6,7 +6,7 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QApplication, QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMenuBar, QMessageBox, QPushButton, QSizePolicy,
+    QMainWindow, QMenuBar, QMessageBox, QPushButton,
     QStackedWidget, QStatusBar, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -37,7 +37,7 @@ class AcercaDeDialog(QDialog):
         layout.setContentsMargins(32, 24, 32, 24)
 
         from pathlib import Path
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+        logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
         if logo_path.exists():
             lbl_logo = QLabel()
             pixmap = QPixmap(str(logo_path)).scaled(
@@ -85,8 +85,9 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("SIAC ERP")
-        self.setMinimumSize(1280, 800)
-        self.resize(1400, 900)
+        self.setMinimumSize(1100, 700)
+        disp = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1400, disp.width()), min(900, disp.height()))
 
         self._central = QWidget()
         self._central.setObjectName("centralContainer")
@@ -123,6 +124,18 @@ class MainWindow(QMainWindow):
         self._config_action = QAction("Configuración", self)
         self._config_action.triggered.connect(self._mostrar_configuracion)
         archivo_menu.addAction(self._config_action)
+        archivo_menu.addSeparator()
+        self._crear_etiqueta_action = QAction("Crear Etiqueta", self)
+        self._crear_etiqueta_action.triggered.connect(self._crear_etiqueta)
+        archivo_menu.addAction(self._crear_etiqueta_action)
+        self._imprimir_etiquetas_action = QAction("Imprimir Etiquetas", self)
+        self._imprimir_etiquetas_action.triggered.connect(self._imprimir_etiquetas)
+        archivo_menu.addAction(self._imprimir_etiquetas_action)
+        archivo_menu.addSeparator()
+        self._cola_impresion_action = QAction("Cola de Impresión", self)
+        self._cola_impresion_action.triggered.connect(self._mostrar_cola_impresion)
+        archivo_menu.addAction(self._cola_impresion_action)
+        archivo_menu.addSeparator()
         salir_action = QAction("Salir", self)
         salir_action.triggered.connect(self.close)
         archivo_menu.addAction(salir_action)
@@ -149,6 +162,25 @@ class MainWindow(QMainWindow):
         if self._stack.currentWidget() == self._main_container:
             dlg = AcercaDeDialog(self)
             dlg.exec()
+
+    def _mostrar_cola_impresion(self) -> None:
+        if self._stack.currentWidget() != self._main_container:
+            return
+        from src.controllers.impresiones_controller import ImpresionesController
+        from src.views.cola_impresion_view import DialogColaImpresion
+        dlg = DialogColaImpresion(ImpresionesController(), self)
+        dlg.exec()
+
+    def _crear_etiqueta(self) -> None:
+        from src.components.editor_etiqueta_widget import DialogoEditorEtiqueta
+        dlg = DialogoEditorEtiqueta(self)
+        dlg.abrir_fullscreen()
+
+    def _imprimir_etiquetas(self) -> None:
+        from src.views.etiquetas_dialog import EtiquetasDialog
+        from src.controllers.programacion_controller import ProgramacionController
+        dlg = EtiquetasDialog(ProgramacionController(), self)
+        dlg.exec()
 
     def _setup_login(self) -> None:
         pass
@@ -199,9 +231,21 @@ class MainWindow(QMainWindow):
         l = QVBoxLayout(logo_page)
         l.addStretch()
         logo_label = QLabel()
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
-        if logo_path.exists():
-            logo_label.setPixmap(QPixmap(str(logo_path)).scaled(
+        logo_pixmap = None
+        try:
+            from src.models.empresa_model import EmpresaModel
+            logo_bytes = EmpresaModel().obtener_logo_bytes()
+            if logo_bytes:
+                logo_pixmap = QPixmap()
+                logo_pixmap.loadFromData(logo_bytes)
+        except Exception:
+            pass
+        if logo_pixmap is None or logo_pixmap.isNull():
+            logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
+            if logo_path.exists():
+                logo_pixmap = QPixmap(str(logo_path))
+        if logo_pixmap is not None and not logo_pixmap.isNull():
+            logo_label.setPixmap(logo_pixmap.scaled(
                 160, 160, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo_label.setAlignment(Qt.AlignCenter)
         l.addWidget(logo_label)
@@ -213,7 +257,7 @@ class MainWindow(QMainWindow):
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet("font-size: 14px; color: #94a3b8;")
         l.addWidget(sub)
-        hint = QLabel("Seleccione un módulo en el menú lateral")
+        hint = QLabel("Seleccione un módulo en la barra superior")
         hint.setAlignment(Qt.AlignCenter)
         hint.setStyleSheet("font-size: 12px; color: #64748b; padding-top: 24px;")
         l.addWidget(hint)
@@ -224,8 +268,20 @@ class MainWindow(QMainWindow):
         audio = QAudioOutput(stack)
         player.setAudioOutput(audio)
         player.setVideoOutput(video)
-        ruta_video = Path(__file__).resolve().parents[2] / "video.mp4"
-        if ruta_video.exists():
+        ruta_video = None
+        try:
+            from src.models.empresa_model import EmpresaModel
+            ruta_cfg = EmpresaModel().obtener('video_splash')
+            if ruta_cfg and Path(ruta_cfg).exists():
+                ruta_video = Path(ruta_cfg)
+        except Exception:
+            pass
+        if ruta_video is None:
+            ruta_default = (
+                Path(__file__).resolve().parents[2] / "video.mp4")
+            if ruta_default.exists():
+                ruta_video = ruta_default
+        if ruta_video is not None:
             player.setSource(QUrl.fromLocalFile(str(ruta_video)))
             player.mediaStatusChanged.connect(self._on_video_status)
         self._splash_player = player
@@ -239,7 +295,7 @@ class MainWindow(QMainWindow):
         la sidebar colapsable. Botón por módulo con ícono arriba y texto debajo;
         el activo se resalta en teal oscuro."""
         bar = QFrame()
-        bar.setObjectName("ctlToolbar")
+        bar.setObjectName("navToolbar")
         bar.setFixedHeight(self._TB_ALTO)
         lay = QHBoxLayout(bar)
         lay.setContentsMargins(8, 6, 8, 6)
@@ -274,7 +330,7 @@ class MainWindow(QMainWindow):
 
         # Botón Sandbox (solo admin) y cierre de sesión a la derecha.
         self.nav_sandbox = QToolButton()
-        self.nav_sandbox.setObjectName("ctlTool")
+        self.nav_sandbox.setObjectName("navTool")
         self.nav_sandbox.setText("Sandbox")
         self.nav_sandbox.setIcon(mono_icon("sandbox", 26, "#EF7218"))
         self.nav_sandbox.setIconSize(QSize(26, 26))
@@ -287,7 +343,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.nav_sandbox)
 
         self.nav_salir = QToolButton()
-        self.nav_salir.setObjectName("ctlTool")
+        self.nav_salir.setObjectName("navTool")
         self.nav_salir.setText("Salir")
         self.nav_salir.setIcon(mono_icon("logout", 26, "#C93744"))
         self.nav_salir.setIconSize(QSize(26, 26))
@@ -301,7 +357,7 @@ class MainWindow(QMainWindow):
 
     def _modulo_btn(self, clave: str, texto: str, icono, idx: int) -> QToolButton:
         btn = QToolButton()
-        btn.setObjectName("ctlTool")
+        btn.setObjectName("navTool")
         btn.setText(texto)
         btn.setIcon(icono)
         btn.setIconSize(QSize(26, 26))
@@ -331,7 +387,6 @@ class MainWindow(QMainWindow):
                                  self.nav_stock, self.nav_clientes,
                                  self.nav_programacion]):
             nav.setChecked(i == index)
-        self.nav_sandbox.setChecked(False)
         names = ["Órdenes de Compra", "Producción", "Inventario", "Clientes",
                  "Programación"]
         if index < len(names):
@@ -348,11 +403,18 @@ class MainWindow(QMainWindow):
         self._config_action.setEnabled(
             tiene(self._permisos, "configuracion", "ver")
             or tiene(self._permisos, "usuarios", "ver"))
+        self._cola_impresion_action.setEnabled(
+            bool(self._current_user)
+            and (tiene(self._permisos, "produccion", "ver")
+                 or tiene(self._permisos, "programacion", "ver")))
         self._view_ordenes.set_permisos(self._permisos)
         self._view_produccion.set_permisos(self._permisos)
         self._view_stock.set_permisos(self._permisos)
         self._view_clientes.set_permisos(self._permisos)
         self._view_programacion.set_permisos(self._permisos)
+        tiene_prog_export = tiene(self._permisos, "programacion", "exportar")
+        self._crear_etiqueta_action.setEnabled(tiene_prog_export)
+        self._imprimir_etiquetas_action.setEnabled(tiene_prog_export)
 
     def _on_login(self, credentials: dict) -> None:
         user = AccesosController().autenticar(
@@ -379,10 +441,6 @@ class MainWindow(QMainWindow):
 
     def _mostrar_sandbox(self) -> None:
         self._content_area.setCurrentWidget(self._view_sandbox)
-        for nav in [self.nav_ordenes, self.nav_produccion, self.nav_stock,
-                    self.nav_clientes, self.nav_programacion]:
-            nav.setChecked(False)
-        self.nav_sandbox.setChecked(True)
         self.status_bar.showMessage("Módulo: Sandbox")
 
     def _logout(self) -> None:
@@ -393,6 +451,9 @@ class MainWindow(QMainWindow):
         set_usuario_actual(None)
         self._permisos = set()
         self._config_action.setEnabled(False)
+        self._crear_etiqueta_action.setEnabled(False)
+        self._imprimir_etiquetas_action.setEnabled(False)
+        self._cola_impresion_action.setEnabled(False)
         self._stack.setCurrentWidget(self._login_view)
         for w in self._stack.findChildren(LoginView):
             w.txt_user.clear()

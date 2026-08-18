@@ -7,7 +7,31 @@ from PySide6.QtWidgets import (
 from src.components.complex_grid import ComplexGrid
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
-from src.views.dialogs import DialogInsumo, DialogMovimientoStock
+from src.views.dialogs import (
+    DialogInsumo, DialogMovimientoMultiPartida, DialogMovimientoStock,
+)
+
+
+class MovimientosGrid(ComplexGrid):
+    """ComplexGrid personalizado para movimientos de inventario.
+
+    Sobreescribe imprimir() para generar documentos MVI cuando el
+    registro seleccionado pertenece a un grupo de movimientos.
+    """
+
+    def __init__(self, controller: InventarioController,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._mov_controller = controller
+
+    def imprimir(self) -> None:
+        registro = self.registro_seleccionado()
+        if registro and registro.get("referencia_tipo") == "movimiento":
+            from src.utils.movimiento_print import imprimir_movimiento_documento
+            imprimir_movimiento_documento(
+                registro["referencia_id"], self)
+        else:
+            super().imprimir()
 
 
 class StockView(QWidget):
@@ -24,8 +48,8 @@ class StockView(QWidget):
         self.btn_eliminar.setEnabled(tiene(permisos, "inventario", "eliminar"))
         self.btn_export.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.btn_print.setEnabled(tiene(permisos, "inventario", "exportar"))
+        self.btn_kardex.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.btn_export_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
-        self.btn_print_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
         self.vista.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
         self.grid_mov.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
 
@@ -52,22 +76,23 @@ class StockView(QWidget):
         self.btn_movimiento = QPushButton("Movimiento")
         self.btn_movimiento.setObjectName("btnWarning")
         self.btn_movimiento.clicked.connect(self._registrar_movimiento)
+        self.btn_stock_bajo = QPushButton("Alertas")
+        self.btn_stock_bajo.setObjectName("btnDanger")
+        self.btn_stock_bajo.clicked.connect(self._mostrar_stock_bajo)
 
         hlayout.addLayout(title_col)
         hlayout.addStretch()
+        hlayout.addWidget(self.btn_stock_bajo)
         hlayout.addWidget(self.btn_movimiento)
         hlayout.addWidget(self.btn_nuevo)
 
         self.tabs = QTabWidget()
         self.tab_insumos = QWidget()
         self.tab_movimientos = QWidget()
-        self.tab_alertas = QWidget()
         self.tabs.addTab(self.tab_insumos, "Insumos")
         self.tabs.addTab(self.tab_movimientos, "Movimientos")
-        self.tabs.addTab(self.tab_alertas, "Alertas")
         self._setup_tab_insumos()
         self._setup_tab_movimientos()
-        self._setup_tab_alertas()
         layout.addWidget(header)
         layout.addWidget(self.tabs)
 
@@ -89,6 +114,9 @@ class StockView(QWidget):
         self.btn_print = QPushButton("Imprimir")
         self.btn_print.setObjectName("btnSecondary")
         self.btn_print.clicked.connect(self._imprimir_insumos)
+        self.btn_kardex = QPushButton("Kardex")
+        self.btn_kardex.setObjectName("btnSecondary")
+        self.btn_kardex.clicked.connect(self._imprimir_kardex)
 
         btn_refresh = QPushButton("Actualizar")
         btn_refresh.setObjectName("btnPrimary")
@@ -98,6 +126,7 @@ class StockView(QWidget):
         toolbar.addStretch()
         toolbar.addWidget(self.btn_editar)
         toolbar.addWidget(self.btn_eliminar)
+        toolbar.addWidget(self.btn_kardex)
         toolbar.addWidget(self.btn_export)
         toolbar.addWidget(self.btn_print)
         layout.addLayout(toolbar)
@@ -129,15 +158,11 @@ class StockView(QWidget):
         self.btn_export_mov = QPushButton("Exportar Excel")
         self.btn_export_mov.setObjectName("btnPrimary")
         self.btn_export_mov.clicked.connect(self._exportar_movimientos)
-        self.btn_print_mov = QPushButton("Imprimir")
-        self.btn_print_mov.setObjectName("btnSecondary")
-        self.btn_print_mov.clicked.connect(self._imprimir_movimientos)
         toolbar.addStretch()
         toolbar.addWidget(self.btn_export_mov)
-        toolbar.addWidget(self.btn_print_mov)
         layout.addLayout(toolbar)
 
-        self.grid_mov = ComplexGrid()
+        self.grid_mov = MovimientosGrid(self.controller)
         self.grid_mov.set_columnas([
             {"key": "created_at", "titulo": "Fecha", "ancho": 150},
             {"key": "insumo_nombre", "titulo": "Insumo", "ancho": 200},
@@ -148,36 +173,6 @@ class StockView(QWidget):
         ])
         self.grid_mov.set_renderers(fila=self._fila_mov, claves=self._claves_mov)
         layout.addWidget(self.grid_mov)
-
-    def _setup_tab_alertas(self) -> None:
-        layout = QVBoxLayout(self.tab_alertas)
-        layout.setContentsMargins(0, 8, 0, 0)
-
-        toolbar = QHBoxLayout()
-        btn_refresh_al = QPushButton("Actualizar")
-        btn_refresh_al.setObjectName("btnPrimary")
-        btn_refresh_al.clicked.connect(self._load_alertas)
-        toolbar.addWidget(btn_refresh_al)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
-
-        self.grid_alertas = ComplexGrid()
-        self.grid_alertas.set_columnas([
-            {"key": "codigo", "titulo": "Código", "ancho": 120},
-            {"key": "nombre", "titulo": "Nombre", "ancho": 220},
-            {"key": "categoria", "titulo": "Categoría", "ancho": 140},
-            {"key": "unidad_medida", "titulo": "Unidad", "ancho": 90},
-            {"key": "stock_actual", "titulo": "Stock Actual", "ancho": 110, "tipo": "numero"},
-            {"key": "stock_minimo", "titulo": "Stock Mínimo", "ancho": 110, "tipo": "numero"},
-        ])
-        self.grid_alertas.set_renderers(
-            fila=self._fila_insumo,
-            claves=self._claves_insumo,
-            estilo=self._estilo_alertas,
-            tarjeta=self._tarjeta_alertas,
-            lista=self._lista_insumo,
-        )
-        layout.addWidget(self.grid_alertas)
 
     def _fila_insumo(self, ins: dict) -> list[str]:
         return [
@@ -247,7 +242,6 @@ class StockView(QWidget):
             insumos = self.controller.listar_insumos()
             self.vista.set_datos(insumos)
             self._load_movimientos()
-            self._load_alertas()
         except Exception as e:
             print(f"Error: {e}")
 
@@ -285,30 +279,31 @@ class StockView(QWidget):
 
     def _registrar_movimiento(self) -> None:
         ins = self.vista.registro_seleccionado()
-        dlg = DialogMovimientoStock(self.controller, ins["id"] if ins else None)
+        dlg = DialogMovimientoMultiPartida(
+            self.controller, ins["id"] if ins else None)
         if dlg.exec():
+            mov_id = dlg.obtener_movimiento_id()
+            if mov_id:
+                resp = QMessageBox.question(
+                    self, "Imprimir documento",
+                    "Movimiento registrado. Desea imprimir el documento?",
+                    QMessageBox.Yes | QMessageBox.No)
+                if resp == QMessageBox.Yes:
+                    from src.utils.movimiento_print import (
+                        imprimir_movimiento_documento,
+                    )
+                    imprimir_movimiento_documento(mov_id, self)
             self._load_insumos()
 
-    def _load_alertas(self) -> None:
-        try:
-            bajos = self.controller.stock_bajo()
-            self.grid_alertas.set_datos(bajos)
-        except Exception as e:
-            print(f"Error alertas: {e}")
-
-    def _estilo_alertas(self, ins: dict, item, col: int) -> None:
-        item.setForeground(Qt.red)
-
-    def _tarjeta_alertas(self, ins: dict) -> dict:
-        stock = ins.get("stock_actual", 0)
-        stock_min = ins.get("stock_minimo", 0)
-        unidad = ins.get("unidad_medida", "")
-        return {
-            "tile": "inventario",
-            "titulo": ins.get("nombre", ""),
-            "subtitulo": f"{ins.get('codigo', '')} · {ins.get('categoria', '')}",
-            "badge": f"{stock}/{stock_min} {unidad}",
-        }
+    def _mostrar_stock_bajo(self) -> None:
+        bajos = self.controller.stock_bajo()
+        if not bajos:
+            QMessageBox.information(self, "Stock", "No hay insumos con stock bajo.")
+            return
+        msg = "=== INSUMOS CON STOCK BAJO ===\n\n"
+        for ins in bajos:
+            msg += f"{ins['codigo']} - {ins['nombre']}: {ins['stock_actual']} / {ins['stock_minimo']} {ins['unidad_medida']}\n"
+        QMessageBox.warning(self, f"Alertas de Stock ({len(bajos)})", msg)
 
     def _exportar_insumos(self) -> None:
         self.vista.exportar_excel()
@@ -319,5 +314,14 @@ class StockView(QWidget):
     def _exportar_movimientos(self) -> None:
         self.grid_mov.exportar_excel()
 
-    def _imprimir_movimientos(self) -> None:
-        self.grid_mov.imprimir()
+    def _imprimir_kardex(self) -> None:
+        from src.utils.kardex_print import imprimir_kardex
+        ins = self.vista.registro_seleccionado()
+        if not ins:
+            QMessageBox.information(self, "Seleccionar", "Seleccione un insumo.")
+            return
+        movimientos = self.controller.listar_kardex(ins["id"])
+        if not movimientos:
+            QMessageBox.information(self, "Kardex", "El insumo no tiene movimientos.")
+            return
+        imprimir_kardex(ins, movimientos, self)

@@ -1,22 +1,30 @@
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
+    QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox,
+    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from src.components.complex_grid import ComplexGrid
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
+from src.models.empresa_model import EmpresaModel
 from src.utils.icons import tile_icon
+from src.utils.impresion_virtual import (
+    guardar_impresora_virtual, impresora_virtual_habilitada,
+)
 from src.utils.table_utils import configurar_tabla_excel
 
 
 _SECCIONES = [
+    ("empresa", "Empresa",
+     "Nombre, razón social, logo (membrete) y video de splash de la empresa."),
     ("unidades", "Unidades de Medida",
      "Catálogo de unidades usadas en insumos y órdenes de compra."),
     ("areas", "Áreas de Producción",
@@ -27,6 +35,8 @@ _SECCIONES = [
      "Colores y códigos cortos para variantes de insumo."),
     ("usuarios", "Usuarios y Accesos",
      "Usuarios del sistema y sus permisos por módulo."),
+    ("impresion", "Impresión",
+     "Impresora virtual SIAC para simular la impresión en pantalla."),
 ]
 
 
@@ -127,7 +137,7 @@ class DialogConfiguracion(QDialog):
         if not tiene(self.permisos, "configuracion", "ver"):
             secciones = [s for s in secciones if s[0] != "unidades"
                          and s[0] != "areas" and s[0] != "tallas"
-                         and s[0] != "colores"]
+                         and s[0] != "colores" and s[0] != "impresion"]
         if not tiene(self.permisos, "usuarios", "ver"):
             secciones = [s for s in secciones if s[0] != "usuarios"]
         self._secciones = secciones
@@ -188,6 +198,8 @@ class DialogConfiguracion(QDialog):
         self._navegar(0)
 
     def _crear_pagina(self, key: str) -> QWidget:
+        if key == "empresa":
+            return _TabEmpresa(self.permisos)
         if key == "unidades":
             return _TabUnidades(self.controller, self.permisos)
         if key == "areas":
@@ -198,6 +210,8 @@ class DialogConfiguracion(QDialog):
             return _TabColores(self.inv_controller, self.permisos)
         if key == "usuarios":
             return _TabAccesos(self.accesos_controller, self.permisos)
+        if key == "impresion":
+            return _TabImpresion(self.permisos)
         raise ValueError(f"Sección de configuración desconocida: {key}")
 
     def _navegar(self, index: int) -> None:
@@ -214,6 +228,196 @@ class DialogConfiguracion(QDialog):
             recargar = getattr(pagina, "recargar", None)
             if callable(recargar):
                 recargar()
+
+
+class _TabEmpresa(QWidget):
+    """Sección de configuración de empresa: nombre, razón social, logo y video."""
+
+    def __init__(self, permisos: set) -> None:
+        super().__init__()
+        self.permisos = permisos
+        self.model = EmpresaModel()
+        self._logo_bytes: bytes | None = None
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        hint = QLabel(
+            "Configure los datos de la empresa que usa el sistema. "
+            "El nombre y razón social se usan en documentos y reportes. "
+            "El logo se usa como membrete en todos los PDFs generados."
+        )
+        hint.setStyleSheet("color: #64748b; font-size: 12px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        grp_datos = QGroupBox("Datos de la empresa")
+        grp_datos.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        form = QFormLayout(grp_datos)
+        form.setSpacing(10)
+
+        self.txt_nombre = QLineEdit()
+        self.txt_nombre.setPlaceholderText(
+            "Nombre que se muestra en el sistema y documentos")
+        form.addRow("Nombre de la empresa:", self.txt_nombre)
+
+        self.txt_razon = QLineEdit()
+        self.txt_razon.setPlaceholderText(
+            "Razón social para documentos legales (facturas, etc.)")
+        form.addRow("Razón social:", self.txt_razon)
+
+        layout.addWidget(grp_datos)
+
+        grp_logo = QGroupBox("Logo / Membrete")
+        grp_logo.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        logo_layout = QHBoxLayout(grp_logo)
+        logo_layout.setSpacing(16)
+
+        self.lbl_logo_preview = QLabel("Sin logo")
+        self.lbl_logo_preview.setFixedSize(120, 120)
+        self.lbl_logo_preview.setAlignment(Qt.AlignCenter)
+        self.lbl_logo_preview.setStyleSheet(
+            "border: 2px dashed #cbd5e1; border-radius: 8px; "
+            "color: #94a3b8; font-size: 11px;")
+        logo_layout.addWidget(self.lbl_logo_preview)
+
+        logo_btns = QVBoxLayout()
+        logo_btns.setSpacing(8)
+        self.btn_seleccionar_logo = QPushButton("Seleccionar imagen")
+        self.btn_seleccionar_logo.setObjectName("btnSecondary")
+        self.btn_seleccionar_logo.setCursor(Qt.PointingHandCursor)
+        self.btn_seleccionar_logo.clicked.connect(self._seleccionar_logo)
+        logo_btns.addWidget(self.btn_seleccionar_logo)
+
+        self.btn_quitar_logo = QPushButton("Quitar logo")
+        self.btn_quitar_logo.setObjectName("btnDanger")
+        self.btn_quitar_logo.setCursor(Qt.PointingHandCursor)
+        self.btn_quitar_logo.clicked.connect(self._quitar_logo)
+        logo_btns.addWidget(self.btn_quitar_logo)
+
+        lbl_hint = QLabel(
+            "Se recomienda una imagen cuadrada o rectangular\n"
+            "con fondo transparente o blanco.\n"
+            "Se usará en el membrete de todos los PDFs.")
+        lbl_hint.setStyleSheet(
+            "color: #94a3b8; font-size: 10px;")
+        lbl_hint.setWordWrap(True)
+        logo_btns.addWidget(lbl_hint)
+        logo_btns.addStretch()
+
+        logo_layout.addLayout(logo_btns)
+        logo_layout.addStretch()
+
+        layout.addWidget(grp_logo)
+
+        grp_video = QGroupBox("Video de Splash")
+        grp_video.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        video_layout = QHBoxLayout(grp_video)
+        video_layout.setSpacing(12)
+
+        self.txt_video = QLineEdit()
+        self.txt_video.setPlaceholderText(
+            "Ruta del archivo de video (.mp4) para la pantalla de inicio")
+        self.txt_video.setReadOnly(True)
+        video_layout.addWidget(self.txt_video, 1)
+
+        self.btn_seleccionar_video = QPushButton("Seleccionar")
+        self.btn_seleccionar_video.setObjectName("btnSecondary")
+        self.btn_seleccionar_video.setCursor(Qt.PointingHandCursor)
+        self.btn_seleccionar_video.clicked.connect(
+            self._seleccionar_video)
+        video_layout.addWidget(self.btn_seleccionar_video)
+
+        self.btn_quitar_video = QPushButton("Quitar")
+        self.btn_quitar_video.setObjectName("btnDanger")
+        self.btn_quitar_video.setCursor(Qt.PointingHandCursor)
+        self.btn_quitar_video.clicked.connect(self._quitar_video)
+        video_layout.addWidget(self.btn_quitar_video)
+
+        layout.addWidget(grp_video)
+
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_guardar = QPushButton("Guardar configuración")
+        btn_guardar.setObjectName("btnPrimary")
+        btn_guardar.setCursor(Qt.PointingHandCursor)
+        btn_guardar.clicked.connect(self._guardar)
+        btns.addWidget(btn_guardar)
+        layout.addLayout(btns)
+
+        layout.addStretch()
+
+    def recargar(self) -> None:
+        datos = self.model.obtener_todas()
+        self.txt_nombre.setText(datos.get('nombre_empresa', ''))
+        self.txt_razon.setText(datos.get('razon_social', ''))
+        self.txt_video.setText(datos.get('video_splash', ''))
+        self._logo_bytes = self.model.obtener_logo_bytes()
+        self._actualizar_preview_logo()
+
+    def _actualizar_preview_logo(self) -> None:
+        if self._logo_bytes:
+            pixmap = QPixmap()
+            pixmap.loadFromData(self._logo_bytes)
+            self.lbl_logo_preview.setPixmap(
+                pixmap.scaled(112, 112, Qt.KeepAspectRatio,
+                              Qt.SmoothTransformation))
+            self.lbl_logo_preview.setStyleSheet(
+                "border: 1px solid #e2e8f0; border-radius: 8px;")
+        else:
+            self.lbl_logo_preview.setText("Sin logo")
+            self.lbl_logo_preview.setPixmap(QPixmap())
+            self.lbl_logo_preview.setStyleSheet(
+                "border: 2px dashed #cbd5e1; border-radius: 8px; "
+                "color: #94a3b8; font-size: 11px;")
+
+    def _seleccionar_logo(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar logo",
+            "", "Imágenes (*.png *.jpg *.jpeg *.bmp *.svg)")
+        if not path:
+            return
+        try:
+            with open(path, "rb") as f:
+                self._logo_bytes = f.read()
+            self._actualizar_preview_logo()
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error", f"No se pudo leer la imagen:\n{e}")
+
+    def _quitar_logo(self) -> None:
+        self._logo_bytes = None
+        self._actualizar_preview_logo()
+
+    def _seleccionar_video(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar video de splash",
+            "", "Video (*.mp4 *.avi *.mov *.mkv)")
+        if path:
+            self.txt_video.setText(path)
+
+    def _quitar_video(self) -> None:
+        self.txt_video.clear()
+
+    def _guardar(self) -> None:
+        nombre = self.txt_nombre.text().strip()
+        razon = self.txt_razon.text().strip()
+        video = self.txt_video.text().strip()
+        self.model.guardar_varias({
+            'nombre_empresa': nombre,
+            'razon_social': razon,
+            'video_splash': video,
+        })
+        self.model.guardar_logo(self._logo_bytes)
+        notificar_flotante(
+            "Configuración de empresa guardada correctamente.",
+            tipo="success", titulo="Guardado", host=self)
 
 
 class _TabUnidades(QWidget):
@@ -708,8 +912,8 @@ class _TabTallas(QWidget):
                     f"No se pudo vaciar la lista:\n{e}\n\n"
                     "Verifique que ninguna talla esté en uso en órdenes.")
                 return
-            QMessageBox.information(self, "Lista vaciada",
-                f"Se eliminaron {eliminados} tallas del catálogo.")
+            notificar_flotante(f"Se eliminaron {eliminados} tallas del catálogo.",
+                               tipo="success", titulo="Lista vaciada", host=self)
             self.recargar()
 
 
@@ -1077,7 +1281,8 @@ class _TabAccesos(QWidget):
             return
         concedidas = {f"{m}.{a}" for (m, a), chk in self._checks.items() if chk.isChecked()}
         self.controller.guardar_permisos(self._usuario_id, concedidas)
-        QMessageBox.information(self, "Guardado", "Permisos actualizados correctamente.")
+        notificar_flotante("Permisos actualizados correctamente.",
+                           tipo="success", titulo="Guardado", host=self)
 
     def _crear_usuario(self) -> None:
         dlg = _DialogUsuario(self.controller)
@@ -1096,7 +1301,8 @@ class _TabAccesos(QWidget):
             return
         dlg = _DialogPassword(self.controller, self._usuario_id)
         if dlg.exec() == QDialog.Accepted:
-            QMessageBox.information(self, "Listo", "Contraseña actualizada.")
+            notificar_flotante("Contraseña actualizada.",
+                               tipo="success", titulo="Listo", host=self)
 
     def _toggle_usuario(self) -> None:
         if not self._validar_seleccion():
@@ -1260,3 +1466,49 @@ class _DialogPassword(QDialog):
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
             return
         self.accept()
+
+
+class _TabImpresion(QWidget):
+    """Preferencias de impresión: impresora virtual SIAC (simulación).
+
+    Al habilitarla, los diálogos de impresión del sistema ofrecen la opción
+    "Impresora virtual SIAC (simulación)" que muestra la salida en pantalla
+    en lugar de enviar el trabajo a una impresora física.
+    """
+
+    def __init__(self, permisos=None) -> None:
+        super().__init__()
+        self.permisos = permisos or set()
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        grupo = QGroupBox("Impresora virtual")
+        g = QVBoxLayout(grupo)
+        g.setSpacing(8)
+
+        self.chk_virtual = QCheckBox(
+            "Habilitar impresora virtual SIAC (simulación en pantalla)")
+        self.chk_virtual.toggled.connect(self._guardar)
+        g.addWidget(self.chk_virtual)
+
+        hint = QLabel(
+            "Cuando está habilitada, al imprimir podrá elegir la \"Impresora "
+            "virtual SIAC\": el sistema mostrará en pantalla una simulación "
+            "del resultado sin enviar el trabajo a una impresora física. "
+            "Las impresoras reales siguen disponibles para imprimir de verdad.")
+        hint.setObjectName("cfgHint")
+        hint.setWordWrap(True)
+        g.addWidget(hint)
+
+        layout.addWidget(grupo)
+        layout.addStretch()
+
+    def _guardar(self, habilitada: bool) -> None:
+        guardar_impresora_virtual(habilitada)
+
+    def recargar(self) -> None:
+        self.chk_virtual.setChecked(impresora_virtual_habilitada())

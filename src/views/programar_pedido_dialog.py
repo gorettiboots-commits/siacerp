@@ -147,6 +147,10 @@ class ProgramarPedidoDialog(QDialog):
                 "det_total": det_total,
                 "prog_det": prog_det,
                 "rest_det": rest_det,
+                "corrida_cap": self._rango_corrida_capturada(
+                    d.get("puntos", [])),
+                "corrida_min": self._minimo_corrida_capturada(
+                    d.get("puntos", [])),
             })
         self.vista.set_datos(self._detalle_recs)
 
@@ -171,14 +175,29 @@ class ProgramarPedidoDialog(QDialog):
         except (TypeError, ValueError):
             return (1, str(talla))
 
-    def _texto_corrida_rango(self, d: dict) -> str:
-        corrida = self._corridas.get(d["detalle_id"])
-        if not corrida or not corrida["tallas"]:
-            return ""
+    def _minimo_corrida_capturada(self, puntos: list) -> tuple:
         parejas = sorted(
-            (self._valor_talla(t["talla"]), t["talla"]) for t in corrida["tallas"])
+            (self._valor_talla(p.get("punto", "")), p.get("punto", ""))
+            for p in puntos if int(p.get("pares", 0) or 0) > 0)
+        return parejas[0][0] if parejas else (1, "")
+
+    def _rango_corrida_capturada(self, puntos: list) -> str:
+        parejas = sorted(
+            (self._valor_talla(p.get("punto", "")), p.get("punto", ""))
+            for p in puntos if int(p.get("pares", 0) or 0) > 0)
+        if not parejas:
+            return ""
         return (f"del {self._fmt_talla(parejas[0][1])} "
                 f"al {self._fmt_talla(parejas[-1][1])}")
+
+    def _texto_corrida_rango(self, d: dict) -> str:
+        corrida = self._corridas.get(d["detalle_id"])
+        if corrida and corrida["tallas"]:
+            parejas = sorted(
+                (self._valor_talla(t["talla"]), t["talla"]) for t in corrida["tallas"])
+            return (f"del {self._fmt_talla(parejas[0][1])} "
+                    f"al {self._fmt_talla(parejas[-1][1])}")
+        return d.get("corrida_cap", "")
 
     def _fila(self, d: dict) -> list[str]:
         return [d.get("modelo", ""), self._texto_corrida_rango(d),
@@ -191,7 +210,7 @@ class ProgramarPedidoDialog(QDialog):
         if corrida and corrida["tallas"]:
             mins = min(self._valor_talla(t["talla"]) for t in corrida["tallas"])
         else:
-            mins = (1, "")
+            mins = d.get("corrida_min", (1, ""))
         return [d.get("modelo", "").lower(), mins,
                 d.get("piel", "").lower(), d.get("color", "").lower(),
                 float(d.get("det_total", 0)), float(d.get("prog_det", 0)),

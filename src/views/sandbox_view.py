@@ -1,12 +1,10 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QLabel, QPushButton, QScrollArea, QTabWidget,
-    QVBoxLayout, QWidget,
+    QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget,
 )
 
-from src.components import listar_componentes
 from src.components.tallas_matrix import MatrizTallasDialog
-
+from src.views.sandbox_catalogo import CatalogoControles
 from src.views.sandbox_complex_grid import ComplexGridDemo
 from src.views.sandbox_controles import ControlesPreview
 from src.views.sandbox_editor_etiqueta import EditorEtiquetaPreview
@@ -40,6 +38,7 @@ class SandboxView(QWidget):
         layout.addWidget(subtitulo)
 
         tabs = QTabWidget()
+        tabs.addTab(CatalogoControles(self), "Catálogo de controles")
         tabs.addTab(self._crear_tab_componentes(), "Componentes")
         tabs.addTab(ControlesPreview(self), "Controles del sistema (prototipo)")
         tabs.addTab(EditorEtiquetaPreview(self), "Editor de etiquetas (prototipo)")
@@ -50,76 +49,36 @@ class SandboxView(QWidget):
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
-        label_cat = QLabel("Catálogo de componentes aprobados del sistema")
-        label_cat.setObjectName("sectionSubtitle")
-        layout.addWidget(label_cat)
-
-        scroll = QScrollArea(widget)
-        scroll.setWidgetResizable(True)
-        cont = QWidget()
-        grid = QGridLayout(cont)
-        grid.setContentsMargins(4, 4, 4, 4)
-        grid.setSpacing(10)
-
-        componentes = listar_componentes()
-        if not componentes:
-            grid.addWidget(QLabel("No hay componentes registrados."), 0, 0)
-        for i, comp in enumerate(componentes):
-            grid.addWidget(self._crear_tarjeta_componente(comp), i // 2, i % 2)
-
-        scroll.setWidget(cont)
-        layout.addWidget(scroll, 1)
-
-        label_demo = QLabel("Prototipos de demostración")
-        label_demo.setObjectName("sectionSubtitle")
-        layout.addWidget(label_demo)
-
-        btn_tallas = QPushButton("Matriz de tallas (probar)")
+        btn_tallas = QPushButton("Controles de tallas")
         btn_tallas.setObjectName("btnPrimary")
-        btn_tallas.setMinimumHeight(38)
+        btn_tallas.setMinimumHeight(42)
         btn_tallas.setCursor(Qt.PointingHandCursor)
         btn_tallas.clicked.connect(self._abrir_tallas)
         layout.addWidget(btn_tallas, 0, Qt.AlignLeft)
 
-        btn_grid = QPushButton("ComplexGrid (probar)")
+        btn_grid = QPushButton("ComplexGrid (prototipo)")
         btn_grid.setObjectName("btnSecondary")
-        btn_grid.setMinimumHeight(38)
+        btn_grid.setMinimumHeight(42)
         btn_grid.setCursor(Qt.PointingHandCursor)
         btn_grid.clicked.connect(self._abrir_complex_grid)
         layout.addWidget(btn_grid, 0, Qt.AlignLeft)
 
-        btn_notif = QPushButton("Notificaciones flotantes (probar)")
+        btn_notif = QPushButton("Notificaciones flotantes (prototipo)")
         btn_notif.setObjectName("btnSecondary")
-        btn_notif.setMinimumHeight(38)
+        btn_notif.setMinimumHeight(42)
         btn_notif.setCursor(Qt.PointingHandCursor)
         btn_notif.clicked.connect(self._abrir_notificaciones)
         layout.addWidget(btn_notif, 0, Qt.AlignLeft)
 
-        btn_preview = QPushButton("Preview de impresión (probar)")
+        btn_preview = QPushButton("Preview de impresión")
         btn_preview.setObjectName("btnPrimary")
-        btn_preview.setMinimumHeight(38)
+        btn_preview.setMinimumHeight(42)
         btn_preview.setCursor(Qt.PointingHandCursor)
         btn_preview.clicked.connect(self._abrir_preview)
         layout.addWidget(btn_preview, 0, Qt.AlignLeft)
 
-        return widget
-
-    def _crear_tarjeta_componente(self, comp: dict) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
-
-        nombre = QLabel(comp["nombre"])
-        nombre.setObjectName("sectionTitle")
-        layout.addWidget(nombre)
-
-        desc = QLabel(comp["descripcion"])
-        desc.setWordWrap(True)
-        layout.addWidget(desc)
         layout.addStretch()
-        return card
+        return widget
 
     def _abrir_tallas(self) -> None:
         dlg = MatrizTallasDialog(parent=self)

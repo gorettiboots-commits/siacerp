@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
@@ -10,12 +8,14 @@ from PySide6.QtWidgets import (
 
 from src.components.complex_grid import ComplexGrid
 from src.components.date_picker import DatePicker
+from src.components.notificacion_flotante import notificar_flotante
 from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
 from src.utils.icons import mono_icon
 from src.utils.table_utils import configurar_tabla_excel
+from src.utils.ui_helpers import load_styles
 from src.views.programar_pedido_dialog import ProgramarPedidoDialog
 
 
@@ -31,368 +31,9 @@ def _fmt_estatus(estatus: str) -> str:
     return _ESTATUS.get(estatus, estatus.replace("_", " ").capitalize())
 
 
-_ASSETS = (Path(__file__).resolve().parent / "assets").as_posix()
-
-_QSS_FORMS = r"""
-QWidget {
-    background-color: #F0F0F0;
-    color: #000000;
-    font-size: 13px;
-}
-
-QLabel { color: #000000; }
-QLabel#sectionTitle { font-size: 18px; font-weight: bold; color: #000000; }
-QLabel#sectionSubtitle { font-size: 12px; color: #444444; }
-
-/* ---------- Botones clásicos (relieve 3D) ---------- */
-QPushButton {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FCFCFC, stop:1 #E1E1E1);
-    border: 2px solid;
-    border-color: #FFFFFF #848484 #848484 #FFFFFF;
-    border-radius: 0px;
-    padding: 6px 16px;
-    font-weight: normal;
-    color: #000000;
-}
-QPushButton:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FDFDFD, stop:1 #EAEAEA);
-}
-QPushButton:pressed {
-    background: #DCDCDC;
-    border-color: #848484 #FFFFFF #FFFFFF #848484;
-}
-QPushButton:disabled {
-    background: #EFEFEF;
-    color: #8A8A8A;
-    border-color: #C8C8C8 #C8C8C8 #C8C8C8 #C8C8C8;
-}
-
-QPushButton#btnPrimary {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #4D80D0, stop:1 #2A5FB0);
-    border: 1px solid;
-    border-color: #6FA0E0 #1E4A8F #1E4A8F #6FA0E0;
-    color: #FFFFFF;
-    font-weight: bold;
-}
-QPushButton#btnPrimary:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #5C8FD9, stop:1 #3569BE);
-}
-QPushButton#btnPrimary:pressed { background: #23509C; }
-QPushButton#btnPrimary:disabled {
-    background: #B9CBE6; color: #E5EEFA; border-color: #9BB4D8;
-}
-
-QPushButton#btnSecondary {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FCFCFC, stop:1 #E1E1E1);
-    border: 1px solid #A0A0A0;
-    color: #000000;
-    font-weight: normal;
-}
-QPushButton#btnSecondary:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FDFDFD, stop:1 #EAEAEA);
-}
-
-QPushButton#btnSuccess {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #67B96A, stop:1 #3D9141);
-    border: 1px solid;
-    border-color: #8CCB8E #2E6E31 #2E6E31 #8CCB8E;
-    color: #FFFFFF;
-    font-weight: bold;
-}
-QPushButton#btnSuccess:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #77C47A, stop:1 #4AA14E);
-}
-QPushButton#btnSuccess:pressed { background: #337A36; }
-QPushButton#btnSuccess:disabled {
-    background: #C6E0C7; color: #F0F7F0; border-color: #A8CBA9;
-}
-
-QPushButton#btnDanger {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #D45B5B, stop:1 #A93A3A);
-    border: 1px solid;
-    border-color: #E08B8B #7E2626 #7E2626 #E08B8B;
-    color: #FFFFFF;
-    font-weight: bold;
-}
-QPushButton#btnDanger:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #DB6E6E, stop:1 #B74444);
-}
-QPushButton#btnDanger:pressed { background: #8F3030; }
-QPushButton#btnDanger:disabled {
-    background: #E3C2C2; color: #F7EAEA; border-color: #D0A2A2;
-}
-
-QPushButton#btnWarning {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #E8A93C, stop:1 #C77E18);
-    border: 1px solid;
-    border-color: #F0C578 #9C5F0E #9C5F0E #F0C578;
-    color: #000000;
-    font-weight: bold;
-}
-QPushButton#btnWarning:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #EFB750, stop:1 #D18A24);
-}
-QPushButton#btnWarning:pressed { background: #A96814; }
-QPushButton#btnWarning:disabled {
-    background: #E7D6AE; color: #F7EFDF; border-color: #D3BA88;
-}
-
-QPushButton#btnModo { border-radius: 0px; }
-QPushButton#btnModo:checked { background: #BBD4F7; border-color: #1E4A8F; }
-
-QPushButton#viewSwitch {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FCFCFC, stop:1 #E1E1E1);
-    color: #000000;
-    border: 1px solid #A0A0A0;
-    border-radius: 0px;
-    padding: 4px 12px;
-    font-size: 12px;
-    min-height: 18px;
-}
-QPushButton#viewSwitch:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                                stop:0 #FDFDFD, stop:1 #EAEAEA);
-}
-QPushButton#viewSwitch:checked {
-    background: #BBD4F7;
-    color: #000000;
-    border: 1px solid #1E4A8F;
-    font-weight: bold;
-}
-
-/* ---------- Entradas (sunken clásico) ---------- */
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit,
-QDateTimeEdit, QTextEdit {
-    background-color: #FFFFFF;
-    border: 1px solid #7F9DB9;
-    border-radius: 0px;
-    padding: 3px 6px;
-    color: #000000;
-    selection-background-color: #3399FF;
-    selection-color: #FFFFFF;
-    min-height: 20px;
-}
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus,
-QDateEdit:focus, QTimeEdit:focus, QDateTimeEdit:focus, QTextEdit:focus {
-    border: 1px solid #0078D7;
-    background-color: #FFFFFF;
-}
-QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover,
-QDateEdit:hover, QTimeEdit:hover, QDateTimeEdit:hover, QTextEdit:hover {
-    border: 1px solid #0078D7;
-}
-QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled,
-QDoubleSpinBox:disabled, QDateEdit:disabled, QTimeEdit:disabled,
-QDateTimeEdit:disabled {
-    background-color: #F0F0F0;
-    color: #808080;
-    border-color: #C0C0C0;
-}
-
-QComboBox::drop-down { border: none; width: 20px; }
-QComboBox::down-arrow {
-    image: url(@ASSETS@/chevron.svg);
-    width: 10px; height: 10px;
-}
-QComboBox QAbstractItemView {
-    background-color: #FFFFFF;
-    border: 1px solid #7A7A7A;
-    color: #000000;
-    selection-background-color: #3399FF;
-    selection-color: #FFFFFF;
-    outline: none;
-}
-QComboBox QAbstractItemView::item { padding: 4px 8px; }
-
-QSpinBox::up-button, QDoubleSpinBox::up-button,
-QSpinBox::down-button, QDoubleSpinBox::down-button {
-    width: 18px;
-    border: 1px solid #A0A0A0;
-    background: #E8E8E8;
-}
-QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
-    width: 0; height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid #000000;
-    margin-top: 4px;
-}
-QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
-    width: 0; height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid #000000;
-    margin-bottom: 4px;
-}
-
-/* ---------- Checkbox / Radio ---------- */
-QCheckBox, QRadioButton { spacing: 6px; color: #000000; }
-QCheckBox::indicator, QRadioButton::indicator {
-    width: 15px; height: 15px;
-    border: 1px solid #7A7A7A;
-    background-color: #FFFFFF;
-}
-QCheckBox::indicator:hover, QRadioButton::indicator:hover {
-    border: 1px solid #0078D7;
-}
-QCheckBox::indicator:checked {
-    background-color: #0078D7;
-    border: 1px solid #005A9E;
-    image: url(@ASSETS@/check.svg);
-}
-QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
-    background-color: #F0F0F0;
-    border-color: #C0C0C0;
-}
-QRadioButton::indicator:checked {
-    background-color: #FFFFFF;
-    border: 5px solid #0078D7;
-}
-
-/* ---------- GroupBox ---------- */
-QGroupBox {
-    background-color: #F0F0F0;
-    border: 1px solid #A0A0A0;
-    border-radius: 0px;
-    margin-top: 10px;
-    padding: 12px 8px 8px 8px;
-    font-weight: bold;
-    font-size: 13px;
-    color: #000000;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 8px;
-    padding: 0 4px;
-    background-color: #F0F0F0;
-}
-
-/* ---------- Tablas ---------- */
-QTableWidget, QTableView, QListWidget {
-    background-color: #FFFFFF;
-    border: 1px solid #A0A0A0;
-    border-radius: 0px;
-    gridline-color: #D8D8D8;
-    color: #000000;
-}
-QTableWidget::item, QTableView::item, QListWidget::item {
-    padding: 3px 6px;
-    border: none;
-}
-QTableWidget::item:hover, QTableView::item:hover, QListWidget::item:hover {
-    background-color: #EAF3FF;
-}
-QTableWidget::item:selected, QTableView::item:selected, QListWidget::item:selected {
-    background-color: #3399FF;
-    color: #FFFFFF;
-}
-QHeaderView::section {
-    background-color: #E8E8E8;
-    border: none;
-    border-right: 1px solid #A0A0A0;
-    border-bottom: 1px solid #A0A0A0;
-    font-weight: bold;
-    color: #000000;
-    padding: 5px 6px;
-}
-QTableCornerButton::section {
-    background-color: #E8E8E8;
-    border: none;
-    border-right: 1px solid #A0A0A0;
-    border-bottom: 1px solid #A0A0A0;
-}
-
-/* ---------- Toolbar / toolbuttons ---------- */
-QToolButton {
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 0px;
-    padding: 3px 8px;
-    color: #000000;
-}
-QToolButton:hover { background: #E0E0E0; }
-QToolButton:pressed { background: #C8C8C8; }
-
-/* ---------- Scrollbars clásicas ---------- */
-QScrollBar:vertical {
-    background: #F0F0F0;
-    width: 16px;
-    margin: 0;
-}
-QScrollBar::handle:vertical {
-    background: #C8C8C8;
-    border: 1px solid #9C9C9C;
-    min-height: 22px;
-}
-QScrollBar::handle:vertical:hover { background: #B4B4B4; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 16px;
-    background: #E0E0E0;
-    border: 1px solid #9C9C9C;
-}
-QScrollBar:horizontal {
-    background: #F0F0F0;
-    height: 16px;
-}
-QScrollBar::handle:horizontal {
-    background: #C8C8C8;
-    border: 1px solid #9C9C9C;
-    min-width: 22px;
-}
-QScrollBar::handle:horizontal:hover { background: #B4B4B4; }
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    width: 16px;
-    background: #E0E0E0;
-    border: 1px solid #9C9C9C;
-}
-QScrollBar::add-line:hover, QScrollBar::sub-line:hover { background: #D0D0D0; }
-
-/* ---------- ScrollArea / Stack ---------- */
-QScrollArea { border: none; background: transparent; }
-
-/* ---------- Calendario ---------- */
-QCalendarWidget QWidget { background-color: #FFFFFF; color: #000000; }
-QCalendarWidget QToolButton {
-    background: transparent;
-    border: none;
-    color: #000000;
-    font-weight: bold;
-    padding: 4px 8px;
-}
-QCalendarWidget QToolButton:hover { background: #E0E0E0; }
-QCalendarWidget QAbstractItemView {
-    background-color: #FFFFFF;
-    color: #000000;
-    selection-background-color: #3399FF;
-    selection-color: #FFFFFF;
-    border: none;
-}
-QCalendarWidget QWidget#qt_calendar_navigationbar { background-color: #F0F0F0; }
-QCalendarWidget QWidget#qt_calendar_weekday { color: #000000; font-weight: bold; }
-
-/* ---------- Mensajes ---------- */
-QMessageBox { background-color: #F0F0F0; }
-QMessageBox QLabel { color: #000000; }
-""".replace("@ASSETS@", _ASSETS)
-
-
 def _aplicar_estilo_forms(widget: QWidget) -> None:
-    """Aplica el estilo Windows Forms clásico al widget y sus descendientes."""
-    widget.setStyleSheet(_QSS_FORMS)
+    """Aplica el tema clásico Windows Forms (estilos.qss) al widget."""
+    widget.setStyleSheet(load_styles())
 
 
 class ClientesView(QWidget):
@@ -400,6 +41,7 @@ class ClientesView(QWidget):
         super().__init__()
         self.controller = ClientesController()
         self._permiso_editar = True
+        self._permiso_programar = True
         _aplicar_estilo_forms(self)
         self._setup_ui()
         self._load_pedidos()
@@ -407,8 +49,8 @@ class ClientesView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self._permiso_editar = tiene(permisos, "clientes", "editar")
+        self._permiso_programar = tiene(permisos, "programacion", "editar")
         self.btn_nuevo_pedido.setEnabled(tiene(permisos, "clientes", "crear"))
-        self.btn_programas.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_nuevo_cli.setEnabled(tiene(permisos, "clientes", "crear"))
 
     def _setup_ui(self) -> None:
@@ -432,13 +74,8 @@ class ClientesView(QWidget):
         self.btn_nuevo_pedido.setObjectName("btnPrimary")
         self.btn_nuevo_pedido.clicked.connect(self._nuevo_pedido)
 
-        self.btn_programas = QPushButton("Programas")
-        self.btn_programas.setObjectName("btnPrimary")
-        self.btn_programas.clicked.connect(self._programar_pedido)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_programas)
         hlayout.addWidget(self.btn_nuevo_pedido)
 
         self.tabs = QTabWidget()
@@ -468,6 +105,10 @@ class ClientesView(QWidget):
         self.vista.set_renderers(fila=self._fila_pedido, claves=self._claves_pedido,
                                  estilo=self._estilo_pedido)
         self.vista.set_acciones([
+            {"texto": "Programar", "icono": "programacion", "color": "#0d9488",
+             "habilitado": lambda rec: self._permiso_programar
+             and rec.get("estatus") not in ("cancelado", "surtido"),
+             "callback": self._programar_pedido},
             {"texto": "Editar", "icono": "editar", "color": "#2A5FB0",
              "habilitado": lambda rec: self._permiso_editar,
              "callback": self._editar_pedido},
@@ -609,8 +250,9 @@ class ClientesView(QWidget):
             QMessageBox.warning(self, "Error", f"No se pudo cancelar: {e}")
         self._load_pedidos()
 
-    def _programar_pedido(self) -> None:
-        rec = self.vista.registro_seleccionado()
+    def _programar_pedido(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.vista.registro_seleccionado()
         if rec is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
             return
@@ -619,9 +261,9 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_pedidos()
             folios = ", ".join(dlg.folios_generados)
-            QMessageBox.information(
-                self, "Programado",
-                f"Se generaron los folios de programación: {folios}")
+            notificar_flotante(
+                f"Se generaron los folios de programación: {folios}",
+                tipo="success", titulo="Programado", host=self)
 
     # ---- Acciones de clientes ----
 

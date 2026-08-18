@@ -1,8 +1,22 @@
 import configparser
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any, Optional
+
+
+def directorio_datos() -> Path:
+    """Directorio de datos de la aplicación (config.ini y BD SQLite).
+
+    En desarrollo es la raíz del proyecto; en el empaquetado (PyInstaller)
+    es %APPDATA%\\SIAC para que los datos no dependan de la carpeta del .exe.
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(os.environ.get("APPDATA", str(Path.home()))) / "SIAC"
+        base.mkdir(parents=True, exist_ok=True)
+        return base
+    return Path(__file__).resolve().parent.parent.parent
 
 
 class DatabaseManager:
@@ -23,15 +37,21 @@ class DatabaseManager:
 
     def _load_config(self) -> configparser.ConfigParser:
         config = configparser.ConfigParser()
-        config_path = Path(__file__).resolve().parent.parent.parent / 'config.ini'
-        config.read(str(config_path))
+        ruta = directorio_datos() / 'config.ini'
+        if not ruta.exists():
+            ejemplo = Path(__file__).resolve().parent.parent.parent / 'config.example.ini'
+            if ejemplo.exists():
+                base = configparser.ConfigParser()
+                base.read(str(ejemplo), encoding='utf-8')
+                with open(str(ruta), 'w', encoding='utf-8') as f:
+                    base.write(f)
+        config.read(str(ruta))
         return config
 
     @property
     def db_path(self) -> str:
-        base = Path(__file__).resolve().parent.parent.parent
         sqlite_path = self.config.get('database', 'sqlite_path')
-        return str(base / sqlite_path)
+        return str(directorio_datos() / sqlite_path)
 
     def connect(self) -> Any:
         if self.connection:
@@ -327,46 +347,274 @@ class DatabaseManager:
 
         self._migrar_tallas_unificadas()
         self._migrar_pedidos_tallas()
+        self._migrar_impresiones_historico()
         self._migrar_fichas_tecnicas()
+        self._migrar_movimientos_inventario()
+
+    def _migrar_impresiones_historico(self) -> None:
+        """Garantiza la tabla del histórico de la cola de impresión.
+
+        Idempotente: si la tabla ya existe no hace nada (schema.sql la crea
+        en instalaciones nuevas; esta migración cubre BD que ya existían).
+        """
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            if self.engine == 'sqlite':
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS impresiones_historico (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        supabase_id TEXT,
+                        tipo TEXT NOT NULL DEFAULT 'partidas',
+                        payload TEXT NOT NULL,
+                        solicitado_en TEXT,
+                        impreso_en TEXT NOT NULL DEFAULT (datetime('now')),
+                        usuario TEXT,
+                        reimpresiones INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+            else:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS impresiones_historico (
+                        id SERIAL PRIMARY KEY,
+                        supabase_id TEXT,
+                        tipo TEXT NOT NULL DEFAULT 'partidas',
+                        payload TEXT NOT NULL,
+                        solicitado_en TEXT,
+                        impreso_en TIMESTAMP NOT NULL DEFAULT NOW(),
+                        usuario TEXT,
+                        reimpresiones INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+            conn.commit()
+        except Exception as e:
+            print(f"Migración impresiones_historico omitida: {e}")
 
     def _migrar_fichas_tecnicas(self) -> None:
-        """Crea las tablas de ficha técnica (kardex) si no existen.
+        """Garantiza las tablas de la ficha técnica por modelo.
 
-        Aditiva y no destructiva: solo `CREATE TABLE IF NOT EXISTS` para
-        bases que ya corrieron schema.sql antes de introducir las tablas.
+        Idempotente: si las tablas ya existen no hace nada (schema.sql las
+        crea en instalaciones nuevas; esta migración cubre BD que ya existían).
         """
-        conn = self.connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(
-                "CREATE TABLE IF NOT EXISTS fichas_tecnicas ("
-                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                " modelo_id INTEGER NOT NULL REFERENCES modelos(id),"
-                " estilo_sistema TEXT, estilo_muestra TEXT, marca TEXT,"
-                " talla TEXT, genero TEXT, horma TEXT, moldura TEXT,"
-                " construccion TEXT, corrida TEXT, scallop TEXT, tacon TEXT,"
-                " notas TEXT, imagen BLOB, fuente_archivo TEXT,"
-                " activo INTEGER NOT NULL DEFAULT 1,"
-                " created_at TEXT NOT NULL DEFAULT (datetime('now')),"
-                " updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
-            )
-            cursor.execute(
-                "CREATE TABLE IF NOT EXISTS ficha_tecnica_secciones ("
-                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                " ficha_id INTEGER NOT NULL REFERENCES fichas_tecnicas(id),"
-                " nombre TEXT NOT NULL, orden INTEGER NOT NULL DEFAULT 0)"
-            )
-            cursor.execute(
-                "CREATE TABLE IF NOT EXISTS ficha_tecnica_detalle ("
-                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
-                " seccion_id INTEGER NOT NULL REFERENCES ficha_tecnica_secciones(id),"
-                " componente TEXT, descripcion TEXT, proveedor TEXT,"
-                " comentarios TEXT, orden INTEGER NOT NULL DEFAULT 0)"
-            )
+            conn = self.connect()
+            cursor = conn.cursor()
+            if self.engine == 'sqlite':
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS fichas_tecnicas (
+                        modelo_id INTEGER PRIMARY KEY REFERENCES modelos(id),
+                        proyecto TEXT NOT NULL DEFAULT '',
+                        etapa TEXT NOT NULL DEFAULT 'MUESTRA',
+                        id_diseno TEXT NOT NULL DEFAULT '',
+                        ref_cliente TEXT NOT NULL DEFAULT '',
+                        color_nombre TEXT NOT NULL DEFAULT '',
+                        cintilla TEXT DEFAULT '',
+                        carnuza_chinela TEXT DEFAULT '',
+                        forro TEXT DEFAULT '',
+                        piel_corte_1 TEXT DEFAULT '',
+                        piel_corte_2 TEXT DEFAULT '',
+                        piel_corte_3 TEXT DEFAULT '',
+                        piel_corte_4 TEXT DEFAULT '',
+                        entretela_tubo TEXT DEFAULT '',
+                        entretela_chinela TEXT DEFAULT '',
+                        entretela_talon TEXT DEFAULT '',
+                        rebajado_tubo TEXT DEFAULT '',
+                        rebajado_chinela TEXT DEFAULT '',
+                        rebajado_talon TEXT DEFAULT '',
+                        bordado_tubo TEXT DEFAULT '',
+                        bordado_chinela TEXT DEFAULT '',
+                        bordado_calzador TEXT DEFAULT '',
+                        bordado_oreja TEXT DEFAULT '',
+                        bordado_logo TEXT DEFAULT '',
+                        hilo_bordado_tubo TEXT DEFAULT '',
+                        hilo_bordado_chinela TEXT DEFAULT '',
+                        hilo_bordado_calzador TEXT DEFAULT '',
+                        hilo_bordado_oreja TEXT DEFAULT '',
+                        hilo_logo TEXT DEFAULT '',
+                        hilo_armado TEXT DEFAULT '',
+                        hilo_sobrecostura TEXT DEFAULT '',
+                        vivo TEXT DEFAULT '',
+                        ribete TEXT DEFAULT '',
+                        estoperol TEXT DEFAULT '',
+                        herraje TEXT DEFAULT '',
+                        acc_1 TEXT DEFAULT '',
+                        acc_2 TEXT DEFAULT '',
+                        acc_3 TEXT DEFAULT '',
+                        acc_4 TEXT DEFAULT '',
+                        puntera TEXT DEFAULT '',
+                        planta TEXT DEFAULT '',
+                        contrafuerte TEXT DEFAULT '',
+                        casco TEXT DEFAULT '',
+                        suela TEXT DEFAULT '',
+                        cambrellon TEXT DEFAULT '',
+                        cerco TEXT DEFAULT '',
+                        herradura TEXT DEFAULT '',
+                        landis TEXT DEFAULT '',
+                        espinazo TEXT DEFAULT '',
+                        firme TEXT DEFAULT '',
+                        tacon TEXT DEFAULT '',
+                        stein TEXT DEFAULT '',
+                        acabado TEXT DEFAULT '',
+                        cierre TEXT DEFAULT '',
+                        cantos TEXT DEFAULT '',
+                        plantilla TEXT DEFAULT '',
+                        transfer TEXT DEFAULT '',
+                        caja TEXT DEFAULT '',
+                        serigrafia TEXT DEFAULT '',
+                        bolsa TEXT DEFAULT '',
+                        soporte TEXT DEFAULT '',
+                        asadera TEXT DEFAULT '',
+                        papel_relleno TEXT DEFAULT '',
+                        colgante TEXT DEFAULT '',
+                        grabado_suela TEXT DEFAULT '',
+                        barranca TEXT DEFAULT '',
+                        comentarios TEXT DEFAULT '',
+                        realizo TEXT DEFAULT '',
+                        recibio TEXT DEFAULT '',
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ficha_tecnica_fotos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        modelo_id INTEGER NOT NULL REFERENCES modelos(id)
+                            ON DELETE CASCADE,
+                        tipo_foto TEXT NOT NULL CHECK(tipo_foto IN
+                            ('producto','tubo','chinela','talon','suela')),
+                        imagen BLOB,
+                        UNIQUE(modelo_id, tipo_foto)
+                    )
+                """)
+            else:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS fichas_tecnicas (
+                        modelo_id BIGINT PRIMARY KEY REFERENCES modelos(id),
+                        proyecto TEXT NOT NULL DEFAULT '',
+                        etapa TEXT NOT NULL DEFAULT 'MUESTRA',
+                        id_diseno TEXT NOT NULL DEFAULT '',
+                        ref_cliente TEXT NOT NULL DEFAULT '',
+                        color_nombre TEXT NOT NULL DEFAULT '',
+                        cintilla TEXT DEFAULT '',
+                        carnuza_chinela TEXT DEFAULT '',
+                        forro TEXT DEFAULT '',
+                        piel_corte_1 TEXT DEFAULT '',
+                        piel_corte_2 TEXT DEFAULT '',
+                        piel_corte_3 TEXT DEFAULT '',
+                        piel_corte_4 TEXT DEFAULT '',
+                        entretela_tubo TEXT DEFAULT '',
+                        entretela_chinela TEXT DEFAULT '',
+                        entretela_talon TEXT DEFAULT '',
+                        rebajado_tubo TEXT DEFAULT '',
+                        rebajado_chinela TEXT DEFAULT '',
+                        rebajado_talon TEXT DEFAULT '',
+                        bordado_tubo TEXT DEFAULT '',
+                        bordado_chinela TEXT DEFAULT '',
+                        bordado_calzador TEXT DEFAULT '',
+                        bordado_oreja TEXT DEFAULT '',
+                        bordado_logo TEXT DEFAULT '',
+                        hilo_bordado_tubo TEXT DEFAULT '',
+                        hilo_bordado_chinela TEXT DEFAULT '',
+                        hilo_bordado_calzador TEXT DEFAULT '',
+                        hilo_bordado_oreja TEXT DEFAULT '',
+                        hilo_logo TEXT DEFAULT '',
+                        hilo_armado TEXT DEFAULT '',
+                        hilo_sobrecostura TEXT DEFAULT '',
+                        vivo TEXT DEFAULT '',
+                        ribete TEXT DEFAULT '',
+                        estoperol TEXT DEFAULT '',
+                        herraje TEXT DEFAULT '',
+                        acc_1 TEXT DEFAULT '',
+                        acc_2 TEXT DEFAULT '',
+                        acc_3 TEXT DEFAULT '',
+                        acc_4 TEXT DEFAULT '',
+                        puntera TEXT DEFAULT '',
+                        planta TEXT DEFAULT '',
+                        contrafuerte TEXT DEFAULT '',
+                        casco TEXT DEFAULT '',
+                        suela TEXT DEFAULT '',
+                        cambrellon TEXT DEFAULT '',
+                        cerco TEXT DEFAULT '',
+                        herradura TEXT DEFAULT '',
+                        landis TEXT DEFAULT '',
+                        espinazo TEXT DEFAULT '',
+                        firme TEXT DEFAULT '',
+                        tacon TEXT DEFAULT '',
+                        stein TEXT DEFAULT '',
+                        acabado TEXT DEFAULT '',
+                        cierre TEXT DEFAULT '',
+                        cantos TEXT DEFAULT '',
+                        plantilla TEXT DEFAULT '',
+                        transfer TEXT DEFAULT '',
+                        caja TEXT DEFAULT '',
+                        serigrafia TEXT DEFAULT '',
+                        bolsa TEXT DEFAULT '',
+                        soporte TEXT DEFAULT '',
+                        asadera TEXT DEFAULT '',
+                        papel_relleno TEXT DEFAULT '',
+                        colgante TEXT DEFAULT '',
+                        grabado_suela TEXT DEFAULT '',
+                        barranca TEXT DEFAULT '',
+                        comentarios TEXT DEFAULT '',
+                        realizo TEXT DEFAULT '',
+                        recibio TEXT DEFAULT '',
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS ficha_tecnica_fotos (
+                        id BIGSERIAL PRIMARY KEY,
+                        modelo_id BIGINT NOT NULL REFERENCES modelos(id)
+                            ON DELETE CASCADE,
+                        tipo_foto TEXT NOT NULL CHECK(tipo_foto IN
+                            ('producto','tubo','chinela','talon','suela')),
+                        imagen BYTEA,
+                        UNIQUE(modelo_id, tipo_foto)
+                    )
+                """)
             conn.commit()
-            print("Migración: tablas de ficha técnica creadas.")
         except Exception as e:
-            print(f"Migración ficha técnica omitida: {e}")
+            print(f"Migración fichas_tecnicas omitida: {e}")
+
+    def _migrar_movimientos_inventario(self) -> None:
+        """Garantiza las tablas de movimientos de inventario multi-partida."""
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            if self.engine == 'sqlite':
+                tablas = {r[0] for r in cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+            else:
+                tablas = {r[0] for r in cursor.execute(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public'").fetchall()}
+            if 'movimientos_inventario' not in tablas:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS movimientos_inventario (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        folio TEXT NOT NULL UNIQUE,
+                        tipo_movimiento TEXT NOT NULL
+                            CHECK(tipo_movimiento IN ('salida','cambio_ubicacion')),
+                        observaciones TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """)
+            if 'detalle_movimiento_inventario' not in tablas:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS detalle_movimiento_inventario (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        movimiento_id INTEGER NOT NULL
+                            REFERENCES movimientos_inventario(id),
+                        insumo_id INTEGER NOT NULL REFERENCES insumos(id),
+                        cantidad REAL NOT NULL,
+                        observaciones TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """)
+            conn.commit()
+        except Exception as e:
+            print(f"Migración movimientos_inventario omitida: {e}")
 
     def _migrar_tallas_unificadas(self) -> None:
         """RD-1: fusiona `puntos_catalogo` + `tallas_corrida` en `tallas_catalogo`.
@@ -803,3 +1051,42 @@ class DatabaseManager:
                 print(f"Migración: {migradas} contraseña(s) migradas a bcrypt.")
         except Exception as e:
             print(f"Migración de contraseñas omitida: {e}")
+        self._migrar_configuracion_empresa()
+
+    def _migrar_configuracion_empresa(self) -> None:
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            if self.engine == 'sqlite':
+                tablas = {r[0] for r in cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()}
+            else:
+                tablas = {r[0] for r in cursor.execute(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema='public'"
+                ).fetchall()}
+            if 'configuracion_empresa' not in tablas:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS configuracion_empresa (
+                        clave TEXT PRIMARY KEY,
+                        valor TEXT NOT NULL DEFAULT '',
+                        tipo TEXT NOT NULL DEFAULT 'texto',
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                """)
+                for clave, valor, tipo in (
+                    ('nombre_empresa', '', 'texto'),
+                    ('razon_social', '', 'texto'),
+                    ('logo', '', 'imagen'),
+                    ('video_splash', '', 'archivo'),
+                ):
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO configuracion_empresa "
+                        "(clave, valor, tipo) VALUES (?, ?, ?)",
+                        (clave, valor, tipo),
+                    )
+                conn.commit()
+                print("Migración: tabla configuracion_empresa creada.")
+        except Exception as e:
+            print(f"Migración configuracion_empresa omitida: {e}")

@@ -59,7 +59,9 @@ class TestMembrete:
 
     def test_reporte_conserva_marca_y_totales(self):
         html = _oc_receipt_html(_datos(), _detalle())
-        assert "GORETTI" in html
+        # La marca viene de _nombre_empresa() (BD o fallback)
+        from src.utils.export_utils import _nombre_empresa
+        assert _nombre_empresa().upper() in html
         assert "RECIBO DE COMPRA" in html
         # 6*25.5 + 4*30 = 153 + 120 = 273 de subtotal
         assert "$273.00" in html

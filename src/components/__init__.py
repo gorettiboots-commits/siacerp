@@ -142,3 +142,16 @@ registrar_componente(
     "captura al salir del campo. Incluye InstaladorHistorico para aplicarlo a "
     "todo el sistema.",
 )
+
+from src.components.notificacion_flotante import (  # noqa: E402
+    NotificacionesFlotantes, notificar_flotante,
+)
+
+registrar_componente(
+    "notificacion_flotante",
+    NotificacionesFlotantes,
+    "Notificaciones flotantes (toasts): tarjetas que se apilan en una esquina "
+    "de la ventana activa u host fijo, con tipos info/success/warning/error, "
+    "cierre automático o manual, animación y callback al hacer clic. Incluye "
+    "la función singleton notificar_flotante para uso directo.",
+)

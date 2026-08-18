@@ -212,6 +212,23 @@ CREATE TABLE IF NOT EXISTS movimiento_inventario (
     FOREIGN KEY (insumo_id) REFERENCES insumos(id)
 );
 
+CREATE TABLE IF NOT EXISTS movimientos_inventario (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio TEXT NOT NULL UNIQUE,
+    tipo_movimiento TEXT NOT NULL CHECK(tipo_movimiento IN ('salida','cambio_ubicacion')),
+    observaciones TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS detalle_movimiento_inventario (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    movimiento_id INTEGER NOT NULL REFERENCES movimientos_inventario(id),
+    insumo_id INTEGER NOT NULL REFERENCES insumos(id),
+    cantidad REAL NOT NULL,
+    observaciones TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- -----------------------------------------------------------
 -- 2.2 PROGRAMACIÓN SEMANAL
 -- El folio_prog es el folio de programación asignado en el
@@ -500,51 +517,142 @@ CREATE TABLE IF NOT EXISTS historico_campos (
     UNIQUE (campo, valor)
 );
 
-CREATE INDEX IF NOT EXISTS idx_historico_campos_campo ON historico_campos (campo);
+-- -----------------------------------------------------------
+-- Configuración general del sistema (clave/valor)
+-- Preferencias de la aplicación gestionadas desde la sección
+-- de Configuración, por ejemplo la impresora virtual SIAC.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS configuracion_sistema (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- -----------------------------------------------------------
--- Ficha técnica / boletos técnicos (kardex) por modelo
--- Amplía modelos/variantes/lista_materiales SIN modificarlos.
+-- Histórico de etiquetas impresas desde la cola de impresión
+-- Las solicitudes llegan de la app móvil (vía Supabase) a la
+-- cola. Al imprimirse salen de la cola y quedan aquí para
+-- reimpresión. Las reimpresiones cuentan en `reimpresiones`.
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS impresiones_historico (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supabase_id TEXT,
+    tipo TEXT NOT NULL DEFAULT 'partidas',
+    payload TEXT NOT NULL,
+    solicitado_en TEXT,
+    impreso_en TEXT NOT NULL DEFAULT (datetime('now')),
+    usuario TEXT,
+    reimpresiones INTEGER NOT NULL DEFAULT 0
+);
+
+-- -----------------------------------------------------------
+-- Ficha técnica por modelo ("Hoja de especificación de diseño")
+-- Campos de característica en texto libre, como en la plantilla
+-- Ficha tecnica.xlsx (RD aprobada). Una fila por modelo.
 -- -----------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS fichas_tecnicas (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    modelo_id INTEGER NOT NULL REFERENCES modelos(id),
-    estilo_sistema TEXT,
-    estilo_muestra TEXT,
-    marca TEXT,
-    talla TEXT,
-    genero TEXT,
-    horma TEXT,
-    moldura TEXT,
-    construccion TEXT,
-    corrida TEXT,
-    scallop TEXT,
-    tacon TEXT,
-    notas TEXT,
-    imagen BLOB,
-    fuente_archivo TEXT,
-    activo INTEGER NOT NULL DEFAULT 1,
+    modelo_id INTEGER PRIMARY KEY REFERENCES modelos(id),
+    proyecto TEXT NOT NULL DEFAULT '',
+    etapa TEXT NOT NULL DEFAULT 'MUESTRA',
+    id_diseno TEXT NOT NULL DEFAULT '',
+    ref_cliente TEXT NOT NULL DEFAULT '',
+    color_nombre TEXT NOT NULL DEFAULT '',
+    cintilla TEXT DEFAULT '',
+    carnuza_chinela TEXT DEFAULT '',
+    forro TEXT DEFAULT '',
+    piel_corte_1 TEXT DEFAULT '',
+    piel_corte_2 TEXT DEFAULT '',
+    piel_corte_3 TEXT DEFAULT '',
+    piel_corte_4 TEXT DEFAULT '',
+    entretela_tubo TEXT DEFAULT '',
+    entretela_chinela TEXT DEFAULT '',
+    entretela_talon TEXT DEFAULT '',
+    rebajado_tubo TEXT DEFAULT '',
+    rebajado_chinela TEXT DEFAULT '',
+    rebajado_talon TEXT DEFAULT '',
+    bordado_tubo TEXT DEFAULT '',
+    bordado_chinela TEXT DEFAULT '',
+    bordado_calzador TEXT DEFAULT '',
+    bordado_oreja TEXT DEFAULT '',
+    bordado_logo TEXT DEFAULT '',
+    hilo_bordado_tubo TEXT DEFAULT '',
+    hilo_bordado_chinela TEXT DEFAULT '',
+    hilo_bordado_calzador TEXT DEFAULT '',
+    hilo_bordado_oreja TEXT DEFAULT '',
+    hilo_logo TEXT DEFAULT '',
+    hilo_armado TEXT DEFAULT '',
+    hilo_sobrecostura TEXT DEFAULT '',
+    vivo TEXT DEFAULT '',
+    ribete TEXT DEFAULT '',
+    estoperol TEXT DEFAULT '',
+    herraje TEXT DEFAULT '',
+    acc_1 TEXT DEFAULT '',
+    acc_2 TEXT DEFAULT '',
+    acc_3 TEXT DEFAULT '',
+    acc_4 TEXT DEFAULT '',
+    puntera TEXT DEFAULT '',
+    planta TEXT DEFAULT '',
+    contrafuerte TEXT DEFAULT '',
+    casco TEXT DEFAULT '',
+    suela TEXT DEFAULT '',
+    cambrellon TEXT DEFAULT '',
+    cerco TEXT DEFAULT '',
+    herradura TEXT DEFAULT '',
+    landis TEXT DEFAULT '',
+    espinazo TEXT DEFAULT '',
+    firme TEXT DEFAULT '',
+    tacon TEXT DEFAULT '',
+    stein TEXT DEFAULT '',
+    acabado TEXT DEFAULT '',
+    cierre TEXT DEFAULT '',
+    cantos TEXT DEFAULT '',
+    plantilla TEXT DEFAULT '',
+    transfer TEXT DEFAULT '',
+    caja TEXT DEFAULT '',
+    serigrafia TEXT DEFAULT '',
+    bolsa TEXT DEFAULT '',
+    soporte TEXT DEFAULT '',
+    asadera TEXT DEFAULT '',
+    papel_relleno TEXT DEFAULT '',
+    colgante TEXT DEFAULT '',
+    grabado_suela TEXT DEFAULT '',
+    barranca TEXT DEFAULT '',
+    comentarios TEXT DEFAULT '',
+    realizo TEXT DEFAULT '',
+    recibio TEXT DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Fotos de la ficha técnica: producto terminado, tubo, chinela,
+-- talón y suela. Una imagen por modelo × tipo.
+CREATE TABLE IF NOT EXISTS ficha_tecnica_fotos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    modelo_id INTEGER NOT NULL REFERENCES modelos(id) ON DELETE CASCADE,
+    tipo_foto TEXT NOT NULL CHECK(tipo_foto IN ('producto','tubo','chinela','talon','suela')),
+    imagen BLOB,
+    UNIQUE(modelo_id, tipo_foto),
     FOREIGN KEY (modelo_id) REFERENCES modelos(id)
 );
 
-CREATE TABLE IF NOT EXISTS ficha_tecnica_secciones (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ficha_id INTEGER NOT NULL REFERENCES fichas_tecnicas(id),
-    nombre TEXT NOT NULL,
-    orden INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (ficha_id) REFERENCES fichas_tecnicas(id)
+CREATE INDEX IF NOT EXISTS idx_historico_campos_campo ON historico_campos (campo);
+
+-- -----------------------------------------------------------
+-- 11. CONFIGURACIÓN DE EMPRESA
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS configuracion_empresa (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL DEFAULT '',
+    tipo TEXT NOT NULL DEFAULT 'texto',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS ficha_tecnica_detalle (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    seccion_id INTEGER NOT NULL REFERENCES ficha_tecnica_secciones(id),
-    componente TEXT,
-    descripcion TEXT,
-    proveedor TEXT,
-    comentarios TEXT,
-    orden INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (seccion_id) REFERENCES ficha_tecnica_secciones(id)
-);
+INSERT OR IGNORE INTO configuracion_empresa (clave, valor, tipo) VALUES
+    ('nombre_empresa', '', 'texto'),
+    ('razon_social', '', 'texto'),
+    ('logo', '', 'imagen'),
+    ('video_splash', '', 'archivo');

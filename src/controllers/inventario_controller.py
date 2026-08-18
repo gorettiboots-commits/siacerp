@@ -1,8 +1,11 @@
 from src.models.catalogos_model import ColoresModel, TallasModel
+from src.models.ficha_tecnica_model import FichaTecnicaModel
 from src.models.inventario_model import (
     InsumoModel, ListaMaterialesModel, MovimientoInventarioModel,
 )
+from src.models.movimiento_inventario_model import MovimientoInventarioGrupoModel
 from src.models.orden_compra_model import UnidadesMedidaModel
+from src.utils.folios import siguiente_folio
 from src.utils.logs import registrar_log
 
 
@@ -11,9 +14,11 @@ class InventarioController:
         self.insumo_model = InsumoModel()
         self.bom_model = ListaMaterialesModel()
         self.mov_model = MovimientoInventarioModel()
+        self.mov_grupo_model = MovimientoInventarioGrupoModel()
         self.unidades_model = UnidadesMedidaModel()
         self.tallas_model = TallasModel()
         self.colores_model = ColoresModel()
+        self.ficha_model = FichaTecnicaModel()
 
     def existe_codigo_insumo(self, codigo: str) -> bool:
         return self.insumo_model.existe_codigo(codigo)
@@ -141,3 +146,120 @@ class InventarioController:
                              "referencia_tipo": ref_tipo, "referencia_id": ref_id,
                              "observaciones": obs})
         return result
+
+    def listar_kardex(self, insumo_id: int) -> list[dict]:
+        """Movimientos del insumo con saldo acumulado para el kardex."""
+        movimientos = self.mov_model.listar_kardex(insumo_id)
+        saldo = 0.0
+        for m in movimientos:
+            signo = m.get("cantidad", 0) if m.get("tipo_movimiento") == "entrada" else -m.get("cantidad", 0)
+            saldo += signo
+            m["entrada"] = m.get("cantidad", 0) if m.get("tipo_movimiento") == "entrada" else 0
+            m["salida"] = m.get("cantidad", 0) if m.get("tipo_movimiento") != "entrada" else 0
+            m["saldo"] = round(saldo, 4)
+        return movimientos
+
+    def obtener_ficha(self, modelo_id: int) -> dict | None:
+        return self.ficha_model.obtener(modelo_id)
+
+    def guardar_ficha(self, modelo_id: int, datos: dict) -> None:
+        self.ficha_model.guardar(modelo_id, datos)
+        registrar_log("inventario", "editar", "ficha_tecnica", modelo_id,
+                      datos={"modelo_id": modelo_id})
+
+    def obtener_foto_ficha(self, modelo_id: int, tipo_foto: str) -> bytes | None:
+        return self.ficha_model.obtener_foto(modelo_id, tipo_foto)
+
+    def guardar_foto_ficha(self, modelo_id: int, tipo_foto: str,
+                           imagen: bytes | None) -> None:
+        self.ficha_model.guardar_foto(modelo_id, tipo_foto, imagen)
+        registrar_log("inventario", "editar", "foto_ficha", modelo_id,
+                       datos={"modelo_id": modelo_id, "tipo_foto": tipo_foto,
+                              "imagen": bool(imagen)})
+
+    def valores_historicos_ficha(self, columna: str) -> list[str]:
+        """Valores ya capturados en *columna* por otros modelos."""
+        return self.ficha_model.valores_historicos(columna)
+
+    def insumos_activos(self) -> list[dict]:
+        """Catálogo de insumos activos."""
+        return self.ficha_model.insumos_activos()
+
+    def agregar_insumo_a_lista(self, modelo_id: int, insumo_id: int) -> bool:
+        """Agrega insumo a la lista de materiales del modelo si no existía.
+
+        Registra con cantidad_por_par = 0 (se ajusta después desde BOM).
+        Devuelve True si insertó, False si ya existía la relación.
+        """
+        resultado = self.bom_model.agregar(modelo_id, insumo_id)
+        if resultado:
+            registrar_log("inventario", "crear", "lista_materiales", insumo_id,
+                           datos={"modelo_id": modelo_id, "insumo_id": insumo_id})
+        return resultado
+
+    # ------------------------------------------------------------------
+    # Movimientos de inventario multi-partida
+    # ------------------------------------------------------------------
+
+    def registrar_movimiento_grupo(self, tipo: str, observaciones: str,
+                                   partidas: list[dict]) -> int:
+        """Registra un grupo de movimientos multi-partida.
+
+        Valida stock, genera folio, guarda header + detail, inserta filas
+        en ``movimiento_inventario`` (kardex) y actualiza stock de cada
+        insumo.
+
+        Parameters
+        ----------
+        tipo : str
+            'salida' o 'cambio_ubicacion'.
+        observaciones : str
+            Observaciones generales del movimiento.
+        partidas : list[dict]
+            Cada dict: ``{insumo_id, cantidad, observaciones?}``.
+
+        Returns
+        -------
+        int
+            ID del grupo creado.
+        """
+        if not partidas:
+            raise ValueError("Debe agregar al menos una partida.")
+        for p in partidas:
+            cant = float(p.get('cantidad', 0) or 0)
+            if cant <= 0:
+                raise ValueError("Cada partida debe tener cantidad mayor a 0.")
+            if tipo == 'salida':
+                ins = self.insumo_model.obtener(p['insumo_id'])
+                if ins and ins.get('stock_actual', 0) < cant:
+                    raise ValueError(
+                        f"Stock insuficiente para '{ins.get('nombre', '')}': "
+                        f"disponible {ins['stock_actual']}, solicitado {cant}.")
+
+        folio = siguiente_folio('movimientos_inventario', 'folio', 'MVI')
+        mov_id = self.mov_grupo_model.registrar_grupo(
+            folio, tipo, observaciones, partidas)
+
+        for p in partidas:
+            cant = float(p.get('cantidad', 0) or 0)
+            self.mov_model.registrar(
+                p['insumo_id'], tipo, cant,
+                ref_tipo='movimiento', ref_id=mov_id,
+                obs=folio,
+            )
+            self.insumo_model.actualizar_stock(p['insumo_id'], -cant)
+
+        registrar_log("inventario", "movimiento_grupo", "movimiento",
+                      mov_id, datos={
+                          "folio": folio, "tipo": tipo,
+                          "partidas": len(partidas),
+                          "observaciones": observaciones})
+        return mov_id
+
+    def obtener_grupo_movimiento(self, movimiento_id: int) -> dict | None:
+        """Obtiene un grupo de movimientos con su detalle."""
+        return self.mov_grupo_model.obtener_grupo(movimiento_id)
+
+    def listar_grupos_movimientos(self, limite: int = 200) -> list[dict]:
+        """Lista grupos de movimientos (más recientes primero)."""
+        return self.mov_grupo_model.listar_grupos(limite)
