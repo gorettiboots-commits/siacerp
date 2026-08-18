@@ -2,12 +2,13 @@ from PySide6.QtCore import QBuffer, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
-    QDateEdit, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
+    QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
     QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.date_picker import DatePicker
 from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
@@ -248,9 +249,22 @@ class DialogInsumo(QDialog):
         for i, c in enumerate(colores):
             chk = QCheckBox(f"{c['nombre']} ({c['codigo']})")
             chk.setChecked(True)
+            chk.toggled.connect(self._regenerar_variantes)
             self._color_checks.append((chk, c["codigo"]))
             grid.addWidget(chk, i // 3, i % 3)
         fc.addLayout(grid)
+
+        sel_col = QHBoxLayout()
+        btn_gen_col = QPushButton("Generar")
+        btn_gen_col.setObjectName("btnPrimary")
+        btn_gen_col.clicked.connect(self._regenerar_variantes)
+        sel_col.addWidget(btn_gen_col)
+        btn_limpiar_col = QPushButton("Limpiar")
+        btn_limpiar_col.setObjectName("btnSecondary")
+        btn_limpiar_col.clicked.connect(self._limpiar_variantes)
+        sel_col.addWidget(btn_limpiar_col)
+        sel_col.addStretch()
+        fc.addLayout(sel_col)
 
         layout.addWidget(self.frame_colores)
         self.frame_colores.setVisible(False)
@@ -320,7 +334,7 @@ class DialogInsumo(QDialog):
             self._update_count()
             return
         tallas = self._tallas_seleccionadas()
-        colores = self._colores_seleccionadas()
+        colores = self._colores_seleccionados()
         if tallas and colores:
             codigos = [f"{base}-{t}-{c}" for t in tallas for c in colores]
         elif tallas:
@@ -443,7 +457,7 @@ class DialogMovimientoStock(QDialog):
         form = QFormLayout()
         form.setSpacing(12)
 
-        self.cmb_insumo = QComboBox()
+        self.cmb_insumo = SearchableComboBox(placeholder="Buscar insumo…")
         insumos = self.controller.listar_insumos()
         for ins in insumos:
             self.cmb_insumo.addItem(f"{ins['codigo']} - {ins['nombre']}", ins["id"])
@@ -496,6 +510,163 @@ class DialogMovimientoStock(QDialog):
                 return
         self.controller.registrar_movimiento(insumo_id, tipo, cantidad, obs=obs)
         self.accept()
+
+
+class DialogMovimientoMultiPartida(QDialog):
+    """Dialogo para crear movimientos de inventario multi-partida.
+
+    Permite agregar 1 a N insumos en un solo movimiento (salida o
+    cambio de ubicacion). Genera un folio MVI-XXXX y el documento
+    de movimiento asociado.
+    """
+
+    def __init__(self, controller: InventarioController,
+                 insumo_id: int | None = None) -> None:
+        super().__init__()
+        self.controller = controller
+        self.setWindowTitle("Movimiento de Inventario")
+        self.setMinimumSize(700, 450)
+        self.setModal(True)
+        self._insumo_inicial = insumo_id
+        self._setup_ui()
+        if insumo_id:
+            self._agregar_fila(insumo_id)
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        top = QHBoxLayout()
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        self.cmb_tipo = QComboBox()
+        self.cmb_tipo.addItems(["salida", "cambio_ubicacion"])
+        form.addRow(QLabel("Tipo:"), self.cmb_tipo)
+
+        self.txt_obs = QTextEdit()
+        self.txt_obs.setPlaceholderText(
+            "Observaciones generales del movimiento (opcional)")
+        self.txt_obs.setMaximumHeight(60)
+        form.addRow(QLabel("Observaciones:"), self.txt_obs)
+        top.addLayout(form)
+        top.addStretch()
+        layout.addLayout(top)
+
+        self.tabla = QTableWidget(0, 4)
+        self.tabla.setHorizontalHeaderLabels(
+            ["Insumo", "Cantidad", "Observaciones", ""])
+        self.tabla.horizontalHeader().setStretchLastSection(True)
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeToContents)
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.Stretch)
+        self.tabla.setColumnWidth(1, 100)
+        self.tabla.setSelectionBehavior(
+            QAbstractItemView.SelectRows)
+        self.tabla.setSelectionMode(QAbstractItemView.SingleSelection)
+        layout.addWidget(self.tabla)
+
+        btns_row = QHBoxLayout()
+        btn_agregar = QPushButton("+ Agregar insumo")
+        btn_agregar.setObjectName("btnPrimary")
+        btn_agregar.clicked.connect(self._agregar_fila_vacia)
+        btn_quitar = QPushButton("Quitar seleccionado")
+        btn_quitar.setObjectName("btnDanger")
+        btn_quitar.clicked.connect(self._quitar_fila)
+        btns_row.addWidget(btn_agregar)
+        btns_row.addWidget(btn_quitar)
+        btns_row.addStretch()
+        layout.addLayout(btns_row)
+
+        botones = QHBoxLayout()
+        botones.addStretch()
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_save = QPushButton("Registrar Movimiento")
+        btn_save.setObjectName("btnPrimary")
+        btn_save.clicked.connect(self._save)
+        botones.addWidget(btn_cancel)
+        botones.addWidget(btn_save)
+        layout.addLayout(botones)
+
+    def _agregar_fila(self, insumo_id: int | None = None) -> None:
+        fila = self.tabla.rowCount()
+        self.tabla.insertRow(fila)
+
+        cmb = QComboBox()
+        insumos = self.controller.listar_insumos()
+        idx_sel = 0
+        for i, ins in enumerate(insumos):
+            texto = f"{ins['codigo']} - {ins['nombre']}  (stock: {ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')})"
+            cmb.addItem(texto, ins["id"])
+            if insumo_id and ins["id"] == insumo_id:
+                idx_sel = i
+        cmb.setCurrentIndex(idx_sel)
+        self.tabla.setCellWidget(fila, 0, cmb)
+
+        spn = QDoubleSpinBox()
+        spn.setRange(0.01, 999999)
+        spn.setDecimals(2)
+        spn.setValue(1)
+        spn.setAlignment(Qt.AlignRight)
+        self.tabla.setCellWidget(fila, 1, spn)
+
+        txt = QLineEdit()
+        txt.setPlaceholderText("Observacion de la partida")
+        self.tabla.setCellWidget(fila, 2, txt)
+
+    def _agregar_fila_vacia(self) -> None:
+        self._agregar_fila(None)
+
+    def _quitar_fila(self) -> None:
+        fila = self.tabla.currentRow()
+        if fila >= 0:
+            self.tabla.removeRow(fila)
+
+    def _save(self) -> None:
+        tipo = self.cmb_tipo.currentText()
+        obs = self.txt_obs.toPlainText().strip()
+        partidas = []
+        for fila in range(self.tabla.rowCount()):
+            cmb = self.tabla.cellWidget(fila, 0)
+            spn = self.tabla.cellWidget(fila, 1)
+            txt = self.tabla.cellWidget(fila, 2)
+            insumo_id = cmb.currentData() if cmb else None
+            cantidad = spn.value() if spn else 0
+            obs_item = txt.text().strip() if txt else ""
+            if insumo_id is None:
+                QMessageBox.warning(
+                    self, "Error",
+                    f"Fila {fila + 1}: seleccione un insumo.")
+                return
+            if cantidad <= 0:
+                QMessageBox.warning(
+                    self, "Error",
+                    f"Fila {fila + 1}: la cantidad debe ser mayor a 0.")
+                return
+            partidas.append({
+                "insumo_id": insumo_id,
+                "cantidad": cantidad,
+                "observaciones": obs_item,
+            })
+        if not partidas:
+            QMessageBox.warning(
+                self, "Error", "Debe agregar al menos una partida.")
+            return
+        try:
+            self._mov_id = self.controller.registrar_movimiento_grupo(
+                tipo, obs, partidas)
+        except ValueError as e:
+            QMessageBox.warning(self, "Error", str(e))
+            return
+        self.accept()
+
+    def obtener_movimiento_id(self) -> int | None:
+        return getattr(self, '_mov_id', None)
 
 
 class DialogProveedor(QDialog):
@@ -694,7 +865,7 @@ class DialogMatrizTallas(QDialog):
         super().__init__()
         self.controller = controller
         self.setWindowTitle("Matriz de Tallas")
-        self.setMinimumSize(620, 420)
+        self.setMinimumSize(720, 620)
         self.setModal(True)
         self._matriz = dict(inicial or {})
         self._precios = dict(precios_iniciales or {})
@@ -745,8 +916,18 @@ class DialogMatrizTallas(QDialog):
                 fila_layout.setContentsMargins(0, 0, 0, 0)
         if cols % 2 != 0:
             filas.append(fila)
+        contenedor_filas = QWidget()
+        contenedor_filas_layout = QVBoxLayout(contenedor_filas)
+        contenedor_filas_layout.setContentsMargins(0, 0, 0, 0)
+        contenedor_filas_layout.setSpacing(8)
         for f in filas:
-            layout.addWidget(f)
+            contenedor_filas_layout.addWidget(f)
+        scroll_filas = QScrollArea()
+        scroll_filas.setWidgetResizable(True)
+        scroll_filas.setWidget(contenedor_filas)
+        scroll_filas.setMinimumHeight(340)
+        scroll_filas.setMaximumHeight(500)
+        layout.addWidget(scroll_filas, 1)
 
         corrida_box = QGroupBox("Corrida rápida de tallas")
         corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
@@ -1531,6 +1712,18 @@ class DialogModelo(QDialog):
             grid.addWidget(chk, i // 3, i % 3)
         fc.addLayout(grid)
 
+        sel_col = QHBoxLayout()
+        btn_gen_col = QPushButton("Generar")
+        btn_gen_col.setObjectName("btnPrimary")
+        btn_gen_col.clicked.connect(self._regenerar_variantes)
+        sel_col.addWidget(btn_gen_col)
+        btn_limpiar_col = QPushButton("Limpiar")
+        btn_limpiar_col.setObjectName("btnSecondary")
+        btn_limpiar_col.clicked.connect(self._limpiar_variantes)
+        sel_col.addWidget(btn_limpiar_col)
+        sel_col.addStretch()
+        fc.addLayout(sel_col)
+
         layout.addWidget(self.frame_colores)
         self.frame_colores.setVisible(False)
 
@@ -1920,14 +2113,9 @@ class DialogOrdenProduccion(QDialog):
                 v["id"],
             )
 
-        self.dte_inicio = QDateEdit()
-        self.dte_inicio.setCalendarPopup(True)
         from PySide6.QtCore import QDate
-        self.dte_inicio.setDate(QDate.currentDate())
-
-        self.dte_entrega = QDateEdit()
-        self.dte_entrega.setCalendarPopup(True)
-        self.dte_entrega.setDate(QDate.currentDate().addDays(7))
+        self.dte_inicio = DatePicker()
+        self.dte_entrega = DatePicker(QDate.currentDate().addDays(7))
 
         self.cmb_prioridad = QComboBox()
         self.cmb_prioridad.addItems(["baja", "normal", "alta", "urgente"])
@@ -2031,8 +2219,8 @@ class DialogOrdenProduccion(QDialog):
 
         self.controller.crear_op(
             folio, self.cmb_variante.currentData(), matriz,
-            self.dte_inicio.date().toString("yyyy-MM-dd"),
-            self.dte_entrega.date().toString("yyyy-MM-dd"),
+            self.dte_inicio.fecha_bd(),
+            self.dte_entrega.fecha_bd(),
             self.cmb_prioridad.currentText(),
             self.txt_obs.toPlainText().strip(),
         )
@@ -2196,3 +2384,189 @@ class DialogAvanceEstacion(QDialog):
             procesados, defectuosos, self.txt_obs.toPlainText().strip(),
         )
         self.accept()
+
+
+class DialogFichaTecnica(QDialog):
+    """Edición e impresión de la ficha técnica de un modelo.
+
+    Muestra el encabezado (proyecto, etapa, ID, ref. cliente, color), los
+    campos de característica agrupados por sección y las fotos de las piezas.
+    El guardado persiste la ficha y sus fotos en la BD.
+    """
+
+    def __init__(self, controller: InventarioController,
+                 produccion_controller: ProduccionController,
+                 modelo_id: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.produccion_controller = produccion_controller
+        self.modelo_id = modelo_id
+        self.modelo = self.produccion_controller.obtener_modelo(modelo_id) or {}
+        self.setWindowTitle(f"Ficha técnica - {self.modelo.get('codigo', '')} {self.modelo.get('nombre', '')}".strip())
+        self.setMinimumSize(720, 600)
+        self.setModal(True)
+        self._setup_ui()
+        self._load_data()
+
+    def _setup_ui(self) -> None:
+        from src.models.ficha_tecnica_model import CAMPOS_ENCABEZADO, CAMPOS_FICHA, TIPOS_FOTO
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        contenido = QWidget()
+        cl = QVBoxLayout(contenido)
+        cl.setSpacing(12)
+
+        # Encabezado
+        form = QFormLayout()
+        form.setSpacing(8)
+        self.campos_encabezado: dict[str, QLineEdit] = {}
+        for etiqueta, col in CAMPOS_ENCABEZADO:
+            edit = QLineEdit()
+            edit.setPlaceholderText(etiqueta)
+            self.campos_encabezado[col] = edit
+            form.addRow(QLabel(f"{etiqueta}:"), edit)
+        self.campos_encabezado["etapa"].setText("MUESTRA")
+        cl.addLayout(form)
+
+        # Características agrupadas en secciones (los campos de firmas y
+        # comentarios se manejan aparte en form_extra).
+        secciones = self._secciones()
+        self.campos_ficha: dict[str, QComboBox] = {}
+        columnas_ficha = {c: etiqueta for etiqueta, c in CAMPOS_FICHA}
+        campos_extra = {"comentarios", "realizo", "recibio"}
+
+        # Cargar catálogo de insumos una sola vez para poblar combos
+        insumos = self.controller.insumos_activos()
+
+        for titulo, columnas in secciones:
+            grupo = QGroupBox(titulo)
+            gform = QGridLayout(grupo)
+            gform.setSpacing(6)
+            for i, col in enumerate(columnas):
+                if col in campos_extra:
+                    continue
+                combo = QComboBox()
+                combo.setEditable(True)
+                combo.setInsertPolicy(QComboBox.NoInsert)
+                combo.setDuplicatesEnabled(False)
+                # Poblar con insumos activos: "nombre (código)"
+                for ins in insumos:
+                    etiqueta_ins = f"{ins['nombre']} ({ins['codigo']})"
+                    combo.addItem(etiqueta_ins, ins["id"])
+                # Agregar valores históricos de otros modelos
+                for val in self.controller.valores_historicos_ficha(col):
+                    if combo.findText(val) == -1:
+                        combo.addItem(val)
+                combo.setPlaceholderText(columnas_ficha.get(col, col))
+                self.campos_ficha[col] = combo
+                gform.addWidget(QLabel(f"{columnas_ficha.get(col, col)}:"), i, 0)
+                gform.addWidget(combo, i, 1)
+            cl.addWidget(grupo)
+
+        # Comentarios y firmas
+        form_extra = QFormLayout()
+        form_extra.setSpacing(8)
+        self.txt_comentarios = QTextEdit()
+        self.txt_comentarios.setMaximumHeight(70)
+        self.txt_comentarios.setPlaceholderText("Comentarios generales (opcional)")
+        self.campos_extra = {
+            "comentarios": self.txt_comentarios,
+        }
+        self.campos_extra_edits: dict[str, QLineEdit] = {}
+        for col in ("realizo", "recibio"):
+            edit = QLineEdit()
+            self.campos_extra_edits[col] = edit
+            form_extra.addRow(QLabel(f"{col.capitalize()}:"), edit)
+        form_extra.addRow("Comentarios:", self.txt_comentarios)
+        cl.addLayout(form_extra)
+
+        # Fotos de las piezas
+        fotos_box = QGroupBox("Fotos de las piezas")
+        fgrid = QGridLayout(fotos_box)
+        fgrid.setSpacing(8)
+        self.widgets_foto: dict[str, WidgetImagen] = {}
+        for i, (etiqueta, tipo) in enumerate(TIPOS_FOTO):
+            widget = WidgetImagen()
+            widget.lbl_preview.setText(f"Sin imagen\n({etiqueta})")
+            self.widgets_foto[tipo] = widget
+            fgrid.addWidget(QLabel(f"{etiqueta}:"), i, 0)
+            fgrid.addWidget(widget, i, 1)
+        cl.addWidget(fotos_box)
+
+        area.setWidget(contenido)
+        layout.addWidget(area)
+
+        # Botones
+        btns = QHBoxLayout()
+        btns.addStretch()
+        self.btn_imprimir = QPushButton("Imprimir")
+        self.btn_imprimir.setObjectName("btnSecondary")
+        self.btn_imprimir.clicked.connect(self._imprimir)
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_save = QPushButton("Guardar")
+        btn_save.setObjectName("btnPrimary")
+        btn_save.clicked.connect(self._save)
+        btns.addWidget(self.btn_imprimir)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_save)
+        layout.addLayout(btns)
+
+    def _secciones(self) -> list[tuple[str, list[str]]]:
+        from src.utils.ficha_tecnica_print import SECCIONES
+        return SECCIONES
+
+    def _load_data(self) -> None:
+        ficha = self.controller.obtener_ficha(self.modelo_id) or {}
+        for col, edit in self.campos_encabezado.items():
+            edit.setText(ficha.get(col, "") or "")
+        for col, combo in self.campos_ficha.items():
+            valor = ficha.get(col, "") or ""
+            idx = combo.findText(valor)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            else:
+                combo.setEditText(valor)
+        self.txt_comentarios.setPlainText(ficha.get("comentarios", "") or "")
+        for col, edit in self.campos_extra_edits.items():
+            edit.setText(ficha.get(col, "") or "")
+        for tipo, widget in self.widgets_foto.items():
+            widget.set_imagen(self.controller.obtener_foto_ficha(self.modelo_id, tipo))
+
+    def _save(self) -> None:
+        datos = {}
+        for col, edit in self.campos_encabezado.items():
+            datos[col] = edit.text().strip()
+        for col, combo in self.campos_ficha.items():
+            texto = combo.currentText().strip()
+            datos[col] = texto
+            # Si el usuario seleccionó un insumo del dropdown (tiene itemData),
+            # registrar en lista de materiales.
+            idx = combo.currentIndex()
+            if idx >= 0:
+                insumo_id = combo.itemData(idx)
+                if insumo_id is not None and texto:
+                    self.controller.agregar_insumo_a_lista(
+                        self.modelo_id, insumo_id)
+        datos["comentarios"] = self.txt_comentarios.toPlainText().strip()
+        for col, edit in self.campos_extra_edits.items():
+            datos[col] = edit.text().strip()
+        self.controller.guardar_ficha(self.modelo_id, datos)
+        for tipo, widget in self.widgets_foto.items():
+            self.controller.guardar_foto_ficha(self.modelo_id, tipo, widget.get_imagen())
+        QMessageBox.information(self, "Ficha técnica", "Ficha técnica guardada.")
+        self.accept()
+
+    def _imprimir(self) -> None:
+        from src.utils.ficha_tecnica_print import imprimir_ficha_tecnica
+        ficha = self.controller.obtener_ficha(self.modelo_id) or {}
+        fotos = {
+            tipo: self.controller.obtener_foto_ficha(self.modelo_id, tipo)
+            for tipo in ("producto", "tubo", "chinela", "talon", "suela")
+        }
+        imprimir_ficha_tecnica(self.modelo, ficha, fotos, self)
