@@ -141,6 +141,10 @@ class MainWindow(QMainWindow):
         archivo_menu.addAction(salir_action)
 
         ayuda_menu = menubar.addMenu("Ayuda")
+        self._logs_action = QAction("Logs del Sistema", self)
+        self._logs_action.triggered.connect(self._mostrar_logs)
+        ayuda_menu.addAction(self._logs_action)
+        ayuda_menu.addSeparator()
         acerca_action = QAction("Acerca de SIAC ERP", self)
         acerca_action.triggered.connect(self._mostrar_acerca)
         ayuda_menu.addAction(acerca_action)
@@ -156,6 +160,13 @@ class MainWindow(QMainWindow):
             return
         from src.views.configuracion_view import DialogConfiguracion
         dlg = DialogConfiguracion(self, self._permisos)
+        dlg.exec()
+
+    def _mostrar_logs(self) -> None:
+        if self._stack.currentWidget() != self._main_container:
+            return
+        from src.views.logs_view import DialogLogs
+        dlg = DialogLogs(self)
         dlg.exec()
 
     def _mostrar_acerca(self) -> None:
@@ -332,24 +343,47 @@ class MainWindow(QMainWindow):
         self.nav_sandbox = QToolButton()
         self.nav_sandbox.setObjectName("navTool")
         self.nav_sandbox.setText("Sandbox")
-        self.nav_sandbox.setIcon(mono_icon("sandbox", 26, "#EF7218"))
-        self.nav_sandbox.setIconSize(QSize(26, 26))
-        self.nav_sandbox.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        self.nav_sandbox.setCheckable(True)
-        self.nav_sandbox.setFixedSize(78, 52)
-        self.nav_sandbox.setCursor(Qt.PointingHandCursor)
+        _iconos_nav = {
+            "oc": ("navToolOC", "#2563eb"),
+            "produccion": ("navToolProduccion", "#7c3aed"),
+            "inventario": ("navToolInventario", "#0d9488"),
+            "clientes": ("navToolClientes", "#16a34a"),
+            "programacion": ("navToolProgramacion", "#ea580c"),
+            "sandbox": ("ToolSandbox", "#ca8a04"),
+        }
+        for clave, btn in [
+            ("oc", self.nav_ordenes),
+            ("produccion", self.nav_produccion),
+            ("inventario", self.nav_stock),
+            ("clientes", self.nav_clientes),
+            ("programacion", self.nav_programacion),
+            ("sandbox", self.nav_sandbox),
+        ]:
+            obj_name, color = _iconos_nav[clave]
+            btn.setObjectName(obj_name)
+            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            btn.setCheckable(True)
+            btn.setAutoExclusive(True)
+            btn.setFixedSize(78, 58)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setIcon(mono_icon(clave, 26, color))
+            btn.setIconSize(QSize(26, 26))
+            btn.toggled.connect(
+                lambda checked, b=btn, k=clave, c=color:
+                b.setIcon(mono_icon(k, 26, "#ffffff" if checked else c)))
+            lay.addWidget(btn)
+
         self.nav_sandbox.setVisible(False)
         self.nav_sandbox.clicked.connect(self._mostrar_sandbox)
-        lay.addWidget(self.nav_sandbox)
 
         self.nav_salir = QToolButton()
-        self.nav_salir.setObjectName("navTool")
-        self.nav_salir.setText("Salir")
-        self.nav_salir.setIcon(mono_icon("logout", 26, "#C93744"))
-        self.nav_salir.setIconSize(QSize(26, 26))
+        self.nav_salir.setText("Cerrar Sesión")
+        self.nav_salir.setObjectName("navToolSalir")
         self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        self.nav_salir.setFixedSize(78, 52)
+        self.nav_salir.setFixedSize(78, 58)
         self.nav_salir.setCursor(Qt.PointingHandCursor)
+        self.nav_salir.setIcon(mono_icon("logout", 26, "#dc2626"))
+        self.nav_salir.setIconSize(QSize(26, 26))
         self.nav_salir.clicked.connect(self._logout)
         lay.addWidget(self.nav_salir)
 
@@ -407,6 +441,9 @@ class MainWindow(QMainWindow):
             bool(self._current_user)
             and (tiene(self._permisos, "produccion", "ver")
                  or tiene(self._permisos, "programacion", "ver")))
+        self._logs_action.setVisible(
+            bool(self._current_user)
+            and self._current_user.get("rol") == "admin")
         self._view_ordenes.set_permisos(self._permisos)
         self._view_produccion.set_permisos(self._permisos)
         self._view_stock.set_permisos(self._permisos)
@@ -454,6 +491,7 @@ class MainWindow(QMainWindow):
         self._crear_etiqueta_action.setEnabled(False)
         self._imprimir_etiquetas_action.setEnabled(False)
         self._cola_impresion_action.setEnabled(False)
+        self._logs_action.setVisible(False)
         self._stack.setCurrentWidget(self._login_view)
         for w in self._stack.findChildren(LoginView):
             w.txt_user.clear()

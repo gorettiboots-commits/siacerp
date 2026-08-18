@@ -8,6 +8,7 @@ from src.views.sandbox_catalogo import CatalogoControles
 from src.views.sandbox_complex_grid import ComplexGridDemo
 from src.views.sandbox_controles import ControlesPreview
 from src.views.sandbox_editor_etiqueta import EditorEtiquetaPreview
+from src.views.sandbox_grid_hibrido import GridHibridoDemo
 from src.views.sandbox_notificaciones import NotificacionesDemo
 from src.views.sandbox_preview_impresion import PreviewImpresionDemo
 
@@ -41,6 +42,7 @@ class SandboxView(QWidget):
         tabs.addTab(CatalogoControles(self), "Catálogo de controles")
         tabs.addTab(self._crear_tab_componentes(), "Componentes")
         tabs.addTab(ControlesPreview(self), "Controles del sistema (prototipo)")
+        tabs.addTab(GridHibridoDemo(self), "Grid Híbrido (ComplexGrid + Controles)")
         tabs.addTab(EditorEtiquetaPreview(self), "Editor de etiquetas (prototipo)")
         layout.addWidget(tabs, 1)
 

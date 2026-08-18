@@ -24,6 +24,7 @@ OC_*.xlsx
 Ordenes_Compra.xlsx
 Movimientos_Inventario.xlsx
 *.pdf
+!Manual_Usuario_SIAC_ERP.pdf
 
 # Empaquetado PyInstaller
 build/
