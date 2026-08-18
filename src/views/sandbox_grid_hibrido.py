@@ -228,7 +228,7 @@ class GridHibridoDemo(QWidget):
             "Vista previa", mono_icon("ver", 26, PURPURA),
             self._vista_previa))
         lay.addWidget(_ToolBtn.crear(
-            "Exportar", mono_icon("excel", 26, VERDE),
+            "Exportar", mono_icon("exportar", 26, VERDE),
             self._exportar_excel))
         lay.addStretch()
 
@@ -340,7 +340,7 @@ class GridHibridoDemo(QWidget):
             claves=lambda r: [r["lote"], r["estilo"], r["linea"],
                               r["color"], r["pares"], r["estatus"]],
             tarjeta=lambda r: {
-                "tile": r["lote"][:2],
+                "tile": "inventario",
                 "icono": "inventario",
                 "color": _ESTILOS_MAP.get(r["estatus"], {}).get(
                     "fg", TEAL_OSCURO),
