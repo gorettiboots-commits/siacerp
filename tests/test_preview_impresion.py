@@ -158,7 +158,7 @@ class TestDemos:
         html = _reporte_oc_ejemplo_html()
         assert html.lstrip().startswith("<!DOCTYPE html>")
         assert "RECIBO DE COMPRA" in html
-        assert "SIAC ERP" in html or "GORETTI" in html
+        assert "GORETTI" in html
         assert "Gracias por su compra" in html
 
     def test_reporte_inventario_genera_html(self):

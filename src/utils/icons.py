@@ -3,15 +3,6 @@ from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 _TILES = {
-    "empresa": """
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-          <rect x="4" y="4" width="56" height="56" rx="14" fill="#7c3aed"/>
-          <path d="M20 44V22a2 2 0 0 1 2-2h20a2 2 0 0 1 2 2v22"
-                fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-          <path d="M16 44h32" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-          <rect x="28" y="14" width="8" height="6" rx="1" fill="#ffffff"/>
-          <path d="M28 32h8M28 38h8" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>
-        </svg>""",
     "unidades": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <rect x="4" y="4" width="56" height="56" rx="14" fill="#6366f1"/>
@@ -79,13 +70,6 @@ _TILES = {
           <path d="M20 24l-6 8 6 8M44 24l6 8-6 8" fill="none"
                 stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M37 16l-8 32" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
-        </svg>""",
-    "impresion": """
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-          <rect x="4" y="4" width="56" height="56" rx="14" fill="#0891b2"/>
-          <rect x="18" y="30" width="28" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="3"/>
-          <rect x="24" y="15" width="16" height="13" fill="none" stroke="#ffffff" stroke-width="3"/>
-          <path d="M24 30v8h16v-8M26 38v8h12v-8" fill="#0891b2" stroke="#ffffff" stroke-width="3"/>
         </svg>""",
 }
 
@@ -245,29 +229,6 @@ def _render_svg(svg: str, size: int) -> QPixmap:
 def tile_icon(key: str, size: int = 28) -> QIcon:
     icon = QIcon()
     icon.addPixmap(_render_svg(_TILES[key], size))
-    return icon
-
-
-def _cuerpo_svg(svg: str) -> str:
-    """Extrae el contenido interno de un SVG (sin el wrapper <svg>...</svg>)."""
-    inicio = svg.find(">") + 1
-    fin = svg.rfind("</svg>")
-    if inicio == 0 or fin == -1:
-        return svg
-    return svg[inicio:fin]
-
-
-def tile_icon_color(key: str, size: int = 16, color: str = "#4f46e5") -> QIcon:
-    """Tile de acción: glifo blanco sobre rectángulo de fondo con el color dado."""
-    glifo = _GLIFOS.get(key, _GLIFOS["mas"])
-    cuerpo = _cuerpo_svg(glifo).replace("#COLOR", "#ffffff")
-    svg = f"""
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-          <rect x="2" y="2" width="60" height="60" rx="14" fill="{color}"/>
-          {cuerpo}
-        </svg>"""
-    icon = QIcon()
-    icon.addPixmap(_render_svg(svg, size))
     return icon
 
 

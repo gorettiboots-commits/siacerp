@@ -2,7 +2,6 @@ from src.models.produccion_model import (
     EstacionModel, InventarioPTModel, ListaMaterialesModel, ModeloModel,
     OrdenProduccionModel, VarianteModel,
 )
-from src.models.ficha_tecnica_model import FichaTecnicaModel
 from src.models.orden_compra_model import UnidadesMedidaModel
 from src.utils.logs import registrar_log
 
@@ -16,7 +15,6 @@ class ProduccionController:
         self.pt_model = InventarioPTModel()
         self.estacion_model = EstacionModel()
         self.unidades_model = UnidadesMedidaModel()
-        self.ficha_model = FichaTecnicaModel()
 
     def listar_unidades(self) -> list[dict]:
         return self.unidades_model.listar()
@@ -65,10 +63,6 @@ class ProduccionController:
 
     def obtener_imagen_modelo(self, modelo_id: int) -> bytes | None:
         return self.modelo_model.obtener_imagen(modelo_id)
-
-    def obtener_ficha_tecnica(self, modelo_id: int) -> dict | None:
-        """Devuelve la ficha técnica completa de un modelo, si existe."""
-        return self.ficha_model.obtener_completa(modelo_id)
 
     def crear_modelo(self, codigo: str, nombre: str, descripcion: str = "",
                      imagen: bytes | None = None) -> int:

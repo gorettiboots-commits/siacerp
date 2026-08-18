@@ -1,21 +1,17 @@
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
+    QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QTabWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget,
+    QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.components.complex_grid import ComplexGrid
-from src.components.date_picker import DatePicker
-from src.components.notificacion_flotante import notificar_flotante
-from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget
+from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
-from src.utils.icons import mono_icon
 from src.utils.table_utils import configurar_tabla_excel
-from src.utils.ui_helpers import load_styles
 from src.views.programar_pedido_dialog import ProgramarPedidoDialog
 
 
@@ -31,26 +27,19 @@ def _fmt_estatus(estatus: str) -> str:
     return _ESTATUS.get(estatus, estatus.replace("_", " ").capitalize())
 
 
-def _aplicar_estilo_forms(widget: QWidget) -> None:
-    """Aplica el tema clásico Windows Forms (estilos.qss) al widget."""
-    widget.setStyleSheet(load_styles())
-
-
 class ClientesView(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.controller = ClientesController()
         self._permiso_editar = True
-        self._permiso_programar = True
-        _aplicar_estilo_forms(self)
         self._setup_ui()
         self._load_pedidos()
         self._load_clientes()
 
     def set_permisos(self, permisos) -> None:
         self._permiso_editar = tiene(permisos, "clientes", "editar")
-        self._permiso_programar = tiene(permisos, "programacion", "editar")
         self.btn_nuevo_pedido.setEnabled(tiene(permisos, "clientes", "crear"))
+        self.btn_programas.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_nuevo_cli.setEnabled(tiene(permisos, "clientes", "crear"))
 
     def _setup_ui(self) -> None:
@@ -74,8 +63,13 @@ class ClientesView(QWidget):
         self.btn_nuevo_pedido.setObjectName("btnPrimary")
         self.btn_nuevo_pedido.clicked.connect(self._nuevo_pedido)
 
+        self.btn_programas = QPushButton("Programas")
+        self.btn_programas.setObjectName("btnPrimary")
+        self.btn_programas.clicked.connect(self._programar_pedido)
+
         hlayout.addLayout(title_col)
         hlayout.addStretch()
+        hlayout.addWidget(self.btn_programas)
         hlayout.addWidget(self.btn_nuevo_pedido)
 
         self.tabs = QTabWidget()
@@ -105,17 +99,9 @@ class ClientesView(QWidget):
         self.vista.set_renderers(fila=self._fila_pedido, claves=self._claves_pedido,
                                  estilo=self._estilo_pedido)
         self.vista.set_acciones([
-            {"texto": "Programar", "icono": "programacion", "color": "#0d9488",
-             "habilitado": lambda rec: self._permiso_programar
-             and rec.get("estatus") not in ("cancelado", "surtido"),
-             "callback": self._programar_pedido},
-            {"texto": "Editar", "icono": "editar", "color": "#2A5FB0",
+            {"texto": "Editar", "icono": "editar", "color": "#4f46e5",
              "habilitado": lambda rec: self._permiso_editar,
              "callback": self._editar_pedido},
-            {"texto": "Cancelar", "icono": "eliminar", "color": "#C00000",
-             "habilitado": lambda rec: self._permiso_editar
-             and rec.get("estatus") not in ("cancelado", "surtido"),
-             "callback": self._cancelar_pedido},
         ])
         self.vista.doubleClicked.connect(self._ver_pedido)
         layout.addWidget(self.vista)
@@ -142,15 +128,6 @@ class ClientesView(QWidget):
             {"key": "direccion", "titulo": "Dirección", "ancho": 220},
         ])
         self.grid_cli.set_renderers(estilo=self._estilo_cliente)
-        self.grid_cli.set_acciones([
-            {"texto": "Editar", "icono": "editar", "color": "#2A5FB0",
-             "habilitado": lambda rec: self._permiso_editar,
-             "callback": self._editar_cliente_rec},
-            {"texto": lambda rec: "Desactivar" if rec.get("activo") else "Activar",
-             "icono": "toggle", "color": "#C00000",
-             "habilitado": lambda rec: self._permiso_editar,
-             "callback": self._alternar_activo_cliente},
-        ])
         self.grid_cli.doubleClicked.connect(self._editar_cliente)
         layout.addWidget(self.grid_cli)
 
@@ -234,25 +211,8 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_pedidos()
 
-    def _cancelar_pedido(self, rec: dict | None = None) -> None:
-        if rec is None:
-            rec = self.vista.registro_seleccionado()
-        if rec is None:
-            QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
-            return
-        if QMessageBox.question(
-                self, "Cancelar pedido",
-                f"¿Cancelar el pedido {rec.get('folio', '')}?") != QMessageBox.Yes:
-            return
-        try:
-            self.controller.cancelar_pedido(rec["id"])
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"No se pudo cancelar: {e}")
-        self._load_pedidos()
-
-    def _programar_pedido(self, rec: dict | None = None) -> None:
-        if rec is None:
-            rec = self.vista.registro_seleccionado()
+    def _programar_pedido(self) -> None:
+        rec = self.vista.registro_seleccionado()
         if rec is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un pedido.")
             return
@@ -261,9 +221,9 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_pedidos()
             folios = ", ".join(dlg.folios_generados)
-            notificar_flotante(
-                f"Se generaron los folios de programación: {folios}",
-                tipo="success", titulo="Programado", host=self)
+            QMessageBox.information(
+                self, "Programado",
+                f"Se generaron los folios de programación: {folios}")
 
     # ---- Acciones de clientes ----
 
@@ -281,23 +241,6 @@ class ClientesView(QWidget):
         if dlg.exec():
             self._load_clientes()
 
-    def _editar_cliente_rec(self, rec: dict) -> None:
-        dlg = _DialogCliente(self.controller, rec["id"])
-        if dlg.exec():
-            self._load_clientes()
-
-    def _alternar_activo_cliente(self, rec: dict) -> None:
-        if rec.get("activo"):
-            if QMessageBox.question(
-                    self, "Desactivar cliente",
-                    f"¿Desactivar al cliente '{rec.get('nombre', '')}'?") \
-                    != QMessageBox.Yes:
-                return
-            self.controller.desactivar_cliente(rec["id"])
-        else:
-            self.controller.reactivar_cliente(rec["id"])
-        self._load_clientes()
-
 
 class _DialogCliente(QDialog):
     def __init__(self, controller: ClientesController, cliente_id: int | None = None) -> None:
@@ -307,7 +250,6 @@ class _DialogCliente(QDialog):
         self.setWindowTitle("Nuevo Cliente" if cliente_id is None else "Editar Cliente")
         self.setMinimumWidth(420)
         self.setModal(True)
-        _aplicar_estilo_forms(self)
         self._setup_ui()
         if cliente_id:
             self._load_data()
@@ -349,7 +291,6 @@ class _DialogCliente(QDialog):
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_save)
         layout.addLayout(btns)
-        self.txt_nombre.setFocus()
 
     def _load_data(self) -> None:
         c = self.controller.obtener_cliente(self.cliente_id)
@@ -366,22 +307,16 @@ class _DialogCliente(QDialog):
         if not nombre:
             QMessageBox.warning(self, "Campo requerido", "El nombre del cliente es obligatorio.")
             return
-        rfc = self.txt_rfc.text().strip().upper()
-        email = self.txt_email.text().strip()
-        if email and "@" not in email:
-            QMessageBox.warning(self, "Datos inválidos",
-                                "El correo electrónico no parece válido.")
-            return
         try:
             if self.cliente_id:
                 self.controller.actualizar_cliente(
-                    self.cliente_id, nombre, rfc,
+                    self.cliente_id, nombre, self.txt_rfc.text().strip(),
                     self.txt_comercial.text().strip(), self.txt_telefono.text().strip(),
-                    email, self.txt_direccion.text().strip())
+                    self.txt_email.text().strip(), self.txt_direccion.text().strip())
             else:
                 self.controller.crear_cliente(
-                    nombre, rfc, self.txt_comercial.text().strip(),
-                    self.txt_telefono.text().strip(), email,
+                    nombre, self.txt_rfc.text().strip(), self.txt_comercial.text().strip(),
+                    self.txt_telefono.text().strip(), self.txt_email.text().strip(),
                     self.txt_direccion.text().strip())
         except Exception as e:
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
@@ -397,13 +332,7 @@ class _DialogPedidoCliente(QDialog):
         self.setWindowTitle("Nuevo Pedido de Cliente" if pedido_id is None else "Editar Pedido")
         self.setMinimumSize(840, 640)
         self.setModal(True)
-        _aplicar_estilo_forms(self)
         self._puntos_fila: dict[int, dict[int, int]] = {}
-        self._prog = ProgramacionController()
-        self._tiene_programacion = False
-        if pedido_id:
-            self._tiene_programacion = \
-                self._prog.pares_programados_pedido(pedido_id) > 0
         self._setup_ui()
         if pedido_id:
             self._load_data()
@@ -423,16 +352,19 @@ class _DialogPedidoCliente(QDialog):
         self.txt_folio_pedido = QLineEdit()
         self.txt_folio_pedido.setPlaceholderText("Folio de pedido del cliente (opcional)")
 
-        self.dte_pedido = DatePicker()
-        self.dte_programado = DatePicker()
+        self.dte_pedido = QDateEdit()
+        self.dte_pedido.setCalendarPopup(True)
+        self.dte_pedido.setDate(QDate.currentDate())
+
+        self.dte_programado = QDateEdit()
+        self.dte_programado.setCalendarPopup(True)
+        self.dte_programado.setDate(QDate.currentDate())
         self.chk_sin_programar = QCheckBox("Sin fecha programada")
         self.chk_sin_programar.toggled.connect(
             lambda on: self.dte_programado.setEnabled(not on))
 
         self.cmb_estatus = QComboBox()
         for k in ("pendiente", "programado", "surtido"):
-            if k == "programado" and not self._tiene_programacion:
-                continue
             self.cmb_estatus.addItem(_ESTATUS[k], k)
 
         self.txt_suela = QLineEdit()
@@ -446,6 +378,7 @@ class _DialogPedidoCliente(QDialog):
         self.txt_obs.setMaximumHeight(60)
 
         grp_datos = QGroupBox("Datos del Pedido")
+        grp_datos.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
         grid_datos = QGridLayout(grp_datos)
         grid_datos.setHorizontalSpacing(16)
         grid_datos.setVerticalSpacing(10)
@@ -471,6 +404,7 @@ class _DialogPedidoCliente(QDialog):
         layout.addWidget(grp_datos)
 
         grp_ficha = QGroupBox("Ficha Técnica")
+        grp_ficha.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
         form_ficha = QFormLayout(grp_ficha)
         form_ficha.setSpacing(10)
         form_ficha.addRow("Suela:", self.txt_suela)
@@ -501,7 +435,7 @@ class _DialogPedidoCliente(QDialog):
         btn_remove.clicked.connect(self._quitar_linea)
 
         self.lbl_total = QLabel("Total de pares: 0")
-        self.lbl_total.setStyleSheet("font-size: 15px; font-weight: bold; color: #1F4E79;")
+        self.lbl_total.setStyleSheet("font-size: 15px; font-weight: bold; color: #4f46e5;")
 
         toolbar = QHBoxLayout()
         toolbar.addWidget(btn_add)
@@ -534,10 +468,11 @@ class _DialogPedidoCliente(QDialog):
         self.txt_folio_pedido.setText(pedido.get("folio_pedido", "") or "")
         self.txt_suela.setText(pedido.get("suela", "") or "")
         self.txt_horma.setText(pedido.get("horma", "") or "")
-        self.dte_pedido.establecer_fecha_bd(pedido.get("fecha_pedido", "") or "")
+        self.dte_pedido.setDate(QDate.fromString(pedido.get("fecha_pedido", "") or "",
+                                                 "yyyy-MM-dd"))
         prog = pedido.get("fecha_programado")
         if prog:
-            self.dte_programado.establecer_fecha_bd(prog)
+            self.dte_programado.setDate(QDate.fromString(prog, "yyyy-MM-dd"))
         else:
             self.chk_sin_programar.setChecked(True)
         idx = self.cmb_estatus.findData(pedido.get("estatus"))
@@ -556,12 +491,8 @@ class _DialogPedidoCliente(QDialog):
         self.table_detalle.setItem(row, 0, QTableWidgetItem(modelo))
         self.table_detalle.setItem(row, 1, QTableWidgetItem(piel))
         self.table_detalle.setItem(row, 2, QTableWidgetItem(color))
-        btn = QToolButton()
-        btn.setObjectName("btnFilaIcono")
-        btn.setIcon(mono_icon("tabla", 16, "#4f46e5"))
-        btn.setIconSize(QSize(16, 16))
-        btn.setToolTip("Configurar Tallas")
-        btn.setCursor(Qt.PointingHandCursor)
+        btn = QPushButton("Configurar Tallas")
+        btn.setObjectName("btnSecondary")
         btn.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
         self.table_detalle.setCellWidget(row, 3, btn)
         self.table_detalle.setItem(row, 4, QTableWidgetItem("0"))
@@ -572,18 +503,17 @@ class _DialogPedidoCliente(QDialog):
         total = sum(matriz.values())
         btn = self.table_detalle.cellWidget(row, 3)
         if btn:
-            btn.setToolTip(f"Configurar Tallas ({total} pr)")
+            btn.setText(f"Editar Tallas ({total} pr)")
         self.table_detalle.item(row, 4).setText(str(total))
         self._recalcular_total()
 
     def _agregar_linea(self) -> None:
-        dlg = _DialogLineaPedido(self.controller, self)
+        dlg = _DialogLineaPedido(self)
         if dlg.exec() == QDialog.Accepted:
             row = self.table_detalle.rowCount()
             self.table_detalle.insertRow(row)
-            self._puntos_fila[row] = dict(dlg.pares)
+            self._puntos_fila[row] = {}
             self._set_fila(row, dlg.modelo, dlg.piel, dlg.color)
-            self._actualizar_boton_tallas(row)
 
     def _configurar_tallas(self, row: int) -> None:
         puntos = self.controller.listar_puntos()
@@ -613,7 +543,7 @@ class _DialogPedidoCliente(QDialog):
     def _fecha_programado(self) -> str:
         if self.chk_sin_programar.isChecked():
             return ""
-        return self.dte_programado.fecha_bd()
+        return self.dte_programado.date().toString("yyyy-MM-dd")
 
     def _save(self) -> None:
         if self.cmb_cliente.currentData() is None:
@@ -640,15 +570,9 @@ class _DialogPedidoCliente(QDialog):
             QMessageBox.warning(self, "Detalle vacío", "Agregue al menos una línea al pedido.")
             return
         cliente_id = self.cmb_cliente.currentData()
-        fecha_pedido = self.dte_pedido.fecha_bd()
+        fecha_pedido = self.dte_pedido.date().toString("yyyy-MM-dd")
         fecha_programado = self._fecha_programado()
         estatus = self.cmb_estatus.currentData()
-        if estatus == "programado" and not self._tiene_programacion:
-            QMessageBox.warning(
-                self, "Estatus no permitido",
-                "No se puede marcar 'Programado' a mano. Primero programe el "
-                "pedido en una semana para generar sus folios de programación.")
-            return
         obs = self.txt_obs.toPlainText().strip()
         folio_pedido = self.txt_folio_pedido.text().strip()
         suela = self.txt_suela.text().strip()
@@ -669,26 +593,22 @@ class _DialogPedidoCliente(QDialog):
 
 
 class _DialogLineaPedido(QDialog):
-    def __init__(self, controller: ClientesController | None = None,
-                 parent=None) -> None:
+    def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.controller = controller or ClientesController()
         self.setWindowTitle("Agregar Línea al Pedido")
-        self.setMinimumSize(700, 560)
+        self.setMinimumWidth(380)
         self.setModal(True)
-        _aplicar_estilo_forms(self)
         self.modelo = ""
         self.piel = ""
         self.color = ""
-        self.pares: dict[int, int] = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(14)
 
         form = QFormLayout()
-        form.setSpacing(8)
+        form.setSpacing(10)
         self.txt_modelo = QLineEdit()
         self.txt_modelo.setPlaceholderText("Ej: RENATO GALAN (obligatorio)")
         self.txt_piel = QLineEdit()
@@ -699,12 +619,6 @@ class _DialogLineaPedido(QDialog):
         form.addRow("Piel:", self.txt_piel)
         form.addRow("Color:", self.txt_color)
         layout.addLayout(form)
-
-        self.puntos = self.controller.listar_puntos()
-        self.matriz = MatrizTallasWidget(
-            puntos=self.puntos, titulo="PARES POR TALLA DE ESTA LÍNEA",
-            parent=self)
-        layout.addWidget(self.matriz, 1)
 
         btns = QHBoxLayout()
         btns.addStretch()
@@ -717,20 +631,12 @@ class _DialogLineaPedido(QDialog):
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_ok)
         layout.addLayout(btns)
-        self.txt_modelo.setFocus()
 
     def _save(self) -> None:
         modelo = self.txt_modelo.text().strip()
         if not modelo:
-            QMessageBox.warning(self, "Campo requerido",
-                                "El modelo es obligatorio.")
+            QMessageBox.warning(self, "Campo requerido", "El modelo es obligatorio.")
             return
-        valores = self.matriz.obtener_valores()
-        self.pares = {}
-        for p in self.puntos:
-            pares = int(valores.get(str(p["punto"]), 0) or 0)
-            if pares > 0:
-                self.pares[p["id"]] = pares
         self.modelo = modelo
         self.piel = self.txt_piel.text().strip()
         self.color = self.txt_color.text().strip()
@@ -745,7 +651,6 @@ class _DialogVerPedido(QDialog):
         self.setWindowTitle("Detalle del Pedido")
         self.setMinimumSize(720, 500)
         self.setModal(True)
-        _aplicar_estilo_forms(self)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -757,8 +662,8 @@ class _DialogVerPedido(QDialog):
 
         info = QLabel()
         info.setWordWrap(True)
-        info.setStyleSheet("color: #000000; font-size: 12px; padding: 10px;"
-                       "background: #FFFFE1; border: 1px solid #C0C0C0;")
+        info.setStyleSheet("color: #334155; font-size: 12px; padding: 10px;"
+                           "background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;")
         lineas = []
         if pedido:
             lineas.append(

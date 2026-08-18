@@ -56,9 +56,22 @@ def export_table_to_excel(table: QTableWidget, titulo: str, parent: QWidget) -> 
 
 
 def print_table(table: QTableWidget, titulo: str, parent: QWidget) -> None:
-    from src.components.preview_impresion import previsualizar_html
+    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+    printer.setPageSize(QPageSize(QPageSize.Letter))
+    printer.setPageOrientation(QPageLayout.Orientation.Landscape)
+
+    dlg = QFileDialog()
+    path, _ = QFileDialog.getSaveFileName(parent, f"Guardar PDF - {titulo}", f"{titulo}.pdf",
+                                           "PDF (*.pdf)")
+    if not path:
+        return
+    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+    printer.setOutputFileName(path)
+
     html = _table_to_html(table, titulo)
-    previsualizar_html(html, titulo=titulo, parent=parent)
+    doc = QTextDocument()
+    doc.setHtml(html)
+    doc.print_(printer)
 
 
 def _table_to_html(table: QTableWidget, titulo: str) -> str:
@@ -106,27 +119,12 @@ Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derech
 
 
 def _logo_base64() -> str:
-    """Logo del membrete en base64: prefiere `logonew.png` de la raíz del
-    proyecto (membrete actual); si no existe, usa `views/assets/logo.png`."""
-    raiz = Path(__file__).resolve().parent.parent.parent
-    candidatos = [
-        raiz / "logonew.png",
-        Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.png",
-    ]
+    logo_path = Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.jpeg"
+    if not logo_path.exists():
+        return ""
     import base64
-    for ruta in candidatos:
-        if ruta.exists():
-            with open(str(ruta), "rb") as f:
-                return base64.b64encode(f.read()).decode()
-    return ""
-
-
-def _nombre_empresa() -> str:
-    try:
-        from src.models.empresa_model import EmpresaModel
-        return EmpresaModel().nombre_empresa()
-    except Exception:
-        return "GORETTI"
+    with open(str(logo_path), "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
 
 def _fmt_fecha(fecha: str) -> str:
@@ -217,7 +215,7 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     logo_html = ""
     if logo_b64:
         logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
-                     f'style="max-width:110px;max-height:110px;vertical-align:middle;margin-right:10px"/>')
+                     f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
 
     th_tallas = "".join(
         f"<th>{_esc('#')}{_esc(c['talla'])}</th>" for c in columnas)
@@ -266,14 +264,6 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     ] if l]
     info_pago_html = "".join(f"<div>{l}</div>" for l in info_pago)
 
-    obs_html = ""
-    observaciones = str(datos.get("observaciones") or "").strip()
-    if observaciones:
-        obs_html = f"""<div style='border:1px solid #cbd5e1;border-left:4px solid #E3C14D;padding:10px 14px;margin-top:14px;'>
-  <div style='font-weight:bold;color:#475569;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;'>Observaciones</div>
-  <div style='color:#1f2937;'>{_esc(observaciones).replace(chr(10), '<br/>')}</div>
-</div>"""
-
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     return f"""<!DOCTYPE html>
@@ -315,7 +305,7 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 <div class='encabezado'>
 <table><tr>
 <td style='width:30%'>
-  <div>{logo_html}<span class='marca'>{_nombre_empresa().upper()}</span></div>
+  <div>{logo_html}<span class='marca'>GORETTI</span></div>
   <div class='titulo2'>Sistema Integral de AdministraciÃ³n y Control</div>
 </td>
 <td style='width:40%;text-align:center'>
@@ -351,8 +341,6 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 <tr class='fila-total'><td>TOTAL</td><td>${total:,.2f}</td></tr>
 </table>
 
-{obs_html}
-
 <div class='metodo'>MÃ©todo de pago: <b>{_esc(datos.get('metodo_pago') or 'Transferencia bancaria')}</b></div>
 
 <div class='pago'>
@@ -362,17 +350,28 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 
 <div class='pie'>
   <div class='gracias'>Gracias por su compra.</div>
-  <div class='marca'>{_nombre_empresa().upper()}</div>
-  <div class='leyenda'>Generado por {_nombre_empresa()} el {ahora}</div>
+  <div class='marca'>GORETTI</div>
+  <div class='leyenda'>Generado por Goretti ERP el {ahora}</div>
 </div>
 </body></html>"""
 
 
 def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> None:
-    from src.components.preview_impresion import previsualizar_html
-    folio = datos.get('folio', '')
-    titulo = f"Orden de Compra {folio}" if folio else "Orden de Compra"
-    previsualizar_html(_oc_receipt_html(datos, detalle), titulo=titulo, parent=parent)
+    path, _ = QFileDialog.getSaveFileName(
+        parent, "Guardar PDF - Orden de Compra",
+        f"OC_{datos.get('folio', '')}.pdf", "PDF (*.pdf)")
+    if not path:
+        return
+
+    doc = QTextDocument()
+    doc.setHtml(_oc_receipt_html(datos, detalle))
+    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+    printer.setPageSize(QPageSize(QPageSize.Letter))
+    printer.setPageOrientation(QPageLayout.Orientation.Landscape if len(_oc_columnas_tallas(detalle)) > 6
+                           else QPageLayout.Orientation.Portrait)
+    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+    printer.setOutputFileName(path)
+    doc.print_(printer)
 
 
 def export_orden_compra_excel(datos: dict, detalle: list[dict], parent: QWidget) -> Optional[str]:
@@ -544,13 +543,13 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
-    c = ws.cell(row=fila, column=1, value=_nombre_empresa().upper())
+    c = ws.cell(row=fila, column=1, value="GORETTI")
     c.font = Font(bold=True, size=16, color="1D4ED8")
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
     c = ws.cell(row=fila, column=1,
-                value=f"Generado por {_nombre_empresa()} el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                value=f"Generado por Goretti ERP el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     c.font = Font(size=9, color="94A3B8")
     c.alignment = Alignment(horizontal="center")
 
@@ -574,10 +573,21 @@ def _pedido_totales(detalle: list[dict]) -> int:
 
 
 def print_pedido_cliente(datos: dict, detalle: list[dict], parent: QWidget) -> None:
-    from src.components.preview_impresion import previsualizar_html
-    folio = datos.get('folio', '')
-    titulo = f"Pedido de Cliente {folio}" if folio else "Pedido de Cliente"
-    previsualizar_html(_pedido_html(datos, detalle), titulo=titulo, parent=parent)
+    path, _ = QFileDialog.getSaveFileName(
+        parent, "Guardar PDF - Pedido de Cliente",
+        f"PED_{datos.get('folio', '')}.pdf", "PDF (*.pdf)")
+    if not path:
+        return
+
+    doc = QTextDocument()
+    doc.setHtml(_pedido_html(datos, detalle))
+    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+    printer.setPageSize(QPageSize(QPageSize.Letter))
+    printer.setPageOrientation(QPageLayout.Orientation.Landscape if len(_oc_columnas_puntos(detalle)) > 6
+                           else QPageLayout.Orientation.Portrait)
+    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+    printer.setOutputFileName(path)
+    doc.print_(printer)
 
 
 def _pedido_html(datos: dict, detalle: list[dict]) -> str:
@@ -599,7 +609,7 @@ def _pedido_html(datos: dict, detalle: list[dict]) -> str:
     logo_html = ""
     if logo_b64:
         logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
-                     f'style="max-width:110px;max-height:110px;vertical-align:middle;margin-right:10px"/>')
+                     f'style="max-width:56px;max-height:56px;vertical-align:middle;margin-right:8px"/>')
 
     th_tallas = "".join(
         f"<th>{_esc('#')}{_esc(c['punto'])}</th>" for c in columnas)
@@ -670,7 +680,7 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 <div class='encabezado'>
 <table><tr>
 <td style='width:30%'>
-  <div>{logo_html}<span class='marca'>{_nombre_empresa().upper()}</span></div>
+  <div>{logo_html}<span class='marca'>GORETTI</span></div>
   <div class='titulo2'>Sistema Integral de AdministraciÃ³n y Control</div>
 </td>
 <td style='width:40%;text-align:center'>
@@ -707,8 +717,8 @@ table.items tr:nth-child(even) td {{ background: #f8fafc; }}
 </table>
 
 <div class='pie'>
-  <div class='marca'>{_nombre_empresa().upper()}</div>
-  <div class='leyenda'>Generado por {_nombre_empresa()} el {ahora}</div>
+  <div class='marca'>GORETTI</div>
+  <div class='leyenda'>Generado por Goretti ERP el {ahora}</div>
 </div>
 </body></html>"""
 
@@ -721,186 +731,6 @@ def export_pedido_cliente_excel(datos: dict, detalle: list[dict], parent: QWidge
         return None
     _write_pedido_excel(path, datos, detalle)
     return path
-
-
-def exportar_programacion_excel(lineas: list[dict], titulo: str,
-                                incluir_semana: bool = False,
-                                parent: QWidget | None = None,
-                                grupos: list | None = None) -> Optional[str]:
-    """Exporta la programación a Excel replicando el formato del reporte que
-    imprime (generar_html_programacion): título morado sobre rosa, encabezado
-    morado, una columna por talla y fila final de totales en negrita.
-
-    `grupos`: lista opcional de (etiqueta, [lineas]) para insertar filas de
-    grupo moradas (segundo encabezado) cuando la tabla está agrupada."""
-    nombre = "".join(c for c in titulo if c.isalnum() or c in " _-") or "Programacion"
-    path, _ = QFileDialog.getSaveFileName(
-        parent, "Exportar Excel - Programación", f"{nombre}.xlsx", "Excel (*.xlsx)")
-    if not path:
-        return None
-    _write_programacion_excel(path, lineas, titulo, incluir_semana, grupos)
-    return path
-
-
-def _write_programacion_excel(path: str, lineas: list[dict], titulo: str,
-                              incluir_semana: bool, grupos: list | None) -> None:
-    from datetime import datetime
-
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-
-    def tallas_ordenadas(ls: list[dict]) -> list[str]:
-        tallas: list[str] = []
-        vistos: set[str] = set()
-        for linea in ls:
-            for t in linea.get("tallas") or []:
-                talla = str(t.get("talla", "") or "").strip()
-                if talla and talla not in vistos:
-                    vistos.add(talla)
-                    tallas.append(talla)
-        tallas.sort(key=lambda x: (float(x), x))
-        return tallas
-
-    tallas = tallas_ordenadas(lineas)
-    total_por_talla: dict[str, int] = {talla: 0 for talla in tallas}
-    gran_total = 0
-
-    fijas = [
-        ("cliente", "CLIENTE"),
-        ("folio_prog", "FOLIO PROG."),
-        ("folio_pedido", "FOLIO PEDIDO"),
-        ("modelo", "MODELO"),
-        ("piel", "PIEL"),
-        ("color", "COLOR"),
-        ("fecha_prog", "FECHA PROG."),
-    ]
-
-    n_texto = len(fijas) + (1 if incluir_semana else 0)
-    n_cols = n_texto + len(tallas) + 1
-
-    morado = PatternFill(start_color="7C3AED", end_color="7C3AED", fill_type="solid")
-    rosa_total = PatternFill(start_color="FFE6FF", end_color="FFE6FF", fill_type="solid")
-    grupo_fill = PatternFill(start_color="7C3AED", end_color="7C3AED", fill_type="solid")
-    par_fill = PatternFill(start_color="FDF2FF", end_color="FDF2FF", fill_type="solid")
-    blanco = Font(color="FFFFFF", bold=True)
-    negrita = Font(bold=True)
-    thin = Side(style="thin", color="D946EF")
-    borde_total = Border(left=thin, right=thin, top=thin, bottom=thin)
-    fina = Side(style="thin", color="E5E7EB")
-    borde = Border(left=fina, right=fina, top=fina, bottom=fina)
-    centro = Alignment(horizontal="center", vertical="center")
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "PROGRAMACIÓN"
-    last = n_cols
-
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last)
-    c = ws.cell(row=1, column=1, value=titulo)
-    c.font = Font(bold=True, size=15, color="7C3AED")
-    c.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 26
-
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last)
-    c = ws.cell(row=2, column=1,
-                value=f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    c.font = Font(size=10, color="6B7280")
-    c.alignment = Alignment(horizontal="center", vertical="center")
-
-    fila = 4
-    encabezados = []
-    if incluir_semana:
-        encabezados.append("SEMANA")
-    encabezados += [t for _, t in fijas]
-    encabezados += tallas
-    encabezados.append("TOTAL PARES")
-    for j, h in enumerate(encabezados):
-        cc = ws.cell(row=fila, column=j + 1, value=h)
-        cc.font = blanco
-        cc.fill = morado
-        cc.alignment = centro
-        cc.border = borde
-    ws.row_dimensions[fila].height = 20
-    fila += 1
-
-    def escribir_linea(linea: dict) -> None:
-        nonlocal fila, gran_total
-        texto = []
-        if incluir_semana:
-            texto.append(linea.get("semana", ""))
-        base = {
-            "cliente": linea.get("cliente", ""),
-            "folio_prog": linea.get("folio_prog", ""),
-            "folio_pedido": linea.get("folio_pedido", ""),
-            "modelo": linea.get("modelo", ""),
-            "piel": linea.get("piel", ""),
-            "color": linea.get("color", ""),
-            "fecha_prog": linea.get("fecha_prog", "") or "",
-        }
-        texto += [base.get(key, "") for key, _ in fijas]
-        numeros = []
-        por_talla = {str(t.get("talla", "")): int(t.get("pares", 0) or 0)
-                     for t in linea.get("tallas") or []}
-        for talla in tallas:
-            pares = por_talla.get(talla, 0)
-            total_por_talla[talla] += pares
-            numeros.append(str(pares or ""))
-        total = int(linea.get("total_pares", 0) or 0)
-        gran_total += total
-        numeros.append(str(total))
-        valores = texto + numeros
-        for j, v in enumerate(valores):
-            cc = ws.cell(row=fila, column=j + 1, value=v)
-            cc.border = borde
-            cc.alignment = centro if j >= n_texto else Alignment(horizontal="left",
-                                                                 vertical="center")
-            cc.font = Font(size=10)
-        if fila % 2 == 0:
-            for j in range(1, last + 1):
-                ws.cell(row=fila, column=j).fill = par_fill
-        fila += 1
-
-    def escribir_grupo(etiqueta: str) -> None:
-        nonlocal fila
-        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
-        cc = ws.cell(row=fila, column=1, value=etiqueta)
-        cc.font = blanco
-        cc.fill = grupo_fill
-        cc.alignment = Alignment(horizontal="left", vertical="center")
-        fila += 1
-
-    if grupos:
-        for etiqueta, ls in grupos:
-            escribir_grupo(etiqueta)
-            for linea in ls:
-                escribir_linea(linea)
-    else:
-        for linea in lineas:
-            escribir_linea(linea)
-
-    fila_total = []
-    if incluir_semana:
-        fila_total.append("")
-    fila_total.append("TOTAL")
-    fila_total += [""] * (len(fijas) - 1)
-    fila_total += [str(total_por_talla.get(talla, 0)) for talla in tallas]
-    fila_total.append(str(gran_total))
-    for j, v in enumerate(fila_total):
-        cc = ws.cell(row=fila, column=j + 1, value=v)
-        cc.font = negrita
-        cc.fill = rosa_total
-        cc.border = borde_total
-        cc.alignment = centro if j >= n_texto else Alignment(horizontal="left",
-                                                             vertical="center")
-    fila += 1
-
-    ws.column_dimensions["A"].width = 34
-    for i in range(1, n_texto):
-        ws.column_dimensions[get_column_letter(i + 1)].width = 16
-    for i in range(len(tallas)):
-        ws.column_dimensions[get_column_letter(n_texto + 1 + i)].width = 9
-    ws.column_dimensions[get_column_letter(last)].width = 12
-
-    wb.save(path)
 
 
 def _write_pedido_excel(path: str, datos: dict, detalle: list[dict]) -> None:
@@ -1026,13 +856,13 @@ def _write_pedido_excel(path: str, datos: dict, detalle: list[dict]) -> None:
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
-    c = ws.cell(row=fila, column=1, value=_nombre_empresa().upper())
+    c = ws.cell(row=fila, column=1, value="GORETTI")
     c.font = Font(bold=True, size=16, color="1D4ED8")
     c.alignment = Alignment(horizontal="center")
     fila += 1
     ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=last)
     c = ws.cell(row=fila, column=1,
-                value=f"Generado por {_nombre_empresa()} el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                value=f"Generado por Goretti ERP el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     c.font = Font(size=9, color="94A3B8")
     c.alignment = Alignment(horizontal="center")
 

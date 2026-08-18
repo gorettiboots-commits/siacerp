@@ -117,30 +117,6 @@ class ListaMaterialesModel:
             (modelo_id,),
         )
 
-    def agregar(self, modelo_id: int, insumo_id: int,
-                cantidad: float = 0, unidad: str = "pieza") -> bool:
-        """Inserta un insumo en la BOM del modelo si no existía.
-
-        Devuelve True si insertó, False si ya existía.
-        """
-        existente = self.db.fetch_one(
-            "SELECT id FROM lista_materiales "
-            "WHERE modelo_id = ? AND insumo_id = ?",
-            (modelo_id, insumo_id))
-        if existente:
-            return False
-        insumo = self.db.fetch_one(
-            "SELECT unidad_medida FROM insumos WHERE id = ?",
-            (insumo_id,))
-        if insumo:
-            unidad = insumo["unidad_medida"]
-        self.db.execute(
-            "INSERT INTO lista_materiales "
-            "(modelo_id, insumo_id, cantidad_por_par, unidad) "
-            "VALUES (?, ?, ?, ?)",
-            (modelo_id, insumo_id, cantidad, unidad))
-        return True
-
 
 class MovimientoInventarioModel:
     def __init__(self) -> None:
@@ -163,23 +139,6 @@ class MovimientoInventarioModel:
                 (insumo_id,),
             )
         return self.db.fetch_all(base + " ORDER BY m.created_at DESC LIMIT 500")
-
-    def listar_kardex(self, insumo_id: int) -> list[dict]:
-        """Movimientos del insumo en orden cronológico (para kardex)."""
-        base = """
-            SELECT m.*, i.nombre as insumo_nombre,
-                   COALESCE(oc.folio, op.folio, m.observaciones) AS referencia_folio
-            FROM movimiento_inventario m
-            JOIN insumos i ON i.id = m.insumo_id
-            LEFT JOIN ordenes_compra oc
-              ON m.referencia_tipo = 'orden_compra' AND oc.id = m.referencia_id
-            LEFT JOIN ordenes_produccion op
-              ON m.referencia_tipo = 'orden_produccion' AND op.id = m.referencia_id
-        """
-        return self.db.fetch_all(
-            base + " WHERE m.insumo_id = ? ORDER BY m.created_at ASC, m.id ASC",
-            (insumo_id,),
-        )
 
     def registrar(self, insumo_id: int, tipo: str, cantidad: float,
                   ref_tipo: Optional[str] = None, ref_id: Optional[int] = None,

@@ -5,13 +5,14 @@ from PySide6.QtWidgets import (
 )
 
 from src.components.complex_grid import ComplexGrid
-from src.components.notificacion_flotante import notificar_flotante
 from src.components.preview_impresion import PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import exportar_programacion_excel
+from src.utils.export_utils import export_table_to_excel
 from src.utils.programacion_print import generar_html_programacion
 from src.utils.ui_helpers import crear_tarjeta
+from src.views.etiqueta_prueba_dialog import EtiquetaPruebaDialog
+from src.views.etiquetas_dialog import EtiquetasDialog
 from src.views.linea_detalle_dialog import LineaDetalleDialog
 
 
@@ -56,11 +57,12 @@ class ProgramacionView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self._permiso_eliminar = tiene(permisos, "programacion", "eliminar")
+        self.btn_estatus.setEnabled(tiene(permisos, "programacion", "editar"))
         self.btn_folio_pedido.setEnabled(tiene(permisos, "programacion", "editar"))
-        self.vista.set_boton_extra_habilitado("Exportar Excel",
-                                              tiene(permisos, "programacion", "exportar"))
-        self.vista.set_boton_extra_habilitado("Imprimir",
-                                              tiene(permisos, "programacion", "exportar"))
+        self.btn_export.setEnabled(tiene(permisos, "programacion", "exportar"))
+        self.btn_print.setEnabled(tiene(permisos, "programacion", "exportar"))
+        self.btn_etiquetas.setEnabled(tiene(permisos, "programacion", "exportar"))
+        self.btn_etiqueta_prueba.setEnabled(tiene(permisos, "programacion", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -82,27 +84,47 @@ class ProgramacionView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
+        self.btn_estatus = QPushButton("Cambiar Estatus")
+        self.btn_estatus.setObjectName("btnSecondary")
+        self.btn_estatus.clicked.connect(self._cambiar_estatus)
+
+        self.btn_print = QPushButton("Imprimir")
+        self.btn_print.setObjectName("btnSecondary")
+        self.btn_print.clicked.connect(self._imprimir)
+
+        self.btn_etiquetas = QPushButton("Imprimir Etiquetas")
+        self.btn_etiquetas.setObjectName("btnPrimary")
+        self.btn_etiquetas.clicked.connect(self._imprimir_etiquetas)
+
+        self.btn_etiqueta_prueba = QPushButton("Etiqueta de Prueba")
+        self.btn_etiqueta_prueba.setObjectName("btnSecondary")
+        self.btn_etiqueta_prueba.clicked.connect(self._imprimir_etiqueta_prueba)
+
+        self.btn_export = QPushButton("Exportar Excel")
+        self.btn_export.setObjectName("btnPrimary")
+        self.btn_export.clicked.connect(self._exportar)
+
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-
-        self._cards_row = QHBoxLayout()
-        hlayout.addLayout(self._cards_row)
+        hlayout.addWidget(self.btn_estatus)
+        hlayout.addWidget(self.btn_print)
+        hlayout.addWidget(self.btn_etiquetas)
+        hlayout.addWidget(self.btn_etiqueta_prueba)
+        hlayout.addWidget(self.btn_export)
 
         layout.addWidget(header)
 
+        self._cards_row = QHBoxLayout()
+        layout.addLayout(self._cards_row)
+
         self._setup_toolbar()
         layout.addLayout(self._toolbar)
+        layout.addLayout(self._toolbar_agrupar)
 
         self.vista = ComplexGrid()
+        self.vista.set_buscador_visible(False)
         self.vista.set_exportar_visible(False)
         self.vista.set_agrupar_visible(False)
-        self.vista.set_widget_izquierda(self._agrupar_widget)
-        self.vista.set_botones_extra([
-            {"texto": "Exportar Excel", "object_name": "btnSuccess", "icono": "exportar",
-             "color": "#ffffff", "callback": self._exportar},
-            {"texto": "Imprimir", "object_name": "btnPrimary", "icono": "imprimir",
-             "color": "#ffffff", "callback": self._imprimir},
-        ])
         self.vista.set_renderers(fila=self._fila_linea, claves=self._claves_linea,
                                  estilo=self._estilo_linea, lista=self._lista_linea,
                                  tarjeta=self._tarjeta_linea)
@@ -114,11 +136,6 @@ class ProgramacionView(QWidget):
         ])
         self.vista.set_grupo_fn(self._grupo_label)
         self.vista.doubleClicked.connect(self._ver_detalle)
-        header = self.vista.table.horizontalHeader()
-        header.setStyleSheet(
-            "QHeaderView::section { background-color:#4f46e5; color:#ffffff; "
-            "border:none; border-right:1px solid #a0a0a0; "
-            "border-bottom:1px solid #a0a0a0; font-weight:bold; padding:5px 6px; }")
         layout.addWidget(self.vista)
 
     def _setup_toolbar(self) -> None:
@@ -128,22 +145,31 @@ class ProgramacionView(QWidget):
         self.cmb_semana.setMinimumWidth(220)
         self.cmb_semana.currentIndexChanged.connect(self._on_semana_cambiada)
 
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText("Buscar por cliente, modelo, folio, piel o color...")
+        self.txt_buscar.setMinimumWidth(280)
+        self.txt_buscar.textChanged.connect(self._recargar_tabla)
+
+        self.txt_folio_pedido = QLineEdit()
+        self.txt_folio_pedido.setPlaceholderText("Buscar folio de pedido...")
+        self.txt_folio_pedido.setMinimumWidth(180)
+        self.txt_folio_pedido.textChanged.connect(self._recargar_tabla)
+
+        self.cmb_estatus = QComboBox()
+        self.cmb_estatus.addItem("Todos los estatus", "")
+        for valor, label in _ESTATUS.items():
+            self.cmb_estatus.addItem(label, valor)
+        self.cmb_estatus.currentIndexChanged.connect(self._recargar_tabla)
+
         self.cmb_agrupar = QComboBox()
         self.cmb_agrupar.addItem("Sin agrupar", None)
         for valor, label in _FACTORES_AGRUPAR.items():
             self.cmb_agrupar.addItem(f"Agrupar por {label}", valor)
         self.cmb_agrupar.currentIndexChanged.connect(self._recargar_tabla)
 
-        self._agrupar_widget = QWidget()
-        agrupar_layout = QHBoxLayout(self._agrupar_widget)
-        agrupar_layout.setContentsMargins(0, 0, 0, 0)
-        agrupar_layout.setSpacing(6)
-        agrupar_layout.addWidget(QLabel("Agrupar:"))
-        agrupar_layout.addWidget(self.cmb_agrupar)
-
-        self.btn_folio_pedido = QPushButton("Asignar Folio Programación")
+        self.btn_folio_pedido = QPushButton("Asignar Folio Pedido")
         self.btn_folio_pedido.setObjectName("btnSecondary")
-        self.btn_folio_pedido.clicked.connect(self._asignar_folio_prog)
+        self.btn_folio_pedido.clicked.connect(self._asignar_folio_pedido)
 
         btn_refresh = QPushButton("Actualizar")
         btn_refresh.setObjectName("btnPrimary")
@@ -151,9 +177,18 @@ class ProgramacionView(QWidget):
 
         self._toolbar.addWidget(QLabel("Semana:"))
         self._toolbar.addWidget(self.cmb_semana)
+        self._toolbar.addSpacing(12)
+        self._toolbar.addWidget(self.txt_buscar)
+        self._toolbar.addWidget(self.txt_folio_pedido)
+        self._toolbar.addWidget(self.cmb_estatus)
         self._toolbar.addWidget(btn_refresh)
         self._toolbar.addStretch()
-        self._toolbar.addWidget(self.btn_folio_pedido)
+
+        self._toolbar_agrupar = QHBoxLayout()
+        self._toolbar_agrupar.addWidget(QLabel("Agrupar:"))
+        self._toolbar_agrupar.addWidget(self.cmb_agrupar)
+        self._toolbar_agrupar.addWidget(self.btn_folio_pedido)
+        self._toolbar_agrupar.addStretch()
 
     def _cargar_semanas(self) -> None:
         semanas = self.controller.listar_semanas()
@@ -188,6 +223,7 @@ class ProgramacionView(QWidget):
         self._cards_row.addWidget(crear_tarjeta("Líneas", str(tot["lineas"]), "#4f46e5"))
         self._cards_row.addWidget(crear_tarjeta("Pares", str(tot["pares"]), "#059669"))
         self._cards_row.addWidget(crear_tarjeta("Clientes", str(tot["clientes"]), "#d97706"))
+        self._cards_row.addStretch()
 
     def _on_semana_cambiada(self) -> None:
         self._cargar_cards(self.controller.listar_semanas())
@@ -195,8 +231,13 @@ class ProgramacionView(QWidget):
 
     def _recargar_tabla(self) -> None:
         semana_id = self.cmb_semana.currentData()
+        estatus = self.cmb_estatus.currentData() or ""
+        termino = self.txt_buscar.text().strip()
+        folio_pedido = self.txt_folio_pedido.text().strip()
+
         es_todas = semana_id is None
-        lineas = self.controller.lineas_con_tallas(semana_id)
+        lineas = self.controller.lineas_con_tallas(
+            semana_id, termino, estatus, folio_pedido)
 
         self._factor_actual = self.cmb_agrupar.currentData()
 
@@ -326,7 +367,7 @@ class ProgramacionView(QWidget):
                "folio_pedido": 115, "modelo": 90, "piel": 110,
                "color": 130, "fecha_prog": 100, "total": 60}
 
-    def _asignar_folio_prog(self) -> None:
+    def _cambiar_estatus(self) -> None:
         rec = self.vista.registro_seleccionado()
         if rec is None:
             QMessageBox.information(self, "Seleccionar",
@@ -336,18 +377,43 @@ class ProgramacionView(QWidget):
         linea = self.controller.obtener_linea(linea_id)
         if not linea:
             return
-        actual = linea.get("folio_prog", "") or ""
+        actual = linea.get("estatus", "programado")
+        opciones = [_ESTATUS[v] for v in _ESTATUS]
+        seleccion, ok = QInputDialog.getItem(
+            self, "Cambiar Estatus",
+            f"Línea {linea.get('folio_prog', '')} - {linea.get('cliente', '')} "
+            f"({linea.get('modelo', '')})",
+            opciones, 0, False)
+        if not ok:
+            return
+        nuevo = [v for v, label in _ESTATUS.items() if label == seleccion][0]
+        if nuevo == actual:
+            return
+        self.controller.cambiar_estatus(linea_id, nuevo)
+        self._recargar_tabla()
+
+    def _asignar_folio_pedido(self) -> None:
+        rec = self.vista.registro_seleccionado()
+        if rec is None:
+            QMessageBox.information(self, "Seleccionar",
+                                    "Seleccione una línea de la programación.")
+            return
+        linea_id = rec["id"]
+        linea = self.controller.obtener_linea(linea_id)
+        if not linea:
+            return
+        actual = linea.get("folio_pedido", "") or ""
         nuevo, ok = QInputDialog.getText(
-            self, "Asignar Folio de Programación",
-            f"Folio de programación para {linea.get('cliente', '')} / "
-            f"{linea.get('modelo', '')}:",
+            self, "Asignar Folio de Pedido",
+            f"Folio de pedido para {linea.get('cliente', '')} / "
+            f"{linea.get('modelo', '')} ({linea.get('folio_prog', '')}):",
             QLineEdit.Normal, actual)
         if not ok:
             return
         nuevo = nuevo.strip()
         if nuevo == actual:
             return
-        self.controller.asignar_folio_prog(linea_id, nuevo)
+        self.controller.asignar_folio_pedido(linea_id, nuevo)
         self._recargar_tabla()
 
     def _eliminar_linea(self, rec=None) -> None:
@@ -377,27 +443,9 @@ class ProgramacionView(QWidget):
         self._on_semana_cambiada()
 
     def _exportar(self) -> None:
-        es_todas = self.cmb_semana.currentData() is None
-        titulo = f"PROGRAMACIÓN SEMANAL — {self.cmb_semana.currentText()}"
-        grupos = None
-        if self._factor_actual:
-            agrupadas: dict = {}
-            for l in self._lineas_actuales:
-                valor = self._valor_agrupar(l, self._factor_actual)
-                agrupadas.setdefault(valor, []).append(l)
-            orden = sorted(agrupadas.keys(), key=lambda v: str(v).lower())
-            grupos = [(self._grupo_label(v, agrupadas[v]), agrupadas[v])
-                      for v in orden]
-        path = exportar_programacion_excel(
-            self._lineas_actuales, titulo=titulo, incluir_semana=es_todas,
-            parent=self, grupos=grupos)
+        path = export_table_to_excel(self.vista.table, "Programacion", self)
         if path:
-            notificar_flotante(f"Excel guardado en:\n{path}",
-                               tipo="success", titulo="Exportado", host=self)
-
-    @staticmethod
-    def _valor_agrupar(l: dict, key: str):
-        return l.get(key, "")
+            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
 
     def _imprimir(self) -> None:
         """Vista previa de impresión del reporte (PreviewImpresion)."""
@@ -408,6 +456,14 @@ class ProgramacionView(QWidget):
             incluir_semana=es_todas, auto_imprimir=False)
         dlg = PreviewImpresion(html, titulo=titulo, parent=self)
         dlg.cmb_orientacion.setCurrentText("Horizontal")
+        dlg.exec()
+
+    def _imprimir_etiquetas(self) -> None:
+        dlg = EtiquetasDialog(self.controller, self)
+        dlg.exec()
+
+    def _imprimir_etiqueta_prueba(self) -> None:
+        dlg = EtiquetaPruebaDialog(self)
         dlg.exec()
 
     def _ver_detalle(self) -> None:

@@ -18,14 +18,6 @@ from PySide6.QtWidgets import (
 from src.components.preview_impresion import PreviewImpresion
 
 
-def _nombre_empresa() -> str:
-    try:
-        from src.models.empresa_model import EmpresaModel
-        return EmpresaModel().nombre_empresa()
-    except Exception:
-        return "SIAC ERP"
-
-
 def _reporte_oc_html() -> str:
     """Recibo de OC de ejemplo: usa datos reales de la BD si existen."""
     from src.controllers.ordenes_compra_controller import OrdenesCompraController
@@ -155,7 +147,7 @@ table.items tr:nth-child(even) td {{ background: #f7faf6; }}
   <div class='cabecera'>
   <table><tr>
   <td style='width:32%'>
-    <div class='marca'>{_nombre_empresa().upper()}</div>
+    <div class='marca'>GORETTI</div>
     <div class='sec'>SIAC ERP · Sistema Integral de Administración y Control</div>
   </td>
   <td style='width:36%;text-align:center'><span class='titulo'>{titulo}</span></td>
@@ -212,8 +204,8 @@ table.items tr:nth-child(even) td {{ background: #f7faf6; }}
   <div style='background:linear-gradient(135deg, #A9C5C1 0%, #D4EDEA 100%);
               padding:6px 28px 22px 28px;'>
     <div style='font-size:14px;font-weight:700;color:#2f4f3a'>Gracias por su compra.</div>
-    <div style='font-size:16px;font-weight:800;color:#2f4f3a;letter-spacing:2px;margin-top:2px'>{_nombre_empresa().upper()}</div>
-    <div style='font-size:9px;color:#4a6b52;margin-top:4px'>Generado por {_nombre_empresa()} el {ahora}</div>
+    <div style='font-size:16px;font-weight:800;color:#2f4f3a;letter-spacing:2px;margin-top:2px'>GORETTI</div>
+    <div style='font-size:9px;color:#4a6b52;margin-top:4px'>Generado por Goretti ERP el {ahora}</div>
   </div>
   </div>
 

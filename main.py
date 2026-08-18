@@ -6,7 +6,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication
 
-from src.components.campo_historico import InstaladorHistorico
 from src.database.db_manager import DatabaseManager
 from src.utils.ui_helpers import load_styles
 from src.views.main_window import MainWindow
@@ -27,8 +26,6 @@ def main() -> None:
 
     db = DatabaseManager()
     db.initialize_schema()
-
-    InstaladorHistorico.instalar()
 
     window = MainWindow()
     window.show()

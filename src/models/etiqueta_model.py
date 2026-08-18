@@ -45,35 +45,26 @@ DEFAULT_DISENO = {
 }
 
 
-PREFIJO_DISENO = "diseno:"
-
-
 class EtiquetaModel:
     def __init__(self) -> None:
         self.db = DatabaseManager()
 
-    @staticmethod
-    def _parsear_diseno(valor: str | None) -> dict | None:
-        """Convierte el JSON guardado en un diseño válido (o None)."""
-        if not valor:
-            return None
+    def cargar_diseno(self) -> dict:
+        row = self.db.fetch_one(
+            "SELECT valor FROM etiqueta_config WHERE clave = 'diseno'")
+        if not row:
+            return deepcopy(DEFAULT_DISENO)
         try:
-            diseno = json.loads(valor)
+            diseno = json.loads(row["valor"])
         except (ValueError, TypeError):
-            return None
+            return deepcopy(DEFAULT_DISENO)
         if not isinstance(diseno, dict) or "campos" not in diseno:
-            return None
+            return deepcopy(DEFAULT_DISENO)
         base = deepcopy(DEFAULT_DISENO)
         base.update({k: v for k, v in diseno.items() if k in base})
         if isinstance(diseno.get("campos"), list):
             base["campos"] = diseno["campos"]
         return base
-
-    def cargar_diseno(self) -> dict:
-        row = self.db.fetch_one(
-            "SELECT valor FROM etiqueta_config WHERE clave = 'diseno'")
-        diseno = self._parsear_diseno(row["valor"] if row else None)
-        return diseno or deepcopy(DEFAULT_DISENO)
 
     def guardar_diseno(self, diseno: dict) -> None:
         self.db.execute(
@@ -81,35 +72,4 @@ class EtiquetaModel:
             "ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, "
             "updated_at = datetime('now')",
             (json.dumps(diseno, ensure_ascii=False),),
-        )
-
-    # ---- Diseños nombrados (guardados en BD, sin archivos sueltos) ----
-
-    def listar_disenos(self) -> list[dict]:
-        """Diseños guardados con nombre: [{'clave', 'valor', 'updated_at'}]."""
-        return self.db.fetch_all(
-            "SELECT clave, valor, updated_at FROM etiqueta_config "
-            "WHERE clave LIKE ? ORDER BY clave",
-            (PREFIJO_DISENO + "%",),
-        )
-
-    def guardar_diseno_nombre(self, nombre: str, diseno: dict) -> None:
-        self.db.execute(
-            "INSERT INTO etiqueta_config (clave, valor) VALUES (?, ?) "
-            "ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, "
-            "updated_at = datetime('now')",
-            (PREFIJO_DISENO + nombre, json.dumps(diseno, ensure_ascii=False)),
-        )
-
-    def cargar_diseno_nombre(self, nombre: str) -> dict | None:
-        row = self.db.fetch_one(
-            "SELECT valor FROM etiqueta_config WHERE clave = ?",
-            (PREFIJO_DISENO + nombre,),
-        )
-        return self._parsear_diseno(row["valor"] if row else None)
-
-    def eliminar_diseno(self, nombre: str) -> None:
-        self.db.execute(
-            "DELETE FROM etiqueta_config WHERE clave = ?",
-            (PREFIJO_DISENO + nombre,),
         )

@@ -4,18 +4,16 @@ Muestra la vista previa de la etiqueta térmica 75x45 mm y permite enviarla
 directo a la etiquetadora (controlador de Windows) o guardarla como PDF.
 """
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtPrintSupport import QPrintPreviewDialog, QPrinter
+from PySide6.QtPrintSupport import QPrintDialog, QPrintPreviewDialog, QPrinter
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
     QVBoxLayout,
 )
 
-from src.components.notificacion_flotante import notificar_flotante
 from src.utils.etiqueta_termica import (
     ANCHO_MM, ALTO_MM, configurar_printer, datos_prueba, etiqueta_termica_pdf,
     imprimir_etiqueta, render_etiqueta_termica, render_etiqueta_termica_pixmap,
 )
-from src.utils.impresion_virtual import dialogo_impresion
 
 _PREVIEW_W = 380
 _PREVIEW_H = 256
@@ -70,23 +68,16 @@ class EtiquetaPruebaDialog(QDialog):
     def _imprimir(self) -> None:
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
         configurar_printer(printer)
-
-        def pintar(p: QPrinter) -> None:
-            err = imprimir_etiqueta(p, self._datos)
-            if err:
-                raise RuntimeError(err)
-
-        try:
-            estado = dialogo_impresion(printer, self, pintar)
-        except Exception as e:
-            QMessageBox.critical(self, "Error al imprimir", str(e))
+        dlg = QPrintDialog(printer, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        if estado == "impreso":
-            notificar_flotante("Etiqueta de prueba enviada a la impresora.",
-                               tipo="success", titulo="Impresión", host=self)
-        elif estado == "simulado":
-            notificar_flotante("Simulación en pantalla: no se envió a la impresora.",
-                               tipo="info", titulo="Impresora virtual", host=self)
+        err = imprimir_etiqueta(printer, self._datos)
+        if err:
+            QMessageBox.critical(self, "Error al imprimir", err)
+        else:
+            QMessageBox.information(
+                self, "Impresión",
+                "Etiqueta de prueba enviada a la impresora.")
 
     def _vista_previa(self) -> None:
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
@@ -103,5 +94,4 @@ class EtiquetaPruebaDialog(QDialog):
         if not path:
             return
         etiqueta_termica_pdf(path, self._datos)
-        notificar_flotante(f"Etiqueta guardada en:\n{path}",
-                           tipo="success", titulo="PDF", host=self)
+        QMessageBox.information(self, "PDF", f"Etiqueta guardada en:\n{path}")

@@ -10,7 +10,6 @@ env/
 *.db
 *.db-wal
 *.db-shm
-goretti_erp.db*
 *.sqlite
 *.sqlite3
 
@@ -24,10 +23,6 @@ OC_*.xlsx
 Ordenes_Compra.xlsx
 Movimientos_Inventario.xlsx
 *.pdf
-
-# Empaquetado PyInstaller
-build/
-dist/
 
 # Capturas de preview (pruebas de UI)
 ui_preview/
