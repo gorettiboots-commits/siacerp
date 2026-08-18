@@ -303,7 +303,7 @@ class MainWindow(QMainWindow):
         """Barra superior horizontal de módulos (estilo toolbar del sandbox)."""
         barra = QFrame()
         barra.setObjectName("navToolbar")
-        barra.setFixedHeight(52)
+        barra.setFixedHeight(68)
         # El fondo/bordes los define styles.qss (navToolbar) — sin override inline
 
         layout = QHBoxLayout(barra)
@@ -332,35 +332,43 @@ class MainWindow(QMainWindow):
 
         self.nav_salir = QToolButton()
         self.nav_salir.setText("Cerrar Sesión")
-        self.nav_salir.setObjectName("navTool")
+        self.nav_salir.setObjectName("navToolSalir")
 
         _iconos_nav = {
-            "oc": self.nav_ordenes,
-            "produccion": self.nav_produccion,
-            "inventario": self.nav_stock,
-            "clientes": self.nav_clientes,
-            "programacion": self.nav_programacion,
-            "sandbox": self.nav_sandbox,
+            "oc": ("navToolOC", "#2563eb"),
+            "produccion": ("navToolProduccion", "#7c3aed"),
+            "inventario": ("navToolInventario", "#0d9488"),
+            "clientes": ("navToolClientes", "#16a34a"),
+            "programacion": ("navToolProgramacion", "#ea580c"),
+            "sandbox": ("navToolSandbox", "#ca8a04"),
         }
-        for clave, btn in _iconos_nav.items():
-            btn.setObjectName("navTool")
-            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        for clave, btn in [
+            ("oc", self.nav_ordenes),
+            ("produccion", self.nav_produccion),
+            ("inventario", self.nav_stock),
+            ("clientes", self.nav_clientes),
+            ("programacion", self.nav_programacion),
+            ("sandbox", self.nav_sandbox),
+        ]:
+            obj_name, color = _iconos_nav[clave]
+            btn.setObjectName(obj_name)
+            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
-            btn.setMinimumHeight(34)
+            btn.setFixedSize(78, 58)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setIcon(mono_icon(clave, 20, "#1F2937"))
-            btn.setIconSize(QSize(20, 20))
+            btn.setIcon(mono_icon(clave, 26, color))
+            btn.setIconSize(QSize(26, 26))
             btn.toggled.connect(
-                lambda checked, b=btn, k=clave:
-                b.setIcon(mono_icon(k, 20, "#ffffff" if checked else "#1F2937")))
+                lambda checked, b=btn, k=clave, c=color:
+                b.setIcon(mono_icon(k, 26, "#ffffff" if checked else c)))
             layout.addWidget(btn)
 
-        self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.nav_salir.setMinimumHeight(34)
+        self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.nav_salir.setFixedSize(78, 58)
         self.nav_salir.setCursor(Qt.PointingHandCursor)
-        self.nav_salir.setIcon(mono_icon("logout", 20, "#1F2937"))
-        self.nav_salir.setIconSize(QSize(20, 20))
+        self.nav_salir.setIcon(mono_icon("logout", 26, "#dc2626"))
+        self.nav_salir.setIconSize(QSize(26, 26))
         self.nav_salir.clicked.connect(self._logout)
 
         self.nav_sandbox.setVisible(False)

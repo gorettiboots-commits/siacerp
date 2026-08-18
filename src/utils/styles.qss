@@ -407,58 +407,158 @@ QToolButton#btnFilaIconoTile:disabled {
 
 /* ============================================================
    BARRA DE NAVEGACIÓN (toolbar superior horizontal)
-   Estilo del sidebar oscuro elegante de Goretti, adaptado a
-   toolbar horizontal.
+   Colores por módulo — cada botón tiene su propio color.
    ============================================================ */
 QFrame#navToolbar {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #1e293b, stop:1 #16202f);
-    border-bottom: 1px solid #0f172a;
+    background-color: #E4E9ED;
+    border-bottom: 1px solid #A9A9A9;
 }
 
 QToolButton#navTool {
     background-color: transparent;
-    color: #cbd5e1;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 500;
+    color: #1F2937;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
 }
 QToolButton#navTool:hover {
-    background-color: #334155;
-    color: #e2e8f0;
+    background-color: #C9D4D6;
 }
 QToolButton#navTool:pressed {
-    background-color: #1e293b;
+    background-color: #AEBFC2;
 }
 QToolButton#navTool:checked {
-    background-color: #4338ca;
+    background-color: #07756A;
     color: #ffffff;
-}
-QToolButton#navTool:checked:hover {
-    background-color: #4f46e5;
+    border-color: #07756A;
 }
 
+QToolButton#navToolOC {
+    background-color: transparent;
+    color: #1e40af;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolOC:hover { background-color: #dbeafe; }
+QToolButton#navToolOC:pressed { background-color: #bfdbfe; }
+QToolButton#navToolOC:checked {
+    background-color: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+}
+
+QToolButton#navToolProduccion {
+    background-color: transparent;
+    color: #7c3aed;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolProduccion:hover { background-color: #ede9fe; }
+QToolButton#navToolProduccion:pressed { background-color: #ddd6fe; }
+QToolButton#navToolProduccion:checked {
+    background-color: #7c3aed;
+    color: #ffffff;
+    border-color: #7c3aed;
+}
+
+QToolButton#navToolInventario {
+    background-color: transparent;
+    color: #0d9488;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolInventario:hover { background-color: #ccfbf1; }
+QToolButton#navToolInventario:pressed { background-color: #99f6e4; }
+QToolButton#navToolInventario:checked {
+    background-color: #0d9488;
+    color: #ffffff;
+    border-color: #0d9488;
+}
+
+QToolButton#navToolClientes {
+    background-color: transparent;
+    color: #16a34a;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolClientes:hover { background-color: #dcfce7; }
+QToolButton#navToolClientes:pressed { background-color: #bbf7d0; }
+QToolButton#navToolClientes:checked {
+    background-color: #16a34a;
+    color: #ffffff;
+    border-color: #16a34a;
+}
+
+QToolButton#navToolProgramacion {
+    background-color: transparent;
+    color: #ea580c;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolProgramacion:hover { background-color: #fed7aa; }
+QToolButton#navToolProgramacion:pressed { background-color: #fdba74; }
+QToolButton#navToolProgramacion:checked {
+    background-color: #ea580c;
+    color: #ffffff;
+    border-color: #ea580c;
+}
+
+QToolButton#navToolSandbox {
+    background-color: transparent;
+    color: #ca8a04;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolSandbox:hover { background-color: #fef9c3; }
+QToolButton#navToolSandbox:pressed { background-color: #fef08a; }
+QToolButton#navToolSandbox:checked {
+    background-color: #ca8a04;
+    color: #ffffff;
+    border-color: #ca8a04;
+}
+
+QToolButton#navToolSalir {
+    background-color: transparent;
+    color: #dc2626;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolSalir:hover { background-color: #fee2e2; }
+QToolButton#navToolSalir:pressed { background-color: #fecaca; }
+
 QFrame#userCard {
-    background-color: #0f172a;
-    border-radius: 8px;
-    padding: 10px 12px;
-    border: 1px solid #243244;
+    background-color: transparent;
+    border: none;
+    padding: 0px 4px;
 }
 QLabel#userName {
-    color: #e2e8f0;
+    color: #1F2937;
     font-size: 12px;
     font-weight: 600;
 }
 QLabel#userRole {
-    color: #94a3b8;
+    color: #6B7280;
     font-size: 11px;
 }
 QLabel#navBrand {
-    color: #ffffff;
+    color: #1E4A8F;
     font-weight: bold;
-    font-size: 17px;
+    font-size: 15px;
 }
 
 /* ============================================================
@@ -709,44 +809,45 @@ QListWidget::item:selected {
    MENÚ
    ============================================================ */
 QMenuBar {
-    background-color: #1e293b;
-    color: #94a3b8;
+    background-color: #E8E8E8;
+    color: #000000;
     padding: 2px;
 }
 QMenuBar::item {
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: 0px;
 }
 QMenuBar::item:selected {
-    background-color: #334155;
-    color: #e2e8f0;
+    background-color: #BBD4F7;
+    color: #000000;
 }
 QMenu {
-    background-color: #ffffff;
-    color: #1e293b;
-    border: 1px solid #e2e8f0;
-    padding: 6px;
+    background-color: #F0F0F0;
+    color: #000000;
+    border: 1px solid #A0A0A0;
+    padding: 4px;
 }
 QMenu::item {
-    padding: 8px 28px 8px 14px;
-    border-radius: 6px;
+    padding: 6px 24px 6px 12px;
+    border-radius: 0px;
 }
 QMenu::item:selected {
-    background-color: #eef2ff;
-    color: #4f46e5;
+    background-color: #BBD4F7;
+    color: #000000;
 }
 
 /* ============================================================
    STATUS BAR
    ============================================================ */
 QStatusBar {
-    background-color: #1e293b;
-    color: #94a3b8;
+    background-color: #E8E8E8;
+    color: #000000;
+    border-top: 1px solid #A0A0A0;
     font-size: 12px;
     padding: 4px 8px;
 }
 QStatusBar QLabel {
-    color: #94a3b8;
+    color: #000000;
 }
 
 /* ============================================================
