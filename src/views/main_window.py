@@ -141,6 +141,10 @@ class MainWindow(QMainWindow):
         archivo_menu.addAction(salir_action)
 
         ayuda_menu = menubar.addMenu("Ayuda")
+        self._logs_action = QAction("Logs del Sistema", self)
+        self._logs_action.triggered.connect(self._mostrar_logs)
+        ayuda_menu.addAction(self._logs_action)
+        ayuda_menu.addSeparator()
         acerca_action = QAction("Acerca de SIAC ERP", self)
         acerca_action.triggered.connect(self._mostrar_acerca)
         ayuda_menu.addAction(acerca_action)
@@ -156,6 +160,13 @@ class MainWindow(QMainWindow):
             return
         from src.views.configuracion_view import DialogConfiguracion
         dlg = DialogConfiguracion(self, self._permisos)
+        dlg.exec()
+
+    def _mostrar_logs(self) -> None:
+        if self._stack.currentWidget() != self._main_container:
+            return
+        from src.views.logs_view import DialogLogs
+        dlg = DialogLogs(self)
         dlg.exec()
 
     def _mostrar_acerca(self) -> None:
@@ -419,6 +430,9 @@ class MainWindow(QMainWindow):
             bool(self._current_user)
             and (tiene(self._permisos, "produccion", "ver")
                  or tiene(self._permisos, "programacion", "ver")))
+        self._logs_action.setVisible(
+            bool(self._current_user)
+            and self._current_user.get("rol") == "admin")
         self._view_ordenes.set_permisos(self._permisos)
         self._view_produccion.set_permisos(self._permisos)
         self._view_stock.set_permisos(self._permisos)
@@ -468,6 +482,7 @@ class MainWindow(QMainWindow):
         self._crear_etiqueta_action.setEnabled(False)
         self._imprimir_etiquetas_action.setEnabled(False)
         self._cola_impresion_action.setEnabled(False)
+        self._logs_action.setVisible(False)
         self._stack.setCurrentWidget(self._login_view)
         for w in self._stack.findChildren(LoginView):
             w.txt_user.clear()
