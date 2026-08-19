@@ -266,13 +266,26 @@ class PreviewImpresion(QDialog):
         QDesktopServices.openUrl(path)
 
     def _renderizar(self, printer: QPrinter) -> None:
+        # Para PDF: usar WebEngine (printToPdf) si está disponible,
+        # genera el archivo con CSS completo (WYSIWYG).
+        if (self._web is not None
+                and printer.outputFormat() == QPrinter.PdfFormat
+                and printer.outputFileName()):
+            from PySide6.QtCore import QEventLoop, QTimer
+            loop = QEventLoop()
+            self._web.page().printToPdf(printer.outputFileName())
+            QTimer.singleShot(3000, loop.quit)
+            loop.exec()
+            return
+        # Para impresora real o fallback: QTextDocument (estable)
         from PySide6.QtGui import QTextDocument
+        from PySide6.QtCore import QSizeF
         doc = QTextDocument()
         doc.setHtml(self._html)
-        # Ajustar el documento al tamaño de página del printer para que
-        # el contenido se escale correctamente (no quede en miniatura).
-        pg = printer.pageLayout().paintRectPixels(printer.resolution())
-        doc.setPageSize(pg.size())
+        page_mm = printer.pageLayout().pageSize().size(QPageSize.Millimeter)
+        css_w = page_mm.width() * 96.0 / 25.4
+        css_h = page_mm.height() * 96.0 / 25.4
+        doc.setPageSize(QSizeF(css_w, css_h))
         doc.print_(printer)
 
 

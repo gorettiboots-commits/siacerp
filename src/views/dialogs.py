@@ -512,6 +512,96 @@ class DialogMovimientoStock(QDialog):
         self.accept()
 
 
+class DialogBuscarInsumo(QDialog):
+    """Diálogo de búsqueda para seleccionar un insumo del catálogo."""
+
+    def __init__(self, controller: InventarioController,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.setWindowTitle("Buscar Insumo")
+        self.setMinimumSize(600, 450)
+        self.setModal(True)
+        self._seleccionado = None
+        self._setup_ui()
+        self._cargar_insumos("")
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Barra de búsqueda
+        search_row = QHBoxLayout()
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText(
+            "Buscar por código o nombre del insumo...")
+        self.txt_buscar.setClearButtonEnabled(True)
+        self.txt_buscar.textChanged.connect(self._cargar_insumos)
+        search_row.addWidget(self.txt_buscar)
+        layout.addLayout(search_row)
+
+        # Tabla de resultados
+        self.tabla = QTableWidget(0, 4)
+        self.tabla.setHorizontalHeaderLabels(
+            ["Código", "Nombre", "Stock", "Unidad"])
+        configurar_tabla_excel(self.tabla)
+        self.tabla.setSelectionBehavior(
+            QAbstractItemView.SelectRows)
+        self.tabla.setSelectionMode(
+            QAbstractItemView.SingleSelection)
+        self.tabla.doubleClicked.connect(self._seleccionar)
+        self.tabla.setColumnWidth(0, 100)
+        self.tabla.setColumnWidth(2, 80)
+        layout.addWidget(self.tabla)
+
+        # Botones
+        btns = QHBoxLayout()
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_select = QPushButton("Seleccionar")
+        btn_select.setObjectName("btnPrimary")
+        btn_select.clicked.connect(self._seleccionar)
+        btns.addStretch()
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_select)
+        layout.addLayout(btns)
+
+    def _cargar_insumos(self, termino: str) -> None:
+        try:
+            if termino.strip():
+                insumos = self.controller.buscar_insumos(termino.strip())
+            else:
+                insumos = self.controller.listar_insumos()
+        except Exception:
+            insumos = []
+        self.tabla.setRowCount(len(insumos))
+        for i, ins in enumerate(insumos):
+            self.tabla.setItem(i, 0, QTableWidgetItem(ins.get("codigo", "")))
+            self.tabla.setItem(i, 1, QTableWidgetItem(ins.get("nombre", "")))
+            stock_item = QTableWidgetItem(str(ins.get("stock_actual", 0)))
+            stock_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(i, 2, stock_item)
+            self.tabla.setItem(
+                i, 3, QTableWidgetItem(ins.get("unidad_medida", "")))
+            # Guardar el dict completo en el item
+            self.tabla.item(i, 0).setData(Qt.UserRole, ins)
+
+    def _seleccionar(self) -> None:
+        fila = self.tabla.currentRow()
+        if fila < 0:
+            QMessageBox.information(
+                self, "Seleccionar", "Seleccione un insumo de la lista.")
+            return
+        item = self.tabla.item(fila, 0)
+        self._seleccionado = item.data(Qt.UserRole) if item else None
+        self.accept()
+
+    def obtener_seleccionado(self) -> dict | None:
+        return self._seleccionado
+
+
 class DialogMovimientoMultiPartida(QDialog):
     """Dialogo para crear movimientos de inventario multi-partida.
 
@@ -525,7 +615,7 @@ class DialogMovimientoMultiPartida(QDialog):
         super().__init__()
         self.controller = controller
         self.setWindowTitle("Movimiento de Inventario")
-        self.setMinimumSize(700, 450)
+        self.setMinimumSize(750, 500)
         self.setModal(True)
         self._insumo_inicial = insumo_id
         self._setup_ui()
@@ -533,12 +623,22 @@ class DialogMovimientoMultiPartida(QDialog):
             self._agregar_fila(insumo_id)
 
     def _setup_ui(self) -> None:
+        from src.utils.folios import siguiente_folio
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
         top = QHBoxLayout()
         form = QFormLayout()
         form.setSpacing(8)
+
+        # Folio auto-generado (solo lectura)
+        self._folio = siguiente_folio(
+            'movimientos_inventario', 'folio', 'MVI')
+        self.txt_folio = QLineEdit(self._folio)
+        self.txt_folio.setReadOnly(True)
+        self.txt_folio.setStyleSheet(
+            "background-color: #f0f0f0; font-weight: bold;")
+        form.addRow(QLabel("Folio:"), self.txt_folio)
 
         self.cmb_tipo = QComboBox()
         self.cmb_tipo.addItems(["salida", "cambio_ubicacion"])
@@ -593,20 +693,45 @@ class DialogMovimientoMultiPartida(QDialog):
         botones.addWidget(btn_save)
         layout.addLayout(botones)
 
+    def _buscar_insumo(self, fila: int) -> None:
+        """Abre diálogo de búsqueda para seleccionar un insumo."""
+        dlg = DialogBuscarInsumo(self.controller, self)
+        if dlg.exec():
+            ins = dlg.obtener_seleccionado()
+            if ins:
+                self._asignar_insumo_a_fila(fila, ins)
+
+    def _asignar_insumo_a_fila(self, fila: int, ins: dict) -> None:
+        """Asigna un insumo seleccionado a una fila de la tabla."""
+        # Limpiar texto placeholder del item
+        item = self.tabla.item(fila, 0)
+        if item:
+            item.setText("")
+        lbl = QLabel(f"{ins['codigo']} - {ins['nombre']}")
+        lbl.setToolTip(
+            f"Stock: {ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')}")
+        lbl.setMargin(4)
+        self.tabla.setCellWidget(fila, 0, lbl)
+        if item:
+            item.setData(Qt.UserRole, ins['id'])
+            item.setData(Qt.UserRole + 1, ins)
+
     def _agregar_fila(self, insumo_id: int | None = None) -> None:
         fila = self.tabla.rowCount()
         self.tabla.insertRow(fila)
 
-        cmb = QComboBox()
-        insumos = self.controller.listar_insumos()
-        idx_sel = 0
-        for i, ins in enumerate(insumos):
-            texto = f"{ins['codigo']} - {ins['nombre']}  (stock: {ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')})"
-            cmb.addItem(texto, ins["id"])
-            if insumo_id and ins["id"] == insumo_id:
-                idx_sel = i
-        cmb.setCurrentIndex(idx_sel)
-        self.tabla.setCellWidget(fila, 0, cmb)
+        # Celda de insumo con botón de búsqueda
+        item = QTableWidgetItem("(Click para buscar)")
+        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+        self.tabla.setItem(fila, 0, item)
+
+        if insumo_id:
+            ins = self.controller.obtener_insumo(insumo_id)
+            if ins:
+                self._asignar_insumo_a_fila(fila, ins)
+        else:
+            # Auto-abrir búsqueda si no hay insumo preseleccionado
+            self._buscar_insumo(fila)
 
         spn = QDoubleSpinBox()
         spn.setRange(0.01, 999999)
@@ -632,10 +757,10 @@ class DialogMovimientoMultiPartida(QDialog):
         obs = self.txt_obs.toPlainText().strip()
         partidas = []
         for fila in range(self.tabla.rowCount()):
-            cmb = self.tabla.cellWidget(fila, 0)
+            item = self.tabla.item(fila, 0)
             spn = self.tabla.cellWidget(fila, 1)
             txt = self.tabla.cellWidget(fila, 2)
-            insumo_id = cmb.currentData() if cmb else None
+            insumo_id = item.data(Qt.UserRole) if item else None
             cantidad = spn.value() if spn else 0
             obs_item = txt.text().strip() if txt else ""
             if insumo_id is None:
@@ -667,6 +792,9 @@ class DialogMovimientoMultiPartida(QDialog):
 
     def obtener_movimiento_id(self) -> int | None:
         return getattr(self, '_mov_id', None)
+
+    def obtener_folio(self) -> str:
+        return self._folio
 
 
 class DialogProveedor(QDialog):

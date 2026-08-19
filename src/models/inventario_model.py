@@ -149,9 +149,12 @@ class MovimientoInventarioModel:
     def listar(self, insumo_id: Optional[int] = None) -> list[dict]:
         base = """
             SELECT m.*, i.nombre as insumo_nombre,
+                   COALESCE(mg.folio, oc.folio, op.folio, m.observaciones) AS folio,
                    COALESCE(oc.folio, op.folio, m.observaciones) AS referencia_folio
             FROM movimiento_inventario m
             JOIN insumos i ON i.id = m.insumo_id
+            LEFT JOIN movimientos_inventario mg
+              ON m.referencia_tipo = 'movimiento' AND mg.id = m.referencia_id
             LEFT JOIN ordenes_compra oc
               ON m.referencia_tipo = 'orden_compra' AND oc.id = m.referencia_id
             LEFT JOIN ordenes_produccion op

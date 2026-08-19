@@ -9,6 +9,9 @@ def configurar_tabla_excel(table: QTableWidget) -> None:
         header.setSectionResizeMode(col, QHeaderView.Interactive)
     header.setStretchLastSection(True)
     table.verticalHeader().setSectionResizeMode(QHeaderView.Interactive)
+    # Doble clic en cabecera = auto-ajustar ancho de columna
+    header.sectionDoubleClicked.connect(
+        lambda logical: table.resizeColumnToContents(logical))
 
 
 class NumericItem(QTableWidgetItem):

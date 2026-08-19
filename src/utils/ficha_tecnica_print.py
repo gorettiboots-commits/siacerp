@@ -52,22 +52,28 @@ def _documento(modelo: dict, ficha: dict, fotos: dict[str, bytes | None]):
 
 
 def _html(modelo: dict, ficha: dict, fotos: dict[str, bytes | None]) -> str:
-    logo_b64 = _logo_base64()
+    """Ficha tecnica con plantilla mint/salvia."""
+    from src.utils.print_template import (
+        esc as t_esc, nombre_empresa as t_empresa, logo_base64,
+        html_cabecera, html_ondas_superiores, html_pie, wrap_hoja,
+    )
+
+    logo_b64 = logo_base64()
     logo_html = ""
     if logo_b64:
-        logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
+        logo_html = (f'<img src="data:image/png;base64,{logo_b64}" '
                      'style="max-width:70px;max-height:70px;float:right"/>')
 
     datos = ficha or {}
     header_cells = "".join(
-        f"<td style='padding:4px 8px;border:1px solid #ddd;font-size:10px'>"
-        f"<b>{etiqueta}:</b> {_esc(_valor(datos, col))}</td>"
+        f"<td style='padding:4px 8px;border:1px solid #e4e7e2;font-size:10px'>"
+        f"<b>{etiqueta}:</b> {t_esc(_valor(datos, col))}</td>"
         for etiqueta, col in CAMPOS_ENCABEZADO
     )
-    header_html = (f"<div style='border-bottom:2px solid #4f46e5;padding-bottom:8px;"
+    header_html = (f"<div style='border-bottom:2px solid #A9C5C1;padding-bottom:8px;"
                    f"margin-bottom:12px'>{logo_html}"
-                   f"<h2 style='color:#1e293b;margin:0'>Ficha técnica</h2>"
-                   f"<p style='color:#64748b;font-size:11px;margin:4px 0'>"
+                   f"<h2 style='color:#2f4f3a;margin:0'>Ficha Tecnica</h2>"
+                   f"<p style='color:#5b6b60;font-size:11px;margin:4px 0'>"
                    f"{modelo.get('codigo', '')} - {modelo.get('nombre', '')}</p></div>")
 
     tabla_encabezado = (f"<table style='width:100%;border-collapse:collapse;"
@@ -82,14 +88,14 @@ def _html(modelo: dict, ficha: dict, fotos: dict[str, bytes | None]) -> str:
                 continue
             etiqueta_campo = dict(CAMPOS_FICHA)[col]
             celdas.append(
-                f"<td style='padding:4px 8px;border:1px solid #ddd;"
-                f"font-size:10px'><b>{_esc(etiqueta_campo)}:</b> "
-                f"{_esc(_valor(datos, col))}</td>")
+                f"<td style='padding:4px 8px;border:1px solid #e4e7e2;"
+                f"font-size:10px'><b>{t_esc(etiqueta_campo)}:</b> "
+                f"{t_esc(_valor(datos, col))}</td>")
         filas_html = ""
         for i in range(0, len(celdas), 2):
             filas_html += f"<tr>{''.join(celdas[i:i + 2])}</tr>"
         secciones_html += (f"<div style='margin-bottom:12px'>"
-                           f"<h3 style='color:#4f46e5;font-size:12px;margin:8px 0'>"
+                           f"<h3 style='color:#A9C5C1;font-size:12px;margin:8px 0'>"
                            f"{etiqueta}</h3>"
                            f"<table style='width:100%;border-collapse:collapse;"
                            f"font-family:Segoe UI,sans-serif'>{filas_html}</table></div>")
@@ -97,29 +103,42 @@ def _html(modelo: dict, ficha: dict, fotos: dict[str, bytes | None]) -> str:
     fotos_html = ""
     for etiqueta, tipo in (("Producto terminado", "producto"),
                            ("Tubo", "tubo"), ("Chinela", "chinela"),
-                           ("Talón", "talon"), ("Suela", "suela")):
+                           ("Talon", "talon"), ("Suela", "suela")):
         img = fotos.get(tipo)
         if not img:
             continue
-        img_b64 = base64.b64encode(img).decode()
+        import base64 as b64
+        img_b64 = b64.b64encode(img).decode()
         fotos_html += (f"<div style='text-align:center;margin:6px;display:inline-block'>"
                        f"<img src='data:image/png;base64,{img_b64}' "
-                       f"style='max-width:160px;max-height:160px;border:1px solid #ddd'/>"
-                       f"<p style='font-size:10px;color:#64748b;margin:2px 0 0 0'>{etiqueta}</p></div>")
+                       f"style='max-width:160px;max-height:160px;border:1px solid #e4e7e2'/>"
+                       f"<p style='font-size:10px;color:#5b6b60;margin:2px 0 0 0'>{etiqueta}</p></div>")
     if fotos_html:
         fotos_html = (f"<div style='margin-bottom:12px'>"
-                      f"<h3 style='color:#4f46e5;font-size:12px;margin:8px 0'>Fotos</h3>"
+                      f"<h3 style='color:#A9C5C1;font-size:12px;margin:8px 0'>Fotos</h3>"
                       f"{fotos_html}</div>")
 
-    return f"""<!DOCTYPE html>
-<html><head><meta charset='utf-8'/></head><body>
+    cabecera = html_cabecera(
+        "FICHA TECNICA",
+        subtitulo=f"{modelo.get('codigo', '')} - {modelo.get('nombre', '')}")
+
+    contenido = f"""
+{cabecera}
+{html_ondas_superiores()}
+
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:0;">
+<tr><td style="padding:0 14mm;">
+
 {header_html}
 {tabla_encabezado}
 {secciones_html}
 {fotos_html}
-<p style='color:#94a3b8;font-size:9px;margin-top:16px;text-align:center'>
-Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derechos reservados</p>
-</body></html>"""
+
+</td></tr></table>
+
+{html_pie("Ficha Tecnica")}
+"""
+    return wrap_hoja(contenido)
 
 
 def _valor(datos: dict, columna: str) -> str:

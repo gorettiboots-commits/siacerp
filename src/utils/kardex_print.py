@@ -18,11 +18,11 @@ def imprimir_kardex(insumo: dict, movimientos: list[dict],
 
 
 def _html(insumo: dict, movimientos: list[dict]) -> str:
-    logo_b64 = _logo_base64()
-    logo_html = ""
-    if logo_b64:
-        logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
-                     'style="max-width:70px;max-height:70px;float:right"/>')
+    """Kardex del insumo con plantilla mint/salvia."""
+    from src.utils.print_template import (
+        esc as t_esc, fmt_fecha as t_fmt_fecha, fmt_numero as t_fmt_numero,
+        html_cabecera, html_ondas_superiores, html_pie, wrap_hoja,
+    )
 
     filas = ""
     for m in movimientos:
@@ -30,38 +30,48 @@ def _html(insumo: dict, movimientos: list[dict]) -> str:
         etiqueta_tipo = {"entrada": "Entrada", "salida": "Salida",
                          "ajuste": "Ajuste"}.get(tipo, tipo)
         filas += (
-            f"<tr><td style='padding:6px;border:1px solid #ddd;font-size:10px'>{_esc(_fmt_fecha(m.get('created_at', '')))}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{etiqueta_tipo}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{_fmt_numero(m.get('entrada', 0))}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{_fmt_numero(m.get('salida', 0))}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{_fmt_numero(m.get('saldo', 0))}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{_esc(m.get('referencia_folio', '') or '')}</td>"
-            f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{_esc(m.get('observaciones', '') or '')}</td></tr>"
+            f"<tr>"
+            f"<td>{t_fmt_fecha(m.get('created_at', ''))}</td>"
+            f"<td>{etiqueta_tipo}</td>"
+            f"<td>{t_fmt_numero(m.get('entrada', 0))}</td>"
+            f"<td>{t_fmt_numero(m.get('salida', 0))}</td>"
+            f"<td style='font-weight:700'>{t_fmt_numero(m.get('saldo', 0))}</td>"
+            f"<td>{t_esc(m.get('referencia_folio', '') or '')}</td>"
+            f"<td>{t_esc(m.get('observaciones', '') or '')}</td>"
+            f"</tr>"
         )
 
-    return f"""<!DOCTYPE html>
-<html><head><meta charset='utf-8'/></head><body>
-<div style='border-bottom:2px solid #4f46e5;padding-bottom:8px;margin-bottom:12px'>
-{logo_html}
-<h2 style='color:#1e293b;margin:0'>Kardex de insumo</h2>
-<p style='color:#64748b;font-size:11px;margin:4px 0'>
-{_esc(insumo.get('codigo', ''))} - {_esc(insumo.get('nombre', ''))} &nbsp;|&nbsp;
-Unidad: {_esc(insumo.get('unidad_medida', ''))} &nbsp;|&nbsp;
-Stock mínimo: {_fmt_numero(insumo.get('stock_minimo', 0))}</p>
-</div>
-<table style='width:100%;border-collapse:collapse;font-family:Segoe UI,sans-serif'>
-<tr><th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Fecha</th>
-<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Tipo</th>
-<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Entrada</th>
-<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Salida</th>
-<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Saldo</th>
-<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Referencia</th>
-<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;font-size:11px'>Observaciones</th></tr>
+    cabecera = html_cabecera(
+        "KARDEX DE INSUMO",
+        subtitulo=f"{t_esc(insumo.get('codigo', ''))} - {t_esc(insumo.get('nombre', ''))} | "
+                  f"Unidad: {t_esc(insumo.get('unidad_medida', ''))} | "
+                  f"Stock minimo: {t_fmt_numero(insumo.get('stock_minimo', 0))}")
+
+    contenido = f"""
+{cabecera}
+{html_ondas_superiores()}
+
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:0;">
+<tr><td style="padding:0 14mm;">
+
+<table class='items' width="100%" cellpadding="0" cellspacing="0">
+<tr>
+  <th>Fecha</th>
+  <th>Tipo</th>
+  <th>Entrada</th>
+  <th>Salida</th>
+  <th>Saldo</th>
+  <th>Referencia</th>
+  <th>Observaciones</th>
+</tr>
 {filas}
 </table>
-<p style='color:#94a3b8;font-size:9px;margin-top:16px;text-align:center'>
-Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derechos reservados</p>
-</body></html>"""
+
+</td></tr></table>
+
+{html_pie("Kardex de Insumo")}
+"""
+    return wrap_hoja(contenido)
 
 
 def _fmt_fecha(fecha: str) -> str:

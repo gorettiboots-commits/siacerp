@@ -55,31 +55,26 @@ def _fmt_fecha(fecha: str) -> str:
 
 
 def _movimiento_html(datos: dict, detalle: list[dict]) -> str:
-    """Construye el HTML del documento de movimiento."""
-    logo_b64 = _logo_base64()
-    logo_html = ""
-    if logo_b64:
-        logo_html = (
-            f'<img src="data:image/jpeg;base64,{logo_b64}" '
-            f'style="max-width:56px;max-height:56px;vertical-align:middle;'
-            f'margin-right:8px"/>')
+    """Construye el HTML del documento de movimiento con plantilla mint/salvia."""
+    from src.utils.print_template import (
+        esc as t_esc, fmt_fecha as t_fmt_fecha,
+        html_cabecera, html_ondas_superiores, html_obs_bloque,
+        html_pie, wrap_hoja,
+    )
 
     tipo = datos.get('tipo_movimiento', '')
     tipo_label = ('Salida de Inventario' if tipo == 'salida'
                   else 'Cambio de Ubicacion')
-    folio = _esc(datos.get('folio', ''))
-    fecha_raw = datos.get('created_at', '')
-    fecha = _esc(_fmt_fecha(fecha_raw))
-    obs = _esc(datos.get('observaciones', '') or '')
-    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    folio = t_esc(datos.get('folio', ''))
+    obs = t_esc(datos.get('observaciones', '') or '')
 
     rows = ""
     for i, d in enumerate(detalle, 1):
-        nombre = _esc(d.get('insumo_nombre', ''))
-        codigo = _esc(d.get('insumo_codigo', ''))
-        unidad = _esc(d.get('unidad_medida', ''))
+        nombre = t_esc(d.get('insumo_nombre', ''))
+        codigo = t_esc(d.get('insumo_codigo', ''))
+        unidad = t_esc(d.get('unidad_medida', ''))
         cant = d.get('cantidad', 0)
-        obs_item = _esc(d.get('observaciones', '') or '')
+        obs_item = t_esc(d.get('observaciones', '') or '')
         rows += f"""<tr>
             <td style='text-align:center'>{i}</td>
             <td style='text-align:left'>{codigo}</td>
@@ -89,59 +84,23 @@ def _movimiento_html(datos: dict, detalle: list[dict]) -> str:
             <td style='text-align:left'>{obs_item}</td>
         </tr>"""
 
-    obs_block = ""
-    if obs:
-        obs_block = (
-            f"<div style='margin:8px 0;padding:8px 12px;background:#f8fafc;"
-            f"border-left:3px solid #1d4ed8;font-size:11px'>"
-            f"<b>Observaciones:</b> {obs}</div>")
+    cabecera = html_cabecera(
+        "DOCUMENTO DE MOVIMIENTO", folio=folio,
+        fecha=datos.get('created_at', ''),
+        extra_derecha=f"<b>{tipo_label}</b>")
 
-    return f"""<!DOCTYPE html>
-<html><head><meta charset='utf-8'/><style>
-@page {{ margin: 14mm; }}
-body {{ font-family: Segoe UI, Arial, sans-serif; font-size: 12px;
-        color: #1f2937; margin: 0; }}
-.encabezado {{ border-bottom: 3px solid #1d4ed8; padding-bottom: 10px; }}
-.encabezado table {{ width: 100%; border-collapse: collapse; }}
-.encabezado td {{ vertical-align: middle; }}
-.marca {{ font-size: 26px; font-weight: bold; color: #1d4ed8;
-          letter-spacing: 2px; }}
-.titulo {{ font-size: 17px; font-weight: bold; color: #1f2937; }}
-.titulo2 {{ font-size: 11px; color: #64748b; margin-top: 3px; }}
-.no-fecha {{ text-align: right; font-size: 12px; color: #1f2937; }}
-.num {{ font-size: 18px; font-weight: bold; color: #1d4ed8; }}
-table.items {{ width: 100%; border-collapse: collapse; margin-top: 12px;
-               font-size: 11px; }}
-table.items th {{ background: #111827; color: #fff; text-align: left;
-                  padding: 7px 6px; font-size: 11px; }}
-table.items td {{ border: 1px solid #e5e7eb; padding: 6px; }}
-.pie {{ border-top: 2px solid #1d4ed8; padding-top: 10px;
-        margin-top: 20px; text-align: center; font-size: 11px;
-        color: #64748b; }}
-.pie .marca {{ font-size: 13px; color: #1d4ed8; }}
-</style></head><body>
+    obs_html = html_obs_bloque(str(datos.get('observaciones', '') or '').strip())
 
-<div class='encabezado'>
-<table><tr>
-<td style='width:30%'>
-  {logo_html}<span class='marca'>{_nombre_empresa().upper()}</span>
-  <div class='titulo2'>Sistema Integral de Administracion y Control</div>
-</td>
-<td style='width:40%;text-align:center'>
-  <div class='titulo'>DOCUMENTO DE MOVIMIENTO</div>
-  <div style='font-size:12px;color:#1f2937;margin-top:4px'>
-    <b>{tipo_label}</b></div>
-</td>
-<td class='no-fecha' style='width:30%'>
-  <div>NO. <span class='num'>{folio}</span></div>
-  <div>FECHA: <b>{fecha}</b></div>
-</td>
-</tr></table>
-</div>
+    contenido = f"""
+{cabecera}
+{html_ondas_superiores()}
 
-{obs_block}
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:0;">
+<tr><td style="padding:0 14mm;">
 
-<table class='items'>
+{obs_html}
+
+<table class='items' width="100%" cellpadding="0" cellspacing="0">
 <tr>
   <th style='text-align:center;width:40px'>#</th>
   <th style='text-align:left;width:100px'>CODIGO</th>
@@ -153,16 +112,15 @@ table.items td {{ border: 1px solid #e5e7eb; padding: 6px; }}
 {rows}
 </table>
 
-<div style='margin-top:8px;font-size:11px;color:#64748b'>
+<div style='margin:8px 0;font-size:11px;color:#5b6b60'>
   Total de partidas: <b>{len(detalle)}</b>
 </div>
 
-<div class='pie'>
-  <div class='marca'>{_nombre_empresa().upper()}</div>
-  <div>Generado por {_nombre_empresa()} el {ahora}</div>
-</div>
+</td></tr></table>
 
-</body></html>"""
+{html_pie("Documento de Movimiento")}
+"""
+    return wrap_hoja(contenido)
 
 
 def imprimir_movimiento_documento(movimiento_id: int,

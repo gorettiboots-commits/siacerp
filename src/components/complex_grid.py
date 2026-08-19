@@ -656,8 +656,30 @@ class ComplexGrid(QWidget):
         printer.setOrientation(QPrinter.Landscape)
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(ruta)
+        # Usar WebEngine si disponible (WYSIWYG, CSS completo)
+        try:
+            from PySide6.QtWebEngineWidgets import QWebEngineView
+            from PySide6.QtCore import QEventLoop, QTimer
+            web = QWebEngineView()
+            web.setHtml(self._reporte_html())
+            loop = QEventLoop()
+            def on_load(ok):
+                web.print(printer)
+                loop.quit()
+            web.loadFinished.connect(on_load)
+            QTimer.singleShot(10000, loop.quit)
+            loop.exec()
+            return
+        except ImportError:
+            pass
+        # Fallback: QTextDocument
+        from PySide6.QtCore import QSizeF
         doc = QTextDocument()
         doc.setHtml(self._reporte_html())
+        page_mm = printer.pageLayout().pageSize().size(QPageSize.Millimeter)
+        css_w = page_mm.width() * 96.0 / 25.4
+        css_h = page_mm.height() * 96.0 / 25.4
+        doc.setPageSize(QSizeF(css_w, css_h))
         doc.print_(printer)
 
     def _reporte_html(self) -> str:

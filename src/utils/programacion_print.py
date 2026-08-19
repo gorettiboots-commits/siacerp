@@ -240,19 +240,19 @@ def _renderizar_tabla_segmento(
 </table>"""
 
 
-def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACIÓN SEMANAL",
+def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACION SEMANAL",
                               incluir_semana: bool = False,
                               auto_imprimir: bool = True) -> str:
-    """Genera el HTML de la programación con fila final de totales en negrita.
+    """Genera el HTML de la programacion con plantilla mint/salvia.
 
-    Si las líneas pertenecen a varias corridas (segmentos con tallas sin
-    superposición), genera una tabla independiente por cada segmento, cada
-    una con sus propias columnas de talla y subtotal.
-
-    `auto_imprimir=False` omite el script de window.print(): útil para
-    mostrar el documento en la vista previa de impresión del sistema en
-    lugar de abrirlo en el navegador.
+    Carta horizontal. Si las lineas pertenecen a varias corridas
+    (segmentos con tallas sin superposicion), genera una tabla por segmento.
     """
+    from src.utils.print_template import (
+        esc as t_esc, nombre_empresa as t_empresa, logo_base64,
+        _MENTA, _SALVIA, _SALVIA_OSCURA, _VERDE_OSCURO, _VERDE_MEDIO, _BLANCO,
+    )
+
     segmentos = _detectar_segmentos(lineas)
     hay_multiples = len(segmentos) > 1
 
@@ -266,12 +266,17 @@ def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACIÓN S
 
     cuerpo_completo = "\n".join(tablas) if tablas else (
         "<div style='text-align:center;padding:40px;color:#64748b'>"
-        "Sin líneas para esta selección.</div>")
+        "Sin lineas para esta seleccion.</div>")
 
     if not lineas:
         gran_total_todos = 0
 
     ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    logo_b64 = logo_base64()
+    logo_html = ""
+    if logo_b64:
+        logo_html = (f'<img src="data:image/png;base64,{logo_b64}" '
+                     f'style="max-width:50px;max-height:50px;vertical-align:middle;margin-right:8px"/>')
 
     script_autoprint = "" if not auto_imprimir else (
         "<script>\n"
@@ -284,39 +289,60 @@ def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACIÓN S
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
-<title>{_esc(titulo)}</title>
+<title>{t_esc(titulo)}</title>
 <style>
 @page {{ size: letter landscape; margin: 10mm; }}
-body {{ font-family: Arial, Helvetica, sans-serif; margin: 0; color: #111827; }}
-.header {{ background: #ffccff; padding: 12px 16px; border-bottom: 3px solid #d946ef; }}
-.header h1 {{ margin: 0; font-size: 18px; color: #7c3aed; }}
-.header .sub {{ font-size: 11px; color: #4a4a4a; margin-top: 3px; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; color: #374151; }}
+.header {{
+    background: linear-gradient(135deg, {_MENTA} 0%, {_SALVIA} 100%);
+    padding: 12px 20px; border-bottom: 3px solid {_SALVIA_OSCURA};
+}}
+.header table {{ width: 100%; border-collapse: collapse; }}
+.header td {{ vertical-align: middle; }}
+.header .marca {{ font-size: 20px; font-weight: 800; color: {_VERDE_OSCURO}; letter-spacing: 2px; }}
+.header .titulo {{ font-size: 18px; font-weight: 700; color: {_VERDE_OSCURO}; text-align: center; }}
+.header .sub {{ font-size: 11px; color: {_VERDE_MEDIO}; }}
+header .fecha {{ font-size: 11px; color: {_VERDE_MEDIO}; text-align: right; }}
 table.prog {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
-table.prog th {{ background: #7c3aed; color: #ffffff; border: 1px solid #6b21a8;
+table.prog th {{ background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+                color: #ffffff; border: 1px solid {_SALVIA_OSCURA};
                 padding: 6px 4px; font-size: 10px; white-space: nowrap; }}
-table.prog td {{ border: 1px solid #e5e7eb; padding: 4px; font-size: 11px;
-                text-align: center; }}
+table.prog td {{ border: 1px solid #e4e7e2; padding: 4px; font-size: 11px;
+                text-align: center; background: {_BLANCO}; }}
 table.prog td.num {{ text-align: center; }}
-table.prog tr.total td {{ font-weight: bold; background: #ffe6ff; border-color: #d946ef; }}
-table.prog tr:nth-child(even) td {{ background: #fdf2ff; }}
-.corrida {{ margin-top: 16px; padding: 5px 12px; background: #7c3aed; color: #ffffff;
-            font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }}
-.gran-total {{ margin-top: 14px; padding: 8px 16px; background: #ede9fe;
-               border: 2px solid #7c3aed; border-radius: 6px;
-               font-size: 13px; font-weight: bold; color: #4c1d95;
-               text-align: right; }}
-.footer {{ margin-top: 14px; font-size: 10px; color: #6b7280; text-align: right; }}
+table.prog tr.total td {{ font-weight: bold;
+    background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+    color: #ffffff; border-color: {_SALVIA_OSCURA}; }}
+table.prog tr:nth-child(even) td {{ background: #f7faf6; }}
+.corrida {{ margin-top: 16px; padding: 5px 12px;
+    background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+    color: #ffffff; font-size: 11px; font-weight: bold; letter-spacing: 0.5px; }}
+.gran-total {{ margin-top: 14px; padding: 8px 16px;
+    background: linear-gradient(135deg, {_SALVIA} 0%, {_MENTA} 100%);
+    border: 2px solid {_SALVIA_OSCURA}; border-radius: 6px;
+    font-size: 13px; font-weight: bold; color: {_VERDE_OSCURO};
+    text-align: right; }}
+.footer {{ margin-top: 14px; font-size: 10px; color: {_VERDE_MEDIO}; text-align: right; }}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>{_esc(titulo)}</h1>
-  <div class="sub">Generado el {ahora}</div>
+<table><tr>
+<td style="width:30%">
+  {logo_html}<span class="marca">{t_empresa().upper()}</span>
+</td>
+<td style="width:40%">
+  <div class="titulo">{t_esc(titulo)}</div>
+</td>
+<td style="width:30%">
+  <div class="fecha">Generado el {ahora}</div>
+</td>
+</tr></table>
 </div>
 {cuerpo_completo}
 {"" if not hay_multiples or not lineas else
  f'<div class="gran-total">TOTAL GENERAL: {gran_total_todos} pares</div>'}
-<div class="footer">{_nombre_empresa()} — Impresión Carta horizontal</div>
+<div class="footer">{t_empresa()} - Programacion Semanal</div>
 {script_autoprint}
 </body>
 </html>"""

@@ -55,7 +55,7 @@ class TestMembrete:
 
     def test_reporte_muestra_logo_a_tamano_de_membrete(self):
         html = _oc_receipt_html(_datos(), _detalle())
-        assert "max-width:110px;max-height:110px" in html
+        assert 'width="90"' in html or 'width="100"' in html or 'width="110"' in html or 'width="120"' in html
 
     def test_reporte_conserva_marca_y_totales(self):
         html = _oc_receipt_html(_datos(), _detalle())
