@@ -10,7 +10,10 @@ from src.database.db_manager import DatabaseManager
 class EmpresaModel:
     """Acceso a la configuración de empresa (key-value store)."""
 
-    CLAVES = ('nombre_empresa', 'razon_social', 'logo', 'video_splash')
+    CLAVES = (
+        'nombre_empresa', 'razon_social', 'logo', 'video_splash',
+        'rfc', 'domicilio', 'telefono', 'email',
+    )
 
     def __init__(self) -> None:
         self.db = DatabaseManager()
@@ -78,3 +81,23 @@ class EmpresaModel:
         if rs:
             return rs
         return self.nombre_empresa()
+
+    def rfc(self) -> str:
+        """Devuelve el RFC de la empresa."""
+        return self.obtener('rfc')
+
+    def domicilio(self) -> str:
+        """Devuelve el domicilio de la empresa."""
+        return self.obtener('domicilio')
+
+    def telefono(self) -> str:
+        """Devuelve el teléfono de la empresa."""
+        return self.obtener('telefono')
+
+    def email(self) -> str:
+        """Devuelve el email de la empresa."""
+        return self.obtener('email')
+
+    def empresa_configurada(self) -> bool:
+        """True si la empresa tiene al menos nombre configurado."""
+        return bool(self.nombre_empresa().strip())

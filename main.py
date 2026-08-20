@@ -30,6 +30,16 @@ def main() -> None:
 
     InstaladorHistorico.instalar()
 
+    # Onboarding: si la empresa no tiene nombre, mostrar wizard
+    try:
+        from src.models.empresa_model import EmpresaModel
+        if not EmpresaModel().empresa_configurada():
+            from src.views.dialog_onboarding import DialogOnboarding
+            wizard = DialogOnboarding()
+            wizard.exec()
+    except Exception:
+        pass
+
     window = MainWindow()
     window.show()
 

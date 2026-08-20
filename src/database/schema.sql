@@ -713,4 +713,8 @@ INSERT OR IGNORE INTO configuracion_empresa (clave, valor, tipo) VALUES
     ('nombre_empresa', '', 'texto'),
     ('razon_social', '', 'texto'),
     ('logo', '', 'imagen'),
-    ('video_splash', '', 'archivo');
+    ('video_splash', '', 'archivo'),
+    ('rfc', '', 'texto'),
+    ('domicilio', '', 'texto'),
+    ('telefono', '', 'texto'),
+    ('email', '', 'texto');

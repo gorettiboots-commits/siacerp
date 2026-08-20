@@ -1089,4 +1089,36 @@ class DatabaseManager:
                 conn.commit()
                 print("Migración: tabla configuracion_empresa creada.")
         except Exception as e:
-            print(f"Migración configuracion_empresa omitida: {e}")
+                print("Migración configuracion_empresa omitida: {e}")
+
+        # Ampliar claves de empresa si faltan (RFC, domicilio, etc.)
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            if self.engine == 'sqlite':
+                claves_existentes = {
+                    r[0] for r in cursor.execute(
+                        "SELECT clave FROM configuracion_empresa"
+                    ).fetchall()
+                }
+            else:
+                claves_existentes = {
+                    r[0] for r in cursor.execute(
+                        "SELECT clave FROM configuracion_empresa"
+                    ).fetchall()
+                }
+            for clave, valor, tipo in (
+                ('rfc', '', 'texto'),
+                ('domicilio', '', 'texto'),
+                ('telefono', '', 'texto'),
+                ('email', '', 'texto'),
+            ):
+                if clave not in claves_existentes:
+                    cursor.execute(
+                        "INSERT INTO configuracion_empresa "
+                        "(clave, valor, tipo) VALUES (?, ?, ?)",
+                        (clave, valor, tipo),
+                    )
+            conn.commit()
+        except Exception as e:
+            print(f"Migración configuracion_empresa claves omitida: {e}")
