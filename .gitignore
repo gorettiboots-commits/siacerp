@@ -39,3 +39,7 @@ ui_preview/
 .DS_Store
 Thumbs.db
 *.log
+
+# Archivos pesados / multimedia (no versionar)
+video.mp4
+logo.png
