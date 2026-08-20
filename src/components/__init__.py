@@ -155,3 +155,22 @@ registrar_componente(
     "cierre automático o manual, animación y callback al hacer clic. Incluye "
     "la función singleton notificar_flotante para uso directo.",
 )
+
+from src.components.grid_hibrido import GridHibrido  # noqa: E402
+
+registrar_componente(
+    "grid_hibrido",
+    GridHibrido,
+    "Wrapper híbrido de ComplexGrid con toolbar de 2 filas: fila 1 (módulo) "
+    "configurable con botones de acción del módulo y fila 2 (grid) con "
+    "Buscar/Imprimir/Vista previa/Exportar; barra de estado inferior.",
+)
+
+from src.components.matriz_preview import MatrizPreviewWidget  # noqa: E402
+
+registrar_componente(
+    "matriz_preview",
+    MatrizPreviewWidget,
+    "Widget flotante de vista previa de la matriz de tallas al hacer hover "
+    "sobre la columna de talla en ComplexGrid: soporte multi-bloque.",
+)

@@ -4,25 +4,12 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
 from src.views.dialogs import (
     DialogInsumo, DialogMovimientoMultiPartida, DialogMovimientoStock,
 )
-
-
-class MovimientosGrid(ComplexGrid):
-    """ComplexGrid personalizado para movimientos de inventario."""
-
-    def __init__(self, controller: InventarioController,
-                 parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._mov_controller = controller
-
-    def imprimir(self) -> None:
-        """Imprime todas las partidas visibles en el grid (el del componente)."""
-        super().imprimir()
 
 
 class StockView(QWidget):
@@ -33,11 +20,16 @@ class StockView(QWidget):
         self._load_insumos()
 
     def set_permisos(self, permisos) -> None:
-        self.btn_nuevo.setEnabled(tiene(permisos, "inventario", "crear"))
-        self.btn_movimiento.setEnabled(tiene(permisos, "inventario", "crear"))
-        self.vista.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
-        self.grid_mov.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
-        self.grid_conflicto.set_exportar_visible(tiene(permisos, "inventario", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "nuevo", tiene(permisos, "inventario", "crear"))
+        self.vista.establecer_boton_modulo(
+            "movimiento", tiene(permisos, "inventario", "crear"))
+        self.vista.set_exportar_visible(
+            tiene(permisos, "inventario", "exportar"))
+        self.grid_mov.set_exportar_visible(
+            tiene(permisos, "inventario", "exportar"))
+        self.grid_conflicto.set_exportar_visible(
+            tiene(permisos, "inventario", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -56,17 +48,8 @@ class StockView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nuevo = QPushButton("+ Nuevo Insumo")
-        self.btn_nuevo.setObjectName("btnPrimary")
-        self.btn_nuevo.clicked.connect(self._nuevo_insumo)
-        self.btn_movimiento = QPushButton("Movimiento")
-        self.btn_movimiento.setObjectName("btnWarning")
-        self.btn_movimiento.clicked.connect(self._registrar_movimiento)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_movimiento)
-        hlayout.addWidget(self.btn_nuevo)
 
         self.tabs = QTabWidget()
         self.tab_insumos = QWidget()
@@ -85,16 +68,14 @@ class StockView(QWidget):
         layout = QVBoxLayout(self.tab_insumos)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        # Toolbar solo con Actualizar
-        toolbar = QHBoxLayout()
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_insumos)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
-
-        self.vista = ComplexGrid()
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nuevo", "+ Nuevo Insumo", "mas", "#ffffff", self._nuevo_insumo)
+        self.vista.agregar_boton_toolbar(
+            "movimiento", "Movimiento", "toggle", "#ffffff",
+            self._registrar_movimiento)
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_insumos)
         self.vista.set_columnas([
             {"key": "codigo", "titulo": "Codigo", "ancho": 120},
             {"key": "nombre", "titulo": "Nombre", "ancho": 220},
@@ -126,22 +107,10 @@ class StockView(QWidget):
         layout = QVBoxLayout(self.tab_movimientos)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        # Toolbar: Imprimir (del componente) + Documento (seleccionado)
-        toolbar = QHBoxLayout()
-        toolbar.addStretch()
-        btn_print_mov = QPushButton("Imprimir")
-        btn_print_mov.setObjectName("btnSecondary")
-        btn_print_mov.setToolTip("Imprimir todas las partidas visibles en el grid")
-        btn_print_mov.clicked.connect(self._imprimir_todas_movimientos)
-        toolbar.addWidget(btn_print_mov)
-        btn_doc_mov = QPushButton("Documento")
-        btn_doc_mov.setObjectName("btnSecondary")
-        btn_doc_mov.setToolTip("Imprimir el documento del movimiento seleccionado")
-        btn_doc_mov.clicked.connect(self._imprimir_documento_movimiento)
-        toolbar.addWidget(btn_doc_mov)
-        layout.addLayout(toolbar)
-
-        self.grid_mov = MovimientosGrid(self.controller)
+        self.grid_mov = GridHibrido()
+        self.grid_mov.agregar_boton_toolbar(
+            "documento", "Documento", "pdf", "#1892D4",
+            self._imprimir_documento_movimiento)
         self.grid_mov.set_columnas([
             {"key": "folio", "titulo": "Folio", "ancho": 120},
             {"key": "created_at", "titulo": "Fecha", "ancho": 150},
@@ -158,15 +127,10 @@ class StockView(QWidget):
         layout = QVBoxLayout(self.tab_conflicto)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_conflicto)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
-
-        self.grid_conflicto = ComplexGrid()
+        self.grid_conflicto = GridHibrido()
+        self.grid_conflicto.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4",
+            self._load_conflicto)
         self.grid_conflicto.set_columnas([
             {"key": "codigo", "titulo": "Codigo", "ancho": 120},
             {"key": "nombre", "titulo": "Nombre", "ancho": 220},

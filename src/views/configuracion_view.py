@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
@@ -431,7 +431,13 @@ class _TabUnidades(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        self.grid = ComplexGrid()
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nueva Unidad", "mas", "#ffffff", self._crear)
+        self.grid.agregar_boton_toolbar(
+            "editar", "Editar", "editar", "#1892D4", self._editar)
+        self.grid.agregar_boton_toolbar(
+            "desactivar", "Desactivar", "eliminar", "#C93744", self._desactivar)
         self.grid.set_columnas([
             {"key": "nombre", "titulo": "Nombre", "ancho": 300},
             {"key": "abreviatura", "titulo": "Abreviatura", "ancho": 160},
@@ -441,27 +447,6 @@ class _TabUnidades(QWidget):
             tiene(self.permisos, "configuracion", "exportar"))
         self.grid.doubleClicked.connect(self._editar)
         layout.addWidget(self.grid)
-
-        self.btn_add = QPushButton("+ Nueva Unidad")
-        self.btn_add.setObjectName("btnPrimary")
-        self.btn_add.clicked.connect(self._crear)
-        self.btn_edit = QPushButton("Editar")
-        self.btn_edit.setObjectName("btnSecondary")
-        self.btn_edit.clicked.connect(self._editar)
-        self.btn_del = QPushButton("Desactivar")
-        self.btn_del.setObjectName("btnDanger")
-        self.btn_del.clicked.connect(self._desactivar)
-
-        self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
-        self.btn_edit.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        self.btn_del.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_add)
-        toolbar.addWidget(self.btn_edit)
-        toolbar.addWidget(self.btn_del)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
 
     @staticmethod
     def _estilo(rec, item, col) -> None:
@@ -583,18 +568,9 @@ class _TabEstaciones(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.btn_add = QPushButton("+ Nueva Área")
-        self.btn_add.setObjectName("btnPrimary")
-        self.btn_add.setCursor(Qt.PointingHandCursor)
-        self.btn_add.clicked.connect(self._crear)
-        self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_add)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
-
-        self.grid = ComplexGrid()
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nueva Área", "mas", "#ffffff", self._crear)
         self.grid.set_columnas([
             {"key": "orden", "titulo": "Orden", "ancho": 90, "tipo": "numero"},
             {"key": "nombre", "titulo": "Área", "ancho": 260},
@@ -993,7 +969,13 @@ class _TabColores(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.grid = ComplexGrid()
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nuevo Color", "mas", "#ffffff", self._crear)
+        self.grid.agregar_boton_toolbar(
+            "editar", "Editar", "editar", "#1892D4", self._editar)
+        self.grid.agregar_boton_toolbar(
+            "desactivar", "Desactivar", "eliminar", "#C93744", self._desactivar)
         self.grid.set_columnas([
             {"key": "nombre", "titulo": "Nombre", "ancho": 240},
             {"key": "codigo", "titulo": "Código", "ancho": 140},
@@ -1004,27 +986,6 @@ class _TabColores(QWidget):
             tiene(self.permisos, "configuracion", "exportar"))
         self.grid.doubleClicked.connect(self._editar)
         layout.addWidget(self.grid)
-
-        self.btn_add = QPushButton("+ Nuevo Color")
-        self.btn_add.setObjectName("btnPrimary")
-        self.btn_add.clicked.connect(self._crear)
-        self.btn_edit = QPushButton("Editar")
-        self.btn_edit.setObjectName("btnSecondary")
-        self.btn_edit.clicked.connect(self._editar)
-        self.btn_del = QPushButton("Desactivar")
-        self.btn_del.setObjectName("btnDanger")
-        self.btn_del.clicked.connect(self._desactivar)
-
-        self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
-        self.btn_edit.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        self.btn_del.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_add)
-        toolbar.addWidget(self.btn_edit)
-        toolbar.addWidget(self.btn_del)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
 
     @staticmethod
     def _estilo(rec, item, col) -> None:
@@ -1152,7 +1113,18 @@ class _TabAccesos(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.grid = ComplexGrid()
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nuevo Usuario", "mas", "#ffffff",
+            self._crear_usuario)
+        self.grid.agregar_boton_toolbar(
+            "editar", "Editar", "editar", "#1892D4", self._editar_usuario)
+        self.grid.agregar_boton_toolbar(
+            "password", "Cambiar Contraseña", "editar", "#1892D4",
+            self._cambiar_password)
+        self.grid.agregar_boton_toolbar(
+            "toggle", "Activar / Desactivar", "toggle", "#C93744",
+            self._toggle_usuario)
         self.grid.set_columnas([
             {"key": "username", "titulo": "Usuario", "ancho": 180},
             {"key": "nombre_completo", "titulo": "Nombre", "ancho": 260},
@@ -1164,33 +1136,6 @@ class _TabAccesos(QWidget):
         self.grid.set_exportar_visible(tiene(self.permisos, "usuarios", "exportar"))
         self.grid.selectionChanged.connect(self._on_seleccion)
         layout.addWidget(self.grid)
-
-        self.btn_nuevo = QPushButton("+ Nuevo Usuario")
-        self.btn_nuevo.setObjectName("btnPrimary")
-        self.btn_nuevo.clicked.connect(self._crear_usuario)
-        self.btn_editar = QPushButton("Editar")
-        self.btn_editar.setObjectName("btnSecondary")
-        self.btn_editar.clicked.connect(self._editar_usuario)
-        self.btn_password = QPushButton("Cambiar Contraseña")
-        self.btn_password.setObjectName("btnSecondary")
-        self.btn_password.clicked.connect(self._cambiar_password)
-        self.btn_toggle = QPushButton("Activar / Desactivar")
-        self.btn_toggle.setObjectName("btnDanger")
-        self.btn_toggle.clicked.connect(self._toggle_usuario)
-
-        self.btn_nuevo.setEnabled(tiene(self.permisos, "usuarios", "crear"))
-        can_edit = tiene(self.permisos, "usuarios", "editar")
-        self.btn_editar.setEnabled(can_edit)
-        self.btn_password.setEnabled(can_edit)
-        self.btn_toggle.setEnabled(tiene(self.permisos, "usuarios", "eliminar"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_nuevo)
-        toolbar.addWidget(self.btn_editar)
-        toolbar.addWidget(self.btn_password)
-        toolbar.addWidget(self.btn_toggle)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
 
         box = QGroupBox("Permisos de acceso")
         box_layout = QVBoxLayout(box)
@@ -1220,7 +1165,7 @@ class _TabAccesos(QWidget):
 
         self.btn_guardar = QPushButton("Guardar Permisos")
         self.btn_guardar.setObjectName("btnPrimary")
-        self.btn_guardar.setEnabled(can_edit)
+        self.btn_guardar.setEnabled(tiene(self.permisos, "usuarios", "editar"))
         self.btn_guardar.clicked.connect(self._guardar_permisos)
         layout.addWidget(self.btn_guardar, 0, Qt.AlignLeft)
 

@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.components.notificacion_flotante import notificar_flotante
 from src.components.preview_impresion import PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
@@ -56,11 +56,11 @@ class ProgramacionView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self._permiso_eliminar = tiene(permisos, "programacion", "eliminar")
-        self.btn_folio_pedido.setEnabled(tiene(permisos, "programacion", "editar"))
-        self.vista.set_boton_extra_habilitado("Exportar Excel",
-                                              tiene(permisos, "programacion", "exportar"))
-        self.vista.set_boton_extra_habilitado("Imprimir",
-                                              tiene(permisos, "programacion", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "asignar_folio",
+            tiene(permisos, "programacion", "editar"))
+        self.vista.set_exportar_visible(
+            tiene(permisos, "programacion", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -90,19 +90,19 @@ class ProgramacionView(QWidget):
 
         layout.addWidget(header)
 
-        self._setup_toolbar()
-        layout.addLayout(self._toolbar)
+        self._crear_widgets_toolbar()
 
-        self.vista = ComplexGrid()
-        self.vista.set_exportar_visible(False)
-        self.vista.set_agrupar_visible(False)
+        self.vista = GridHibrido()
+        self.vista.agregar_widget_toolbar(QLabel("Semana:"))
+        self.vista.agregar_widget_toolbar(self.cmb_semana)
+        self.vista.agregar_separador_toolbar()
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4",
+            self._cargar_semanas)
+        self.vista.agregar_boton_toolbar(
+            "asignar_folio", "Asignar Folio Programación", "editar", "#1892D4",
+            self._asignar_folio_prog)
         self.vista.set_widget_izquierda(self._agrupar_widget)
-        self.vista.set_botones_extra([
-            {"texto": "Exportar Excel", "object_name": "btnSuccess", "icono": "exportar",
-             "color": "#ffffff", "callback": self._exportar},
-            {"texto": "Imprimir", "object_name": "btnPrimary", "icono": "imprimir",
-             "color": "#ffffff", "callback": self._imprimir},
-        ])
         self.vista.set_renderers(fila=self._fila_linea, claves=self._claves_linea,
                                  estilo=self._estilo_linea, lista=self._lista_linea,
                                  tarjeta=self._tarjeta_linea)
@@ -121,9 +121,7 @@ class ProgramacionView(QWidget):
             "border-bottom:1px solid #a0a0a0; font-weight:bold; padding:5px 6px; }")
         layout.addWidget(self.vista)
 
-    def _setup_toolbar(self) -> None:
-        self._toolbar = QHBoxLayout()
-
+    def _crear_widgets_toolbar(self) -> None:
         self.cmb_semana = QComboBox()
         self.cmb_semana.setMinimumWidth(220)
         self.cmb_semana.currentIndexChanged.connect(self._on_semana_cambiada)
@@ -140,20 +138,6 @@ class ProgramacionView(QWidget):
         agrupar_layout.setSpacing(6)
         agrupar_layout.addWidget(QLabel("Agrupar:"))
         agrupar_layout.addWidget(self.cmb_agrupar)
-
-        self.btn_folio_pedido = QPushButton("Asignar Folio Programación")
-        self.btn_folio_pedido.setObjectName("btnSecondary")
-        self.btn_folio_pedido.clicked.connect(self._asignar_folio_prog)
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._cargar_semanas)
-
-        self._toolbar.addWidget(QLabel("Semana:"))
-        self._toolbar.addWidget(self.cmb_semana)
-        self._toolbar.addWidget(btn_refresh)
-        self._toolbar.addStretch()
-        self._toolbar.addWidget(self.btn_folio_pedido)
 
     def _cargar_semanas(self) -> None:
         semanas = self.controller.listar_semanas()

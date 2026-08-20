@@ -1,10 +1,10 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTabWidget, QVBoxLayout, QWidget,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.produccion_controller import ProduccionController
@@ -27,24 +27,28 @@ class ProduccionView(QWidget):
 
     def set_permisos(self, permisos) -> None:
         self._permisos = permisos or set()
-        self.btn_nueva_op.setEnabled(tiene(self._permisos, "produccion", "crear"))
-        self.btn_seguimiento.setEnabled(tiene(self._permisos, "produccion", "ver"))
-        self.btn_avanzar.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_export.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_print.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_nuevo_m.setEnabled(tiene(self._permisos, "produccion", "crear"))
-        self.btn_editar_m.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_desactivar_m.setEnabled(tiene(self._permisos, "produccion", "eliminar"))
-        self.btn_export_m.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_ficha_m.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_nuevo_v.setEnabled(tiene(self._permisos, "produccion", "crear"))
-        self.btn_editar_v.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_desactivar_v.setEnabled(tiene(self._permisos, "produccion", "eliminar"))
-        self.btn_export_v.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_editar_bom.setEnabled(
-            tiene(self._permisos, "produccion", "editar") and hasattr(self, "_modelo_bom_id"))
-        self.btn_export_pt.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_print_pt.setEnabled(tiene(self._permisos, "produccion", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "nueva_op", tiene(self._permisos, "produccion", "crear"))
+        self.vista.establecer_boton_modulo(
+            "ver_seguimiento", tiene(self._permisos, "produccion", "ver"))
+        self.vista.establecer_boton_modulo(
+            "avanzar", tiene(self._permisos, "produccion", "editar"))
+        self.vista.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
+        self.grid_modelos.establecer_boton_modulo(
+            "nuevo_modelo", tiene(self._permisos, "produccion", "crear"))
+        self.grid_modelos.establecer_boton_modulo(
+            "ficha_tecnica", tiene(self._permisos, "produccion", "editar"))
+        self.grid_modelos.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
+        self.grid_variantes.establecer_boton_modulo(
+            "nueva_variante", tiene(self._permisos, "produccion", "crear"))
+        self.grid_variantes.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
+        self.grid_bom.boton_modulo("editar_bom").setEnabled(
+            tiene(self._permisos, "produccion", "editar"))
+        self.grid_pt.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -63,13 +67,8 @@ class ProduccionView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nueva_op = QPushButton("+ Nueva OP")
-        self.btn_nueva_op.setObjectName("btnPrimary")
-        self.btn_nueva_op.clicked.connect(self._nueva_op)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_nueva_op)
 
         self.tabs = QTabWidget()
         self.tab_kanban = QWidget()
@@ -98,40 +97,17 @@ class ProduccionView(QWidget):
         layout = QVBoxLayout(self.tab_ops)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar OP por folio, modelo o variante...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar)
-
-        self.btn_seguimiento = QPushButton("Ver Seguimiento")
-        self.btn_seguimiento.setObjectName("btnSecondary")
-        self.btn_seguimiento.clicked.connect(self._ver_seguimiento)
-        self.btn_avanzar = QPushButton("Avanzar Estación")
-        self.btn_avanzar.setObjectName("btnSuccess")
-        self.btn_avanzar.clicked.connect(self._avanzar_desde_tabla)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(lambda: self._exportar_tabla(self.vista.table, "Ordenes_Produccion"))
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(lambda: print_table(self.vista.table, "Ordenes_Produccion", self))
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_ops)
-
-        toolbar.addWidget(self.txt_buscar)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_seguimiento)
-        toolbar.addWidget(self.btn_avanzar)
-        toolbar.addWidget(self.btn_export)
-        toolbar.addWidget(self.btn_print)
-        layout.addLayout(toolbar)
-
-        self.vista = ComplexGrid()
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nueva_op", "+ Nueva OP", "mas", "#ffffff", self._nueva_op)
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_ops)
+        self.vista.agregar_boton_toolbar(
+            "ver_seguimiento", "Ver Seguimiento", "ver", "#1892D4",
+            self._ver_seguimiento)
+        self.vista.agregar_boton_toolbar(
+            "avanzar", "Avanzar Estación", "ok", "#16A34A",
+            self._avanzar_desde_tabla)
         self.vista.set_columnas([
             {"key": "folio", "titulo": "Folio", "ancho": 110},
             {"key": "modelo_nombre", "titulo": "Modelo", "ancho": 150},
@@ -149,8 +125,6 @@ class ProduccionView(QWidget):
             tarjeta=self._tarjeta_op,
             lista=self._lista_op,
         )
-        self.vista.set_buscador_visible(False)
-        self.vista.set_exportar_visible(False)
         self.vista.doubleClicked.connect(self._ver_seguimiento)
         layout.addWidget(self.vista)
 
@@ -219,73 +193,28 @@ class ProduccionView(QWidget):
 
         # Modelos
         mlayout = QVBoxLayout(tab_modelos)
-        mtoolbar = QHBoxLayout()
-        self.txt_buscar_m = QLineEdit()
-        self.txt_buscar_m.setPlaceholderText("Buscar modelo...")
-        self.txt_buscar_m.textChanged.connect(self._buscar_modelos)
-        self.btn_nuevo_m = QPushButton("+ Nuevo Modelo")
-        self.btn_nuevo_m.setObjectName("btnPrimary")
-        self.btn_nuevo_m.clicked.connect(self._nuevo_modelo)
-        self.btn_editar_m = QPushButton("Editar")
-        self.btn_editar_m.setObjectName("btnSecondary")
-        self.btn_editar_m.clicked.connect(self._editar_modelo)
-        self.btn_desactivar_m = QPushButton("Desactivar")
-        self.btn_desactivar_m.setObjectName("btnDanger")
-        self.btn_desactivar_m.clicked.connect(self._desactivar_modelo)
-        self.btn_export_m = QPushButton("Exportar Excel")
-        self.btn_export_m.setObjectName("btnPrimary")
-        self.btn_export_m.clicked.connect(lambda: self._exportar_tabla(self.grid_modelos.table, "Modelos"))
-        self.btn_ficha_m = QPushButton("Ficha Técnica")
-        self.btn_ficha_m.setObjectName("btnSecondary")
-        self.btn_ficha_m.clicked.connect(self._ficha_tecnica)
-        mtoolbar.addWidget(self.txt_buscar_m)
-        mtoolbar.addStretch()
-        mtoolbar.addWidget(self.btn_nuevo_m)
-        mtoolbar.addWidget(self.btn_editar_m)
-        mtoolbar.addWidget(self.btn_desactivar_m)
-        mtoolbar.addWidget(self.btn_ficha_m)
-        mtoolbar.addWidget(self.btn_export_m)
-        mlayout.addLayout(mtoolbar)
-
-        self.grid_modelos = ComplexGrid()
+        self.grid_modelos = GridHibrido()
+        self.grid_modelos.agregar_boton_toolbar(
+            "nuevo_modelo", "+ Nuevo Modelo", "mas", "#ffffff",
+            self._nuevo_modelo)
+        self.grid_modelos.agregar_boton_toolbar(
+            "ficha_tecnica", "Ficha Técnica", "ver", "#1892D4",
+            self._ficha_tecnica)
         self.grid_modelos.set_columnas([
             {"key": "codigo", "titulo": "Código", "ancho": 140},
             {"key": "nombre", "titulo": "Nombre", "ancho": 220},
             {"key": "descripcion", "titulo": "Descripción", "ancho": 320},
         ])
-        self.grid_modelos.set_buscador_visible(False)
-        self.grid_modelos.set_exportar_visible(False)
         self.grid_modelos.doubleClicked.connect(self._editar_modelo)
         self.grid_modelos.selectionChanged.connect(self._on_modelo_selected)
         mlayout.addWidget(self.grid_modelos)
 
         # Variantes
         vlayout = QVBoxLayout(tab_variantes)
-        vtoolbar = QHBoxLayout()
-        self.txt_buscar_v = QLineEdit()
-        self.txt_buscar_v.setPlaceholderText("Buscar variante...")
-        self.txt_buscar_v.textChanged.connect(self._buscar_variantes)
-        self.btn_nuevo_v = QPushButton("+ Nueva Variante")
-        self.btn_nuevo_v.setObjectName("btnPrimary")
-        self.btn_nuevo_v.clicked.connect(self._nueva_variante)
-        self.btn_editar_v = QPushButton("Editar")
-        self.btn_editar_v.setObjectName("btnSecondary")
-        self.btn_editar_v.clicked.connect(self._editar_variante)
-        self.btn_desactivar_v = QPushButton("Desactivar")
-        self.btn_desactivar_v.setObjectName("btnDanger")
-        self.btn_desactivar_v.clicked.connect(self._desactivar_variante)
-        self.btn_export_v = QPushButton("Exportar Excel")
-        self.btn_export_v.setObjectName("btnPrimary")
-        self.btn_export_v.clicked.connect(lambda: self._exportar_tabla(self.grid_variantes.table, "Variantes"))
-        vtoolbar.addWidget(self.txt_buscar_v)
-        vtoolbar.addStretch()
-        vtoolbar.addWidget(self.btn_nuevo_v)
-        vtoolbar.addWidget(self.btn_editar_v)
-        vtoolbar.addWidget(self.btn_desactivar_v)
-        vtoolbar.addWidget(self.btn_export_v)
-        vlayout.addLayout(vtoolbar)
-
-        self.grid_variantes = ComplexGrid()
+        self.grid_variantes = GridHibrido()
+        self.grid_variantes.agregar_boton_toolbar(
+            "nueva_variante", "+ Nueva Variante", "mas", "#ffffff",
+            self._nueva_variante)
         self.grid_variantes.set_columnas([
             {"key": "codigo_variante", "titulo": "Código", "ancho": 160},
             {"key": "modelo_nombre", "titulo": "Modelo", "ancho": 150},
@@ -293,8 +222,6 @@ class ProduccionView(QWidget):
             {"key": "color", "titulo": "Color", "ancho": 110},
             {"key": "piel", "titulo": "Piel", "ancho": 120},
         ])
-        self.grid_variantes.set_buscador_visible(False)
-        self.grid_variantes.set_exportar_visible(False)
         self.grid_variantes.doubleClicked.connect(self._editar_variante)
         vlayout.addWidget(self.grid_variantes)
 
@@ -304,12 +231,11 @@ class ProduccionView(QWidget):
         self.cmb_bom_modelo = QLineEdit()
         self.cmb_bom_modelo.setReadOnly(True)
         self.cmb_bom_modelo.setPlaceholderText("(seleccione un modelo)")
-        self.btn_editar_bom = QPushButton("Editar Lista de Materiales")
-        self.btn_editar_bom.setObjectName("btnPrimary")
-        self.btn_editar_bom.setMinimumHeight(40)
-        self.btn_editar_bom.clicked.connect(self._editar_bom)
-        self.btn_editar_bom.setEnabled(False)
-        self.grid_bom = ComplexGrid()
+        self.grid_bom = GridHibrido()
+        self.grid_bom.agregar_boton_toolbar(
+            "editar_bom", "Editar Lista de Materiales", "editar", "#1892D4",
+            self._editar_bom)
+        self.grid_bom.boton_modulo("editar_bom").setEnabled(False)
         self.grid_bom.set_columnas([
             {"key": "insumo_nombre", "titulo": "Insumo", "ancho": 260},
             {"key": "cantidad_por_par", "titulo": "Cant. por Par",
@@ -318,34 +244,16 @@ class ProduccionView(QWidget):
             {"key": "stock_actual", "titulo": "Stock Actual",
              "ancho": 110, "tipo": "numero"},
         ])
-        self.grid_bom.set_buscador_visible(False)
-        self.grid_bom.set_exportar_visible(False)
         blayout.addWidget(self.cmb_bom_modelo)
-        blayout.addWidget(self.btn_editar_bom)
         blayout.addWidget(self.grid_bom)
 
     def _setup_tab_pt(self) -> None:
         layout = QVBoxLayout(self.tab_pt)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.btn_export_pt = QPushButton("Exportar Excel")
-        self.btn_export_pt.setObjectName("btnPrimary")
-        self.btn_export_pt.clicked.connect(lambda: self._exportar_tabla(self.grid_pt.table, "Producto_Terminado"))
-        self.btn_print_pt = QPushButton("Imprimir")
-        self.btn_print_pt.setObjectName("btnSecondary")
-        self.btn_print_pt.clicked.connect(lambda: print_table(self.grid_pt.table, "Producto_Terminado", self))
-
-        btn_refresh_pt = QPushButton("Actualizar")
-        btn_refresh_pt.setObjectName("btnPrimary")
-        btn_refresh_pt.clicked.connect(self._load_pt)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_export_pt)
-        toolbar.addWidget(self.btn_print_pt)
-        toolbar.addWidget(btn_refresh_pt)
-        layout.addLayout(toolbar)
-
-        self.grid_pt = ComplexGrid()
+        self.grid_pt = GridHibrido()
+        self.grid_pt.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_pt)
         self.grid_pt.set_columnas([
             {"key": "modelo_nombre", "titulo": "Modelo", "ancho": 180},
             {"key": "codigo_variante", "titulo": "Variante", "ancho": 160},

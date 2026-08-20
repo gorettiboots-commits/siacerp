@@ -1,11 +1,11 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTabWidget, QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.models.accesos_model import tiene
@@ -23,16 +23,20 @@ class OrdenesCompraView(QWidget):
         self._load_ordenes()
 
     def set_permisos(self, permisos) -> None:
-        self.btn_nueva.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_factura.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_recibir.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_cancelar.setEnabled(tiene(permisos, "ordenes_compra", "eliminar"))
-        self.btn_export.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
-        self.btn_print.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
-        self.btn_nuevo_prov.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_editar_prov.setEnabled(tiene(permisos, "ordenes_compra", "editar"))
-        self.btn_desactivar_prov.setEnabled(tiene(permisos, "ordenes_compra", "eliminar"))
-        self.btn_export_prov.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "nueva_orden", tiene(permisos, "ordenes_compra", "crear"))
+        self.vista.establecer_boton_modulo(
+            "factura", tiene(permisos, "ordenes_compra", "crear"))
+        self.vista.establecer_boton_modulo(
+            "recibir", tiene(permisos, "ordenes_compra", "crear"))
+        self.vista.establecer_boton_modulo(
+            "cancelar", tiene(permisos, "ordenes_compra", "eliminar"))
+        self.vista.set_exportar_visible(
+            tiene(permisos, "ordenes_compra", "exportar"))
+        self.grid_prov.establecer_boton_modulo(
+            "nuevo_prov", tiene(permisos, "ordenes_compra", "crear"))
+        self.grid_prov.set_exportar_visible(
+            tiene(permisos, "ordenes_compra", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -51,23 +55,8 @@ class OrdenesCompraView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nueva = QPushButton("+ Nueva Orden")
-        self.btn_nueva.setObjectName("btnPrimary")
-        self.btn_nueva.clicked.connect(self._nueva_orden)
-
-        self.btn_factura = QPushButton("Ingresar Factura")
-        self.btn_factura.setObjectName("btnPrimary")
-        self.btn_factura.clicked.connect(self._nueva_factura)
-
-        self.btn_proveedor = QPushButton("Proveedores")
-        self.btn_proveedor.setObjectName("btnSecondary")
-        self.btn_proveedor.clicked.connect(self._gestionar_proveedores)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_proveedor)
-        hlayout.addWidget(self.btn_factura)
-        hlayout.addWidget(self.btn_nueva)
 
         self.tabs = QTabWidget()
         self.tab_ordenes = QWidget()
@@ -83,47 +72,22 @@ class OrdenesCompraView(QWidget):
         layout = QVBoxLayout(self.tab_ordenes)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar por folio, insumo o proveedor...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar)
-
-        btn_ver = QPushButton("Ver Detalle")
-        btn_ver.setObjectName("btnSecondary")
-        btn_ver.clicked.connect(self._ver_orden)
-
-        self.btn_recibir = QPushButton("Recibir Orden")
-        self.btn_recibir.setObjectName("btnSuccess")
-        self.btn_recibir.clicked.connect(self._recibir_orden)
-
-        self.btn_cancelar = QPushButton("Cancelar")
-        self.btn_cancelar.setObjectName("btnDanger")
-        self.btn_cancelar.clicked.connect(self._cancelar_orden)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(self._exportar)
-
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(self._imprimir)
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_ordenes)
-
-        toolbar.addWidget(self.txt_buscar)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        toolbar.addWidget(btn_ver)
-        toolbar.addWidget(self.btn_recibir)
-        toolbar.addWidget(self.btn_cancelar)
-        toolbar.addWidget(self.btn_export)
-        toolbar.addWidget(self.btn_print)
-        layout.addLayout(toolbar)
-
-        self.vista = ComplexGrid()
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nueva_orden", "+ Nueva Orden", "mas", "#ffffff", self._nueva_orden)
+        self.vista.agregar_boton_toolbar(
+            "factura", "Ingresar Factura", "mas", "#ffffff", self._nueva_factura)
+        self.vista.agregar_boton_toolbar(
+            "proveedores", "Proveedores", "clientes", "#1892D4",
+            self._gestionar_proveedores)
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_ordenes)
+        self.vista.agregar_boton_toolbar(
+            "ver_detalle", "Ver Detalle", "ver", "#1892D4", self._ver_orden)
+        self.vista.agregar_boton_toolbar(
+            "recibir", "Recibir Orden", "ok", "#16A34A", self._recibir_orden)
+        self.vista.agregar_boton_toolbar(
+            "cancelar", "Cancelar", "eliminar", "#C93744", self._cancelar_orden)
         self.vista.set_columnas([
             {"key": "folio", "titulo": "Folio", "ancho": 110},
             {"key": "tipo", "titulo": "Tipo", "ancho": 120},
@@ -139,8 +103,6 @@ class OrdenesCompraView(QWidget):
             tarjeta=self._tarjeta_orden,
             lista=self._lista_orden,
         )
-        self.vista.set_buscador_visible(False)
-        self.vista.set_exportar_visible(False)
         self.vista.doubleClicked.connect(self._ver_orden)
         layout.addWidget(self.vista)
 
@@ -148,38 +110,13 @@ class OrdenesCompraView(QWidget):
         layout = QVBoxLayout(self.tab_proveedores)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar_prov = QLineEdit()
-        self.txt_buscar_prov.setPlaceholderText("Buscar proveedor...")
-        self.txt_buscar_prov.setMinimumWidth(300)
-        self.txt_buscar_prov.textChanged.connect(self._buscar_proveedores)
-
-        self.btn_nuevo_prov = QPushButton("+ Nuevo Proveedor")
-        self.btn_nuevo_prov.setObjectName("btnPrimary")
-        self.btn_nuevo_prov.clicked.connect(self._nuevo_proveedor)
-        self.btn_editar_prov = QPushButton("Editar")
-        self.btn_editar_prov.setObjectName("btnSecondary")
-        self.btn_editar_prov.clicked.connect(self._editar_proveedor)
-        self.btn_desactivar_prov = QPushButton("Desactivar")
-        self.btn_desactivar_prov.setObjectName("btnDanger")
-        self.btn_desactivar_prov.clicked.connect(self._desactivar_proveedor)
-        self.btn_export_prov = QPushButton("Exportar Excel")
-        self.btn_export_prov.setObjectName("btnPrimary")
-        self.btn_export_prov.clicked.connect(self._exportar_proveedores)
-        btn_refresh_prov = QPushButton("Actualizar")
-        btn_refresh_prov.setObjectName("btnPrimary")
-        btn_refresh_prov.clicked.connect(self._load_proveedores)
-
-        toolbar.addWidget(self.txt_buscar_prov)
-        toolbar.addWidget(btn_refresh_prov)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_nuevo_prov)
-        toolbar.addWidget(self.btn_editar_prov)
-        toolbar.addWidget(self.btn_desactivar_prov)
-        toolbar.addWidget(self.btn_export_prov)
-        layout.addLayout(toolbar)
-
-        self.grid_prov = ComplexGrid()
+        self.grid_prov = GridHibrido()
+        self.grid_prov.agregar_boton_toolbar(
+            "nuevo_prov", "+ Nuevo Proveedor", "mas", "#ffffff",
+            self._nuevo_proveedor)
+        self.grid_prov.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4",
+            self._load_proveedores)
         self.grid_prov.set_columnas([
             {"key": "rfc", "titulo": "RFC", "ancho": 120},
             {"key": "nombre", "titulo": "Nombre", "ancho": 200},

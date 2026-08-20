@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QTabWidget, QTextEdit, QToolButton, QVBoxLayout, QWidget,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.components.date_picker import DatePicker
 from src.components.notificacion_flotante import notificar_flotante
 from src.components.tallas_matrix import MatrizTallasDialog, MatrizTallasWidget
@@ -50,8 +50,10 @@ class ClientesView(QWidget):
     def set_permisos(self, permisos) -> None:
         self._permiso_editar = tiene(permisos, "clientes", "editar")
         self._permiso_programar = tiene(permisos, "programacion", "editar")
-        self.btn_nuevo_pedido.setEnabled(tiene(permisos, "clientes", "crear"))
-        self.btn_nuevo_cli.setEnabled(tiene(permisos, "clientes", "crear"))
+        self.vista.establecer_boton_modulo(
+            "nuevo_pedido", tiene(permisos, "clientes", "crear"))
+        self.grid_cli.establecer_boton_modulo(
+            "nuevo_cliente", tiene(permisos, "clientes", "crear"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -70,13 +72,8 @@ class ClientesView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nuevo_pedido = QPushButton("+ Nuevo Pedido")
-        self.btn_nuevo_pedido.setObjectName("btnPrimary")
-        self.btn_nuevo_pedido.clicked.connect(self._nuevo_pedido)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_nuevo_pedido)
 
         self.tabs = QTabWidget()
         self.tab_pedidos = QWidget()
@@ -93,7 +90,10 @@ class ClientesView(QWidget):
         layout = QVBoxLayout(self.tab_pedidos)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        self.vista = ComplexGrid()
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nuevo_pedido", "+ Nuevo Pedido", "mas", "#ffffff",
+            self._nuevo_pedido)
         self.vista.set_columnas([
             {"key": "folio", "titulo": "Folio", "ancho": 110},
             {"key": "cliente_nombre", "titulo": "Cliente", "ancho": 220},
@@ -124,15 +124,10 @@ class ClientesView(QWidget):
         layout = QVBoxLayout(self.tab_clientes)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        toolbar.addStretch()
-        self.btn_nuevo_cli = QPushButton("+ Nuevo Cliente")
-        self.btn_nuevo_cli.setObjectName("btnPrimary")
-        self.btn_nuevo_cli.clicked.connect(self._nuevo_cliente)
-        toolbar.addWidget(self.btn_nuevo_cli)
-        layout.addLayout(toolbar)
-
-        self.grid_cli = ComplexGrid()
+        self.grid_cli = GridHibrido()
+        self.grid_cli.agregar_boton_toolbar(
+            "nuevo_cliente", "+ Nuevo Cliente", "mas", "#ffffff",
+            self._nuevo_cliente)
         self.grid_cli.set_columnas([
             {"key": "rfc", "titulo": "RFC", "ancho": 130},
             {"key": "nombre", "titulo": "Nombre", "ancho": 200},

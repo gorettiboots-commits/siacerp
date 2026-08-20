@@ -10,7 +10,7 @@ Se ejecutan headless (QT_QPA_PLATFORM=offscreen, ver conftest.py).
 
 import pytest
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.programacion_controller import ProgramacionController
 from src.views.clientes_view import (
@@ -245,5 +245,5 @@ class TestCorridaVisibleProgramacion:
 # ------------------------------------------------- Integración con el grid
 class TestIntegracionConGrid:
     def test_vista_es_complex_grid(self, vista):
-        assert isinstance(vista.vista, ComplexGrid)
-        assert isinstance(vista.grid_cli, ComplexGrid)
+        assert isinstance(vista.vista, GridHibrido)
+        assert isinstance(vista.grid_cli, GridHibrido)

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QPushButton, QVBoxLayout,
 )
 
-from src.components.complex_grid import ComplexGrid
+from src.components.grid_hibrido import GridHibrido
 from src.components.tallas_matrix import MatrizTallasDialog
 
 
@@ -69,7 +69,9 @@ class ProgramarPedidoDialog(QDialog):
         form.addRow("Folio Pedido:", self.lbl_folio_pedido)
         layout.addLayout(form)
 
-        self.vista = ComplexGrid()
+        self.vista = GridHibrido()
+        self.vista.set_buscador_visible(False)
+        self.vista.set_agrupar_visible(False)
         self.vista.set_columnas([
             {"key": "modelo", "titulo": "Modelo", "ancho": 200},
             {"key": "corrida", "titulo": "Corrida", "ancho": 150},
@@ -86,9 +88,6 @@ class ProgramarPedidoDialog(QDialog):
              "habilitado": self._habilitado_corrida,
              "callback": self._configurar_corrida},
         ])
-        self.vista.set_buscador_visible(False)
-        self.vista.set_exportar_visible(False)
-        self.vista.set_agrupar_visible(False)
         layout.addWidget(self.vista)
 
         self.lbl_total_programar = QLabel("Total a programar: 0 pares")
