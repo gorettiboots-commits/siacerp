@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QUrl
-from PySide6.QtGui import QAction, QFont, QPixmap
+from PySide6.QtGui import QAction, QFont, QKeySequence, QPixmap
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QApplication, QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMenuBar, QMessageBox, QPushButton,
+    QMainWindow, QMenuBar, QMessageBox, QPushButton, QShortcut,
     QStackedWidget, QStatusBar, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -104,6 +104,7 @@ class MainWindow(QMainWindow):
         self._setup_login()
         self._setup_main_container()
         self._setup_status_bar()
+        self._setup_shortcuts()
 
         self._stack.addWidget(self._login_view)
         self._stack.addWidget(self._main_container)
@@ -141,6 +142,10 @@ class MainWindow(QMainWindow):
         archivo_menu.addAction(salir_action)
 
         ayuda_menu = menubar.addMenu("Ayuda")
+        self._atajos_action = QAction("Atajos de Teclado", self)
+        self._atajos_action.triggered.connect(self._mostrar_atajos)
+        ayuda_menu.addAction(self._atajos_action)
+        ayuda_menu.addSeparator()
         self._logs_action = QAction("Logs del Sistema", self)
         self._logs_action.triggered.connect(self._mostrar_logs)
         ayuda_menu.addAction(self._logs_action)
@@ -173,6 +178,23 @@ class MainWindow(QMainWindow):
         if self._stack.currentWidget() == self._main_container:
             dlg = AcercaDeDialog(self)
             dlg.exec()
+
+    def _mostrar_atajos(self) -> None:
+        texto = (
+            "<b>Atajos de Teclado — SIAC ERP</b><br><br>"
+            "<table cellspacing='8'>"
+            "<tr><td><b>Ctrl+1</b></td><td>Órdenes de Compra</td></tr>"
+            "<tr><td><b>Ctrl+2</b></td><td>Producción</td></tr>"
+            "<tr><td><b>Ctrl+3</b></td><td>Inventario</td></tr>"
+            "<tr><td><b>Ctrl+4</b></td><td>Clientes</td></tr>"
+            "<tr><td><b>Ctrl+5</b></td><td>Programación</td></tr>"
+            "<tr><td><b>Ctrl+K</b></td><td>Buscador Global</td></tr>"
+            "<tr><td><b>Ctrl+,</b></td><td>Configuración</td></tr>"
+            "<tr><td><b>Enter</b></td><td>Aceptar / Confirmar</td></tr>"
+            "<tr><td><b>Escape</b></td><td>Cancelar / Cerrar</td></tr>"
+            "</table>"
+        )
+        QMessageBox.information(self, "Atajos de Teclado", texto)
 
     def _mostrar_cola_impresion(self) -> None:
         if self._stack.currentWidget() != self._main_container:
@@ -325,14 +347,19 @@ class MainWindow(QMainWindow):
 
         self.nav_ordenes = self._modulo_btn(
             "oc", "OC", mono_icon("oc", 26, "#1892D4"), 0)
+        self.nav_ordenes.setToolTip("Órdenes de Compra (Ctrl+1)")
         self.nav_produccion = self._modulo_btn(
             "produccion", "Producción", mono_icon("produccion", 26, "#16A34A"), 1)
+        self.nav_produccion.setToolTip("Producción (Ctrl+2)")
         self.nav_stock = self._modulo_btn(
             "inventario", "Inventario", mono_icon("inventario", 26, "#E3C14D"), 2)
+        self.nav_stock.setToolTip("Inventario (Ctrl+3)")
         self.nav_clientes = self._modulo_btn(
             "clientes", "Clientes", mono_icon("clientes", 26, "#77307E"), 3)
+        self.nav_clientes.setToolTip("Clientes (Ctrl+4)")
         self.nav_programacion = self._modulo_btn(
             "programacion", "Programación", mono_icon("programacion", 26, "#22A8C6"), 4)
+        self.nav_programacion.setToolTip("Programación (Ctrl+5)")
 
         # --- Estilos/colores de botones módulo (izquierda) ---
         _iconos_nav = {
@@ -370,6 +397,7 @@ class MainWindow(QMainWindow):
         self.nav_sandbox = QToolButton()
         self.nav_sandbox.setObjectName("navToolSandbox")
         self.nav_sandbox.setText("Sandbox")
+        self.nav_sandbox.setToolTip("Sandbox (solo admin)")
         self.nav_sandbox.setIcon(mono_icon("sandbox", 26, "#ca8a04"))
         self.nav_sandbox.setIconSize(QSize(26, 26))
         self.nav_sandbox.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
@@ -388,6 +416,7 @@ class MainWindow(QMainWindow):
         self.nav_salir.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         self.nav_salir.setFixedSize(78, 58)
         self.nav_salir.setCursor(Qt.PointingHandCursor)
+        self.nav_salir.setToolTip("Cerrar Sesión")
         self.nav_salir.setIcon(mono_icon("logout", 26, "#dc2626"))
         self.nav_salir.setIconSize(QSize(26, 26))
         self.nav_salir.clicked.connect(self._logout)
@@ -413,6 +442,40 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Sistema listo")
+
+    def _setup_shortcuts(self) -> None:
+        sc = QShortcut(QKeySequence("Ctrl+1"), self)
+        sc.activated.connect(lambda: self._switch_view(0))
+        sc = QShortcut(QKeySequence("Ctrl+2"), self)
+        sc.activated.connect(lambda: self._switch_view(1))
+        sc = QShortcut(QKeySequence("Ctrl+3"), self)
+        sc.activated.connect(lambda: self._switch_view(2))
+        sc = QShortcut(QKeySequence("Ctrl+4"), self)
+        sc.activated.connect(lambda: self._switch_view(3))
+        sc = QShortcut(QKeySequence("Ctrl+5"), self)
+        sc.activated.connect(lambda: self._switch_view(4))
+        sc = QShortcut(QKeySequence("Ctrl+K"), self)
+        sc.activated.connect(self._abrir_buscador)
+        sc = QShortcut(QKeySequence("Ctrl+,"), self)
+        sc.activated.connect(self._mostrar_configuracion)
+
+    def _abrir_buscador(self) -> None:
+        if self._stack.currentWidget() != self._main_container:
+            return
+        from src.views.search_dialog import DialogBuscadorGlobal
+        dlg = DialogBuscadorGlobal(self)
+        dlg.navegar.connect(self._navegar_desde_buscador)
+        dlg.exec()
+
+    def _navegar_desde_buscador(self, modulo: str, registro: dict) -> None:
+        mod_indices = {
+            "ordenes_compra": 0,
+            "produccion": 1,
+            "inventario": 2,
+            "clientes": 3,
+        }
+        if modulo in mod_indices:
+            self._switch_view(mod_indices[modulo])
 
     def _on_video_status(self, status) -> None:
         if status == QMediaPlayer.MediaStatus.EndOfMedia:

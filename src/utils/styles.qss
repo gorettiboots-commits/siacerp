@@ -1098,3 +1098,56 @@ QPushButton#toastCerrar:hover {
     background-color: #E0E0E0;
     color: #000000;
 }
+
+/* ============================================================
+   BUSCADOR GLOBAL (Ctrl+K)
+   ============================================================ */
+QWidget#searchPalette {
+    background-color: #FFFFFF;
+    border: 1px solid #A0A0A0;
+    border-radius: 8px;
+}
+
+QLineEdit#searchInput {
+    background-color: #F5F5F5;
+    border: 1px solid #D0D0D0;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 15px;
+    color: #000000;
+    selection-background-color: #3399FF;
+}
+
+QLineEdit#searchInput:focus {
+    border-color: #2A5FB0;
+}
+
+QLabel#searchHint {
+    font-size: 11px;
+    color: #888888;
+    padding-left: 28px;
+}
+
+QListWidget#searchResults {
+    background-color: transparent;
+    border: none;
+    padding: 4px 0px;
+    font-size: 13px;
+    color: #000000;
+    outline: none;
+}
+
+QListWidget#searchResults::item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin: 1px 2px;
+}
+
+QListWidget#searchResults::item:selected {
+    background-color: #E8F0FE;
+    color: #000000;
+}
+
+QListWidget#searchResults::item:hover:!selected {
+    background-color: #F0F0F0;
+}
