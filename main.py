@@ -3,8 +3,19 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLineEdit
+
+_orig_le_init = QLineEdit.__init__
+
+
+def _patched_le_init(self, *args, **kwargs):
+    _orig_le_init(self, *args, **kwargs)
+    self.setCompleter(None)
+
+
+QLineEdit.__init__ = _patched_le_init
 
 from src.components.campo_historico import InstaladorHistorico
 from src.database.db_manager import DatabaseManager
