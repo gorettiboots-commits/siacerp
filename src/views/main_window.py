@@ -481,6 +481,8 @@ class MainWindow(QMainWindow):
             for w in self._stack.findChildren(LoginView):
                 w.lbl_error.setText("Usuario o contraseña incorrectos")
                 w.lbl_error.setVisible(True)
+                w.btn_login.setEnabled(True)
+                w.btn_login.setText("Iniciar Sesión")
 
     def _mostrar_sandbox(self) -> None:
         self._content_area.setCurrentWidget(self._view_sandbox)

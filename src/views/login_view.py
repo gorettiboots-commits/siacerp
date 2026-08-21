@@ -77,6 +77,7 @@ class LoginView(QWidget):
         self.txt_user = QLineEdit()
         self.txt_user.setPlaceholderText("Ingrese su usuario")
         self.txt_user.setMinimumHeight(38)
+        self.txt_user.setCompleter(None)
 
         lbl_pass = QLabel("Contraseña")
         lbl_pass.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
@@ -84,6 +85,7 @@ class LoginView(QWidget):
         self.txt_pass.setPlaceholderText("Ingrese su contraseña")
         self.txt_pass.setEchoMode(QLineEdit.Password)
         self.txt_pass.setMinimumHeight(38)
+        self.txt_pass.setCompleter(None)
 
         self.btn_login = QPushButton("Iniciar Sesión")
         self.btn_login.setObjectName("btnLogin")
@@ -119,4 +121,6 @@ class LoginView(QWidget):
             self.lbl_error.setVisible(True)
             return
 
+        self.btn_login.setEnabled(False)
+        self.btn_login.setText("Conectando...")
         self.login_successful.emit({"username": user, "password": password})
