@@ -100,4 +100,4 @@ class EmpresaModel:
 
     def empresa_configurada(self) -> bool:
         """True si la empresa tiene al menos nombre configurado."""
-        return bool(self.nombre_empresa().strip())
+        return bool(self.obtener('nombre_empresa').strip())

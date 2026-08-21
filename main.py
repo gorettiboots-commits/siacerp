@@ -37,8 +37,8 @@ def main() -> None:
             from src.views.dialog_onboarding import DialogOnboarding
             wizard = DialogOnboarding()
             wizard.exec()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Onboarding omitido: {e}")
 
     window = MainWindow()
     window.show()
