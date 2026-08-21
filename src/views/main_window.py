@@ -1,12 +1,12 @@
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QUrl
-from PySide6.QtGui import QAction, QFont, QKeySequence, QPixmap
+from PySide6.QtGui import QAction, QFont, QKeySequence, QPixmap, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
     QApplication, QDialog, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMenuBar, QMessageBox, QPushButton, QShortcut,
+    QMainWindow, QMenuBar, QMessageBox, QPushButton,
     QStackedWidget, QStatusBar, QToolButton, QVBoxLayout, QWidget,
 )
 
