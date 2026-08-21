@@ -521,7 +521,7 @@ def _write_oc_excel(path: str, datos: dict, detalle: list[dict]) -> None:
 
 
 def _pedido_columnas_puntos(detalle: list[dict]) -> list[dict]:
-    return _oc_columnas_puntos(detalle)
+    return _oc_columnas_tallas(detalle)
 
 
 def _pedido_totales(detalle: list[dict]) -> int:
@@ -816,7 +816,7 @@ def _write_pedido_excel(path: str, datos: dict, detalle: list[dict]) -> None:
 
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
-    columnas = _oc_columnas_puntos(detalle)
+    columnas = _oc_columnas_tallas(detalle)
     total = _pedido_totales(detalle)
 
     n_tallas = len(columnas)

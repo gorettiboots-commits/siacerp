@@ -13,6 +13,7 @@ _orig_le_init = QLineEdit.__init__
 def _patched_le_init(self, *args, **kwargs):
     _orig_le_init(self, *args, **kwargs)
     self.setCompleter(None)
+    self.setAttribute(Qt.WidgetAttribute.WA_InputMethodEnabled, False)
 
 
 QLineEdit.__init__ = _patched_le_init

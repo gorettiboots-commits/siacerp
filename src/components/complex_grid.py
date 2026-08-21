@@ -23,7 +23,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QTextDocument
+from PySide6.QtGui import QColor, QFont, QPageSize, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QHeaderView,
@@ -82,6 +82,7 @@ class ComplexGrid(QWidget):
         self._lista_fn = None
         self._estilo_fn = None
         self._grupo_fn = None
+        self._matriz_fn = None
         self._totales_fn = None
         self._acciones: list[dict] = []
         self._filtros: list = []
@@ -296,6 +297,10 @@ class ComplexGrid(QWidget):
     def set_grupo_fn(self, fn) -> None:
         """fn(valor, recs) -> str: etiqueta para las filas de agrupación."""
         self._grupo_fn = fn
+
+    def set_matriz_handler(self, fn) -> None:
+        """fn(registro) -> dict: extrae datos de matriz de tallas para hover."""
+        self._matriz_fn = fn
 
     def buscar(self, texto: str) -> None:
         self._txt_buscar.setText(texto)
