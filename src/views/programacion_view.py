@@ -93,6 +93,7 @@ class ProgramacionView(QWidget):
         self._crear_widgets_toolbar()
 
         self.vista = GridHibrido()
+        self.vista.set_imprimir_callback(self._imprimir)
         self.vista.agregar_widget_toolbar(QLabel("Semana:"))
         self.vista.agregar_widget_toolbar(self.cmb_semana)
         self.vista.agregar_separador_toolbar()

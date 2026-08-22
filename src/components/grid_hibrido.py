@@ -301,6 +301,13 @@ class GridHibrido(QWidget):
         self._grid.exportar_excel()
 
     # ---------------------------------------------------------- API pública (proxy)
+    def set_imprimir_callback(self, fn) -> None:
+        try:
+            self._btn_imprimir.clicked.disconnect()
+        except RuntimeError:
+            pass
+        self._btn_imprimir.clicked.connect(fn)
+
     def set_columnas(self, columnas: list[dict]) -> None:
         self._grid.set_columnas(columnas)
 
