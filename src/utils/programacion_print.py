@@ -143,6 +143,63 @@ def _detectar_segmentos(lineas: list[dict]) -> list[list[dict]]:
     return [s for s in segmentos if s]
 
 
+def _caratula_resumen(
+    segmentos: list[list[dict]],
+    incluir_semana: bool,
+) -> str:
+    """Genera una carátula resumen cuando hay múltiples segmentos.
+
+    Muestra una tabla con: #, Rango de corrida, Líneas, Total pares,
+    y una fila de gran total al final.
+    """
+    filas = []
+    gran_lineas = 0
+    gran_pares = 0
+    for idx, seg in enumerate(segmentos, 1):
+        tallas = _tallas_ordenadas(seg)
+        total = sum(int(l.get("total_pares", 0) or 0) for l in seg)
+        rango = (
+            f"Del {_fmt_talla_encabezado(tallas[0])} al "
+            f"{_fmt_talla_encabezado(tallas[-1])}"
+            if tallas else "Sin tallas")
+        n_lineas = len(seg)
+        gran_lineas += n_lineas
+        gran_pares += total
+        filas.append(
+            f"<tr>"
+            f"<td class='num'>{idx}</td>"
+            f"<td>{_esc(rango)}</td>"
+            f"<td class='num'>{n_lineas}</td>"
+            f"<td class='num'>{total}</td>"
+            f"</tr>")
+
+    filas_total = (
+        f"<tr class='total'>"
+        f"<td></td>"
+        f"<td>TOTAL GENERAL</td>"
+        f"<td class='num'>{gran_lineas}</td>"
+        f"<td class='num'>{gran_pares}</td>"
+        f"</tr>")
+
+    return f"""
+<div class="caratula">
+  <div class="caratula-titulo">RESUMEN POR CORRIDA</div>
+  <table class="prog caratula-tabla">
+  <thead><tr>
+    <th style="width:40px">#</th>
+    <th>RANGO DE TALLAS</th>
+    <th style="width:80px">LÍNEAS</th>
+    <th style="width:100px">TOTAL PARES</th>
+  </tr></thead>
+  <tbody>
+  {''.join(filas)}
+  {filas_total}
+  </tbody>
+  </table>
+</div>
+"""
+
+
 def _fmt_talla_encabezado(talla: str) -> str:
     """Formatea la talla para el encabezado de columna."""
     try:
@@ -166,8 +223,13 @@ def _renderizar_tabla_segmento(
     lineas: list[dict],
     incluir_semana: bool,
     mostrar_subtotal_segmento: bool,
+    pagina_nueva: bool = False,
 ) -> str:
-    """Renderiza una sola tabla HTML para un segmento de líneas."""
+    """Renderiza una sola tabla HTML para un segmento de líneas.
+
+    Si *pagina_nueva* es True, agrega page-break-before para que la tabla
+    empiece en una hoja nueva (útil cuando hay múltiples corridas).
+    """
     tallas = _tallas_ordenadas(lineas)
     total_por_talla: dict[str, int] = {talla: 0 for talla in tallas}
     gran_total = 0
@@ -220,6 +282,7 @@ def _renderizar_tabla_segmento(
         "color:#64748b'>Sin líneas para esta selección.</td></tr>"
         % len(encabezados))
 
+    # Etiqueta de corrida: siempre se muestra el rango y los totales
     etiqueta_corrida = ""
     if mostrar_subtotal_segmento and tallas:
         etiqueta_corrida = (
@@ -228,7 +291,10 @@ def _renderizar_tabla_segmento(
             f'{_fmt_talla_encabezado(tallas[-1])} '
             f'({len(lineas)} líneas · {gran_total} pares)</div>')
 
-    return f"""{etiqueta_corrida}
+    estilo_extra = " style='page-break-before:always'" if pagina_nueva else ""
+
+    return f"""<div{estilo_extra}>
+{etiqueta_corrida}
 <table class="prog">
 <thead><tr>
 {''.join(f'<th>{_esc(h)}</th>' for h in encabezados)}
@@ -237,7 +303,8 @@ def _renderizar_tabla_segmento(
 {cuerpo}
 <tr class="total">{''.join(f'<td>{_esc(c)}</td>' for c in fila_total)}</tr>
 </tbody>
-</table>"""
+</table>
+</div>"""
 
 
 def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACION SEMANAL",
@@ -258,15 +325,24 @@ def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACION SE
 
     tablas = []
     gran_total_todos = 0
-    for seg in segmentos:
+    for idx, seg in enumerate(segmentos):
+        # La primera tabla va en la misma hoja; las demás en hoja nueva
+        pagina_nueva = hay_multiples and idx > 0
         tablas.append(
-            _renderizar_tabla_segmento(seg, incluir_semana, hay_multiples))
+            _renderizar_tabla_segmento(
+                seg, incluir_semana, hay_multiples,
+                pagina_nueva=pagina_nueva))
         gran_total_todos += sum(
             int(l.get("total_pares", 0) or 0) for l in seg)
 
-    cuerpo_completo = "\n".join(tablas) if tablas else (
-        "<div style='text-align:center;padding:40px;color:#64748b'>"
-        "Sin lineas para esta seleccion.</div>")
+    # Carátula resumen cuando hay múltiples segmentos
+    caratula_html = ""
+    if hay_multiples and segmentos:
+        caratula_html = _caratula_resumen(segmentos, incluir_semana)
+
+    cuerpo_completo = caratula_html + "\n".join(tablas) if tablas else (
+        caratula_html + "<div style='text-align:center;padding:40px;"
+        "color:#64748b'>Sin lineas para esta seleccion.</div>")
 
     if not lineas:
         gran_total_todos = 0
@@ -303,6 +379,21 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; color: #374151; }
 .header .titulo {{ font-size: 18px; font-weight: 700; color: {_VERDE_OSCURO}; text-align: center; }}
 .header .sub {{ font-size: 11px; color: {_VERDE_MEDIO}; }}
 header .fecha {{ font-size: 11px; color: {_VERDE_MEDIO}; text-align: right; }}
+.caratula {{ margin: 16px 0; padding: 16px 20px;
+    background: {_BLANCO}; border: 2px solid {_SALVIA_OSCURA};
+    border-radius: 6px; }}
+.caratula-titulo {{ font-size: 14px; font-weight: 800;
+    color: {_VERDE_OSCURO}; text-align: center; margin-bottom: 12px;
+    letter-spacing: 2px; text-transform: uppercase; }}
+.caratula-tabla {{ width: 60%; margin: 0 auto; }}
+.caratula-tabla th {{ background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+    color: #ffffff; border: 1px solid {_SALVIA_OSCURA};
+    padding: 8px 10px; font-size: 11px; text-align: center; }}
+.caratula-tabla td {{ border: 1px solid #e4e7e2; padding: 6px 10px;
+    font-size: 12px; text-align: center; background: {_BLANCO}; }}
+.caratula-tabla tr.total td {{ font-weight: bold;
+    background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+    color: #ffffff; border-color: {_SALVIA_OSCURA}; }}
 table.prog {{ width: 100%; border-collapse: collapse; margin-top: 6px; }}
 table.prog th {{ background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
                 color: #ffffff; border: 1px solid {_SALVIA_OSCURA};
