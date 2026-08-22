@@ -181,9 +181,11 @@ def _caratula_resumen(
         f"<td class='num'>{gran_pares}</td>"
         f"</tr>")
 
+    titulo_caratula = "RESUMEN POR CORRIDA" if len(segmentos) > 1 else "RESUMEN DE CORRIDA"
+
     return f"""
 <div class="caratula">
-  <div class="caratula-titulo">RESUMEN POR CORRIDA</div>
+  <div class="caratula-titulo">{titulo_caratula}</div>
   <table class="prog caratula-tabla">
   <thead><tr>
     <th style="width:40px">#</th>
@@ -335,9 +337,9 @@ def generar_html_programacion(lineas: list[dict], titulo: str = "PROGRAMACION SE
         gran_total_todos += sum(
             int(l.get("total_pares", 0) or 0) for l in seg)
 
-    # Carátula resumen cuando hay múltiples segmentos
+    # Carátula resumen siempre (muestra resumen de corridas)
     caratula_html = ""
-    if hay_multiples and segmentos:
+    if segmentos:
         caratula_html = _caratula_resumen(segmentos, incluir_semana)
 
     cuerpo_completo = caratula_html + "\n".join(tablas) if tablas else (
