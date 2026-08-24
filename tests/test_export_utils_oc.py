@@ -5,10 +5,10 @@ Se ejecutan headless (QT_QPA_PLATFORM=offscreen, ver conftest.py).
 """
 
 import base64
+import os
 
 import pytest
 
-import src.components.preview_impresion as pim
 from src.utils.export_utils import _oc_receipt_html, print_orden_compra
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -55,7 +55,8 @@ class TestMembrete:
 
     def test_reporte_muestra_logo_a_tamano_de_membrete(self):
         html = _oc_receipt_html(_datos(), _detalle())
-        assert 'width="90"' in html or 'width="100"' in html or 'width="110"' in html or 'width="120"' in html
+        assert ('width="90"' in html or 'width="100"' in html
+                or 'max-width:90px' in html or 'max-width:100px' in html)
 
     def test_reporte_conserva_marca_y_totales(self):
         html = _oc_receipt_html(_datos(), _detalle())
@@ -94,14 +95,26 @@ class TestObservaciones:
 
 # -------------------------------------------------------------- Vista previa
 class TestVistaPrevia:
-    def test_print_orden_compra_abre_la_vista_previa(self, monkeypatch):
-        abiertos = []
+    def test_print_orden_compra_genera_pdf(self, monkeypatch, tmp_path):
+        """print_orden_compra abre QFileDialog y genera un PDF."""
+        from PySide6.QtGui import QTextDocument
 
-        def _stub(html: str, titulo: str = "", parent=None) -> None:
-            abiertos.append((html, titulo))
+        guardar_en = str(tmp_path / "OC_test.pdf")
+        monkeypatch.setattr(
+            "src.utils.export_utils.QFileDialog.getSaveFileName",
+            lambda *a, **kw: (guardar_en, "PDF (*.pdf)"),
+        )
 
-        monkeypatch.setattr(pim, "previsualizar_html", _stub)
         print_orden_compra(_datos(), _detalle(), None)
-        assert len(abiertos) == 1
-        assert "RECIBO DE COMPRA" in abiertos[0][0]
-        assert "Orden de Compra" in abiertos[0][1]
+
+        assert os.path.exists(guardar_en)
+        assert os.path.getsize(guardar_en) > 0
+
+    def test_print_orden_compra_cancela_si_no_ruta(self, monkeypatch, tmp_path):
+        """Si el usuario cancela el diálogo, no se genera nada."""
+        monkeypatch.setattr(
+            "src.utils.export_utils.QFileDialog.getSaveFileName",
+            lambda *a, **kw: ("", ""),
+        )
+        print_orden_compra(_datos(), _detalle(), None)
+        assert not os.path.exists(str(tmp_path / "OC_test.pdf"))

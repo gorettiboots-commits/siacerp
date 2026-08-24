@@ -62,46 +62,77 @@ def print_table(table: QTableWidget, titulo: str, parent: QWidget) -> None:
 
 
 def _table_to_html(table: QTableWidget, titulo: str) -> str:
-    logo_path = Path(__file__).resolve().parent.parent / "views" / "assets" / "logo.jpeg"
-    logo_b64 = ""
-    if logo_path.exists():
-        import base64
-        with open(str(logo_path), "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
+    from src.utils.print_template import (
+        _MENTA, _SALVIA, _SALVIA_OSCURA, _VERDE_OSCURO, _VERDE_MEDIO,
+        logo_base64, nombre_empresa,
+    )
+    from datetime import datetime
+
+    logo_b64 = logo_base64()
+    empresa = nombre_empresa()
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    logo_html = ""
+    if logo_b64:
+        logo_html = (f'<img src="data:image/png;base64,{logo_b64}" '
+                     'style="max-width:50px;max-height:50px;vertical-align:middle;margin-right:8px"/>')
 
     rows_html = ""
     visible_cols = [c for c in range(table.columnCount()) if not table.isColumnHidden(c)]
     headers = [table.horizontalHeaderItem(c).text() if table.horizontalHeaderItem(c) else ""
                for c in visible_cols]
 
-    header_row = "".join(f"<th style='background:#4f46e5;color:#fff;padding:8px;text-align:center;"
-                         f"font-size:11px'>{h}</th>" for h in headers)
+    header_row = "".join(
+        f"<th style='background:linear-gradient(135deg,{_SALVIA} 0%,{_SALVIA_OSCURA} 100%);"
+        f"color:#fff;padding:7px 8px;text-align:center;font-size:10px;"
+        f"border:1px solid {_SALVIA_OSCURA}'>{h}</th>"
+        for h in headers)
     rows_html += f"<tr>{header_row}</tr>"
 
-    for row in range(table.rowCount()):
+    for row_idx in range(table.rowCount()):
         cells = ""
+        par = (row_idx % 2 == 1)
+        bg = 'background:#f7faf6;' if par else ''
         for ci in visible_cols:
-            item = table.item(row, ci)
+            item = table.item(row_idx, ci)
             val = item.text() if item else ""
-            cells += f"<td style='padding:6px;border:1px solid #ddd;font-size:10px'>{val}</td>"
+            cells += (
+                f"<td style='padding:6px;border:1px solid #e4e7e2;"
+                f"font-size:10px;{bg}'>{val}</td>")
         rows_html += f"<tr>{cells}</tr>"
 
-    logo_html = ""
-    if logo_b64:
-        logo_html = f'<img src="data:image/jpeg;base64,{logo_b64}" style="max-width:80px;max-height:80px;float:right"/>'
-
     return f"""<!DOCTYPE html>
-<html><head><meta charset='utf-8'/></head><body>
-<div style='border-bottom:2px solid #4f46e5;padding-bottom:8px;margin-bottom:16px'>
-{logo_html}
-<h2 style='color:#1e293b;margin:0'>{titulo}</h2>
-<p style='color:#64748b;font-size:11px;margin:4px 0'>SIAC ERP - Sistema Integral de AdministraciÃ³n y Control</p>
+<html><head><meta charset='utf-8'/><style>
+@page {{ margin: 10mm; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 0; color: #374151; }}
+.header {{
+    background: linear-gradient(135deg, {_MENTA} 0%, {_SALVIA} 100%);
+    padding: 12px 20px; border-bottom: 3px solid {_SALVIA_OSCURA};
+}}
+.header table {{ width: 100%; border-collapse: collapse; }}
+.header td {{ vertical-align: middle; }}
+.header .marca {{ font-size: 20px; font-weight: 800; color: {_VERDE_OSCURO}; letter-spacing: 2px; }}
+.header .titulo {{ font-size: 16px; font-weight: 700; color: {_VERDE_OSCURO}; text-align: center; }}
+.header .fecha {{ font-size: 11px; color: {_VERDE_MEDIO}; text-align: right; }}
+.footer {{ margin-top: 14px; font-size: 10px; color: {_VERDE_MEDIO}; text-align: right; }}
+</style></head><body>
+<div class="header">
+<table><tr>
+<td style="width:35%">
+  {logo_html}<span class="marca">{empresa.upper()}</span>
+</td>
+<td style="width:30%">
+  <div class="titulo">{_esc(titulo)}</div>
+</td>
+<td style="width:35%">
+  <div class="fecha">Generado el {ahora}</div>
+</td>
+</tr></table>
 </div>
-<table style='width:100%;border-collapse:collapse;font-family:Segoe UI,sans-serif'>
+<table style='width:100%;border-collapse:collapse;margin-top:12px;font-family:Segoe UI,sans-serif'>
 {rows_html}
 </table>
-<p style='color:#94a3b8;font-size:9px;margin-top:16px;text-align:center'>
-Generado por SIAC ERP - Desarrollado por Mario Felipe Luevano - Todos los derechos reservados</p>
+<div class="footer">{empresa} - Generado el {ahora}</div>
 </body></html>"""
 
 
@@ -198,18 +229,24 @@ def _oc_totales(detalle: list[dict], solo_remision: bool) -> tuple[float, float,
 
 
 def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
-    """Recibo de OC con estilos inline (WYSIWYG QTextDocument)."""
-    from src.utils.print_template import (
-        esc as t_esc, fmt_fecha as t_fmt_fecha,
-        html_cabecera, html_ondas_superiores, html_obs_bloque,
-        html_pie, wrap_hoja, html_tabla_items, th, td_izq, td_der, td_num,
-        _SALVIA, _SALVIA_OSCURA, _BLANCO,
-    )
+    from datetime import datetime
+
+    # Datos de empresa para el membrete
+    try:
+        from src.models.empresa_model import EmpresaModel
+        em = EmpresaModel()
+        emp_nombre = _esc(em.nombre_empresa().upper())
+        emp_sub = _esc(em.razon_social())
+    except Exception:
+        emp_nombre = "GORETTI"
+        emp_sub = ""
 
     solo_remision = bool(datos.get("solo_remision"))
-    titulo = "REMI-SION - ORDEN DE COMPRA" if solo_remision else         "RECIBO DE COMPRA"
+    titulo = "REMI-SIÓN - ORDEN DE COMPRA" if solo_remision else \
+        "RECIBO DE COMPRA - ORDEN DE COMPRA"
     subtotal, iva, total = _oc_totales(detalle, solo_remision)
     columnas = _oc_columnas_tallas(detalle)
+    logo_b64 = _logo_base64()
 
     estatus = str(datos.get("estatus", "") or "").replace("_", " ").capitalize()
     proveedor = datos.get("proveedor_nombre") or "Compra a inventario"
@@ -218,117 +255,192 @@ def _oc_receipt_html(datos: dict, detalle: list[dict]) -> str:
     rfc = datos.get("proveedor_rfc") or ""
     direccion = datos.get("proveedor_direccion") or ""
 
-    # --- Headers de la tabla ---
-    headers = th("NOMBRE", ancho="34%", alineado="left")
-    for c in columnas:
-        headers += th(f"#{t_esc(c['talla'])}", ancho="")
-    headers += th("TOTAL PARES")
-    headers += th("VALOR UNITARIO")
-    headers += th("TOTAL")
+    logo_html = ""
+    if logo_b64:
+        logo_html = (f'<img src="data:image/jpeg;base64,{logo_b64}" '
+                     f'style="max-width:90px;max-height:90px;vertical-align:middle;margin-right:8px"/>')
 
-    # --- Filas de datos ---
+    th_tallas = "".join(
+        f"<th>{_esc('#')}{_esc(c['talla'])}</th>" for c in columnas)
+
     rows = ""
-    for i, d in enumerate(detalle):
-        par = (i % 2 == 1)
+    for d in detalle:
         por_talla = {int(t["talla_id"]): int(t.get("pares", 0) or 0)
                      for t in d.get("tallas", [])}
-        celdas = ""
-        for c in columnas:
-            val = por_talla.get(int(c["talla_id"]), 0) or ""
-            celdas += td_num(str(val), es_par=par)
+        celdas = "".join(
+            f"<td class='td-num'>{por_talla.get(int(c['talla_id']), 0) or ''}</td>"
+            for c in columnas)
         cant = int(d.get("cantidad", 0) or 0)
         precio = float(d.get("precio_unitario", 0) or 0)
         sub = _oc_subtotal_detalle(d)
         rows += f"""<tr>
-            {td_izq(t_esc(d.get('insumo_nombre', '')), es_par=par)}
+            <td style='text-align:left'>{_esc(d.get('insumo_nombre', ''))}</td>
             {celdas}
-            {td_num(str(cant), es_par=par)}
-            {td_der(f"${precio:,.2f}", es_par=par)}
-            {td_der(f"${sub:,.2f}", es_par=par, negrita=True)}
+            <td class='td-num'>{cant}</td>
+            <td class='td-der'>${precio:,.2f}</td>
+            <td class='td-der'>${sub:,.2f}</td>
         </tr>"""
 
-    tabla = html_tabla_items(headers, rows)
-
-    # --- Resumen ---
     filas_iva = ""
     if not solo_remision:
         filas_iva = f"""<tr>
-            <td style="padding:3px 8px;font-size:11px;border:1px solid #e4e7e2;">IVA (16%)</td>
-            <td style="padding:3px 8px;font-size:11px;border:1px solid #e4e7e2;text-align:right;font-weight:bold;">${iva:,.2f}</td>
+            <td class='lbl'>IVA (16%)</td>
+            <td class='val'>${iva:,.2f}</td>
         </tr>"""
 
-    resumen = f"""<table width="260" cellpadding="0" cellspacing="0"
-           style="border-collapse:collapse;margin:8px 0 8px auto;">
-    <tr>
-        <td style="padding:3px 8px;font-size:11px;border:1px solid #e4e7e2;">Subtotal</td>
-        <td style="padding:3px 8px;font-size:11px;border:1px solid #e4e7e2;text-align:right;font-weight:bold;">${subtotal:,.2f}</td>
-    </tr>
-    {filas_iva}
-    <tr>
-        <td bgcolor="{_SALVIA}" style="padding:5px 8px;font-size:14px;font-weight:bold;border:1px solid {_SALVIA_OSCURA};color:#ffffff;">TOTAL</td>
-        <td bgcolor="{_SALVIA}" style="padding:5px 8px;font-size:14px;font-weight:bold;border:1px solid {_SALVIA_OSCURA};text-align:right;color:#ffffff;">${total:,.2f}</td>
-    </tr>
-    </table>"""
-
-    # --- Bloque proveedor ---
-    lineas_prov = [l for l in [
-        t_esc(proveedor),
-        (f"Tel: {t_esc(telefono)}" if telefono else ""),
-        (f"Email: {t_esc(email)}" if email else ""),
-        (f"RFC: {t_esc(rfc)}" if rfc else ""),
-        (f"Direccion: {t_esc(direccion)}" if direccion else ""),
+    datos_proveedor = [l for l in [
+        _esc(proveedor),
+        (f"Tel: {_esc(telefono)}" if telefono else ""),
+        (f"Email: {_esc(email)}" if email else ""),
+        (f"RFC: {_esc(rfc)}" if rfc else ""),
+        (f"Dirección: {_esc(direccion)}" if direccion else ""),
     ] if l]
+
     vendido_html = "".join(
-        f"<div style='{'font-size:15px;font-weight:bold;color:#2f4f3a' if i == 0 else 'color:#5b6b60;font-size:12px'}'>"
-        f"{l}</div>" for i, l in enumerate(lineas_prov))
+        f"<div class='{'empresa' if i == 0 else 'sub'}'>"
+        f"{l}</div>" for i, l in enumerate(datos_proveedor))
 
-    cabecera = html_cabecera(
-        titulo, folio=t_esc(datos.get("folio", "")),
-        fecha=datos.get("fecha_emision", ""),
-        extra_derecha=f"Estatus: {t_esc(estatus)}")
+    info_pago = [l for l in [
+        _esc(proveedor),
+        (f"Tel: {_esc(telefono)}" if telefono else ""),
+        (f"Email: {_esc(email)}" if email else ""),
+    ] if l]
+    info_pago_html = "".join(f"<div>{l}</div>" for l in info_pago)
 
-    obs_html = html_obs_bloque(str(datos.get("observaciones") or "").strip())
-    metodo = t_esc(datos.get("metodo_pago") or "Transferencia bancaria")
+    # Observaciones
+    obs_texto = str(datos.get("observaciones") or "").strip()
+    if obs_texto:
+        obs_html = (
+            f"<div class='obs'>"
+            f"<div class='lbl'>Observaciones</div>"
+            f"<div>{_esc(obs_texto).replace(chr(10), '<br/>')}</div>"
+            f"</div>")
+    else:
+        obs_html = ""
 
-    contenido = f"""
-{cabecera}
-{html_ondas_superiores()}
+    ahora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    sub_label = emp_sub if emp_sub and emp_sub != emp_nombre else ""
 
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:0;">
-<tr><td style="padding:0 14mm;">
+    from src.utils.print_template import (
+        _MENTA, _SALVIA, _SALVIA_OSCURA, _VERDE_OSCURO, _VERDE_MEDIO, _BLANCO,
+    )
 
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:0;">
-<tr><td bgcolor="{_BLANCO}" style="padding:10px 14px;border-left:4px solid {_SALVIA};">
-  <div class="lbl">Vendido a:</div>
+    return f"""<!DOCTYPE html>
+<html><head><meta charset='utf-8'/><style>
+@page {{ margin: 14mm; }}
+body {{ font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #374151; margin: 0; }}
+.encabezado {{ background: linear-gradient(135deg, {_MENTA} 0%, {_SALVIA} 100%);
+    border-bottom: 3px solid {_SALVIA_OSCURA}; padding-bottom: 10px; }}
+.encabezado table {{ width: 100%; border-collapse: collapse; }}
+.encabezado td {{ vertical-align: middle; }}
+.marca {{ font-size: 22px; font-weight: 800; color: {_VERDE_OSCURO}; letter-spacing: 2px; }}
+.razon {{ font-size: 11px; color: {_VERDE_MEDIO}; margin-top: 2px; }}
+.datos {{ font-size: 10px; color: {_VERDE_MEDIO}; margin-top: 2px; }}
+.titulo {{ font-size: 17px; font-weight: 700; color: {_VERDE_OSCURO}; text-align: center; }}
+.no-fecha {{ text-align: right; font-size: 12px; color: #374151; }}
+.no-fecha .num {{ font-size: 15px; font-weight: bold; color: {_VERDE_OSCURO}; }}
+.vendido {{ border: 1px solid {_SALVIA_OSCURA}; border-left: 4px solid {_SALVIA}; padding: 10px 14px; margin-top: 14px; background: {_BLANCO}; }}
+.vendido .lbl {{ font-weight: bold; color: {_VERDE_MEDIO}; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }}
+.vendido .empresa {{ font-size: 15px; font-weight: bold; color: {_VERDE_OSCURO}; }}
+.vendido .sub {{ font-size: 12px; color: {_VERDE_MEDIO}; }}
+table.items {{ width: 100%; border-collapse: collapse; margin-top: 14px; }}
+table.items th {{ background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+    color: #ffffff; padding: 7px 6px; font-size: 10px; text-align: center;
+    border: 1px solid {_SALVIA_OSCURA}; }}
+table.items td {{ border: 1px solid #e4e7e2; padding: 6px; font-size: 11px; background: {_BLANCO}; }}
+table.items tr:nth-child(even) td {{ background: #f7faf6; }}
+.td-num {{ text-align: center; }}
+.td-der {{ text-align: right; }}
+.resumen {{ margin-top: 14px; margin-left: auto; width: 250px; border-collapse: collapse; }}
+.resumen td {{ padding: 5px 10px; font-size: 12px; border: 1px solid #e4e7e2; }}
+.resumen .lbl {{ color: {_VERDE_MEDIO}; }}
+.resumen .val {{ text-align: right; font-weight: bold; }}
+.resumen .fila-total td {{ background: linear-gradient(135deg, {_SALVIA} 0%, {_SALVIA_OSCURA} 100%);
+    color: #ffffff; font-size: 15px; font-weight: bold; border-color: {_SALVIA_OSCURA}; }}
+.metodo {{ margin-top: 16px; font-size: 13px; }}
+.metodo b {{ color: {_VERDE_OSCURO}; }}
+.pago {{ border: 1px solid {_SALVIA_OSCURA}; border-left: 4px solid {_SALVIA}; padding: 10px 14px; margin-top: 10px; font-size: 12px; background: {_BLANCO}; }}
+.pago .lbl, .obs .lbl {{ font-weight: bold; color: {_VERDE_MEDIO}; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }}
+.obs {{ border: 1px solid {_SALVIA_OSCURA}; border-left: 4px solid {_SALVIA}; padding: 10px 14px; margin-top: 14px; font-size: 11px; background: {_BLANCO}; }}
+.pie {{ margin-top: 26px; padding-top: 10px; border-top: 2px solid {_SALVIA_OSCURA}; text-align: center; }}
+.pie .gracias {{ font-size: 14px; font-weight: bold; color: {_VERDE_OSCURO}; }}
+.pie .marca {{ font-size: 16px; font-weight: bold; color: {_VERDE_OSCURO}; letter-spacing: 2px; margin-top: 4px; }}
+.pie .leyenda {{ font-size: 9px; color: {_VERDE_MEDIO}; margin-top: 4px; }}
+</style></head><body>
+<div class='encabezado'>
+<table><tr>
+<td style='width:35%'>
+  {logo_html}<span class='marca'>{emp_nombre}</span>
+  {'<div class="razon">' + sub_label + '</div>' if sub_label else ''}
+</td>
+<td style='width:30%;text-align:center'>
+  <div class='titulo'>{titulo}</div>
+</td>
+<td class='no-fecha' style='width:35%'>
+  <div>NO. <span class='num'>{_esc(datos.get('folio', ''))}</span></div>
+  <div>FECHA: <b>{_fmt_fecha(datos.get('fecha_emision', ''))}</b></div>
+  <div class='datos'>Estatus: {_esc(estatus)}</div>
+</td>
+</tr></table>
+</div>
+
+<div class='vendido'>
+  <div class='lbl'>Vendido a:</div>
   {vendido_html}
-</td></tr>
+</div>
+
+<table class='items'>
+<tr>
+  <th style='text-align:left;min-width:170px'>NOMBRE</th>
+  {th_tallas}
+  <th>TOTAL PARES</th>
+  <th>VALOR UNITARIO</th>
+  <th>TOTAL</th>
+</tr>
+{rows}
 </table>
 
-{tabla}
-
-{resumen}
+<table class='resumen'>
+<tr><td class='lbl'>Subtotal</td><td class='val'>${subtotal:,.2f}</td></tr>
+{filas_iva}
+<tr class='fila-total'><td>TOTAL</td><td>${total:,.2f}</td></tr>
+</table>
 
 {obs_html}
+<div class='metodo'>Método de pago: <b>{_esc(datos.get('metodo_pago') or 'Transferencia bancaria')}</b></div>
 
-<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;">
-<tr><td bgcolor="{_BLANCO}" style="padding:10px 14px;border-left:4px solid {_SALVIA};">
-  <div class="lbl">Informacion de Pago</div>
-  <div style="font-size:10px;">Metodo: <b>{metodo}</b></div>
-</td></tr>
-</table>
+<div class='pago'>
+  <div class='lbl'>Información de Pago</div>
+  {info_pago_html}
+</div>
 
-</td></tr></table>
+<div class='pie'>
+  <div class='gracias'>Gracias por su compra.</div>
+  <div class='marca'>{emp_nombre}</div>
+  <div class='leyenda'>Generado por {emp_nombre} el {ahora}</div>
+</div>
 
-{html_pie()}
-"""
-    return wrap_hoja(contenido)
+</body></html>"""
 
 
 def print_orden_compra(datos: dict, detalle: list[dict], parent: QWidget) -> None:
-    from src.components.preview_impresion import previsualizar_html
-    folio = datos.get('folio', '')
-    titulo = f"Orden de Compra {folio}" if folio else "Orden de Compra"
-    previsualizar_html(_oc_receipt_html(datos, detalle), titulo=titulo, parent=parent)
+    path, _ = QFileDialog.getSaveFileName(
+        parent, "Guardar PDF - Orden de Compra",
+        f"OC_{datos.get('folio', '')}.pdf", "PDF (*.pdf)")
+    if not path:
+        return
+
+    doc = QTextDocument()
+    doc.setHtml(_oc_receipt_html(datos, detalle))
+    printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+    printer.setPageSize(QPageSize(QPageSize.Letter))
+    printer.setPageOrientation(
+        QPageLayout.Orientation.Landscape
+        if len(_oc_columnas_tallas(detalle)) > 6
+        else QPageLayout.Orientation.Portrait)
+    printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+    printer.setOutputFileName(path)
+    doc.print_(printer)
 
 
 def export_orden_compra_excel(datos: dict, detalle: list[dict], parent: QWidget) -> Optional[str]:
