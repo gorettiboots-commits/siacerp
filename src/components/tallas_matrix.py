@@ -180,7 +180,6 @@ class MatrizTallasWidget(QWidget):
         self.puntos = list(filas) if filas is not None else TallasModel().listar()
         self.tallas = self.puntos
         self.setMinimumHeight(30)
-        self.setMaximumWidth(600) if not con_precios else self.setMaximumWidth(760)
         self.bloques: list[list[tuple[dict, CeldaMatriz]]] = []
         self._celdas: list[CeldaMatriz] = []
         self._celdas_precio: list[CeldaPrecio] = []
@@ -207,8 +206,16 @@ class MatrizTallasWidget(QWidget):
         if not self.tallas:
             layout.addWidget(QLabel("No hay tallas configuradas en el sistema."))
         else:
+            # Layout horizontal: matriz a la izquierda, corrida+total a la derecha
+            cuerpo = QHBoxLayout()
+            cuerpo.setSpacing(12)
+
+            # -- Columna izquierda: tabla de tallas --
+            izquierda = QVBoxLayout()
+            izquierda.setContentsMargins(0, 0, 0, 0)
+            izquierda.setSpacing(6)
             self.tabla = self._crear_matriz()
-            layout.addWidget(self.tabla)
+            izquierda.addWidget(self.tabla)
 
             hint_text = (
                 "Sin controles de flechas: escriba los números directamente "
@@ -219,23 +226,35 @@ class MatrizTallasWidget(QWidget):
                      "con el teclado.")
             hint = QLabel(hint_text)
             hint.setStyleSheet("color: #64748b; font-size: 11px;")
-            layout.addWidget(hint)
+            izquierda.addWidget(hint)
+            izquierda.addStretch()
 
-        self._crear_corrida(layout)
-        self._actualizar_total()
+            cuerpo.addLayout(izquierda, 1)
+
+            # -- Columna derecha: corrida + total --
+            derecha = QVBoxLayout()
+            derecha.setContentsMargins(0, 0, 0, 0)
+            derecha.setSpacing(10)
+            self._crear_corrida(derecha)
+            self._actualizar_total()
+            derecha.addStretch()
+
+            cuerpo.addLayout(derecha, 0)
+            layout.addLayout(cuerpo)
 
         if self._celdas:
             self._celdas[0].setFocus()
 
     def _crear_corrida(self, layout: QVBoxLayout) -> None:
-        """Corrida rápida de tallas: aplica el mismo valor a un rango."""
+        """Corrida rápida de tallas: panel lateral vertical."""
         if not self.tallas:
             return
-        corrida_box = QGroupBox("Corrida rápida de tallas")
-        corrida_layout = QHBoxLayout(corrida_box)
-        corrida_layout.setSpacing(8)
+        corrida_box = QGroupBox("Corrida rápida")
+        corrida_box.setMinimumWidth(200)
+        corrida_box.setMaximumWidth(260)
+        c_layout = QVBoxLayout(corrida_box)
+        c_layout.setSpacing(6)
 
-        corrida_layout.addWidget(QLabel("De talla:"))
         self.cmb_talla_desde = QComboBox()
         self.cmb_talla_hasta = QComboBox()
         for p in self.tallas:
@@ -244,33 +263,53 @@ class MatrizTallasWidget(QWidget):
             self.cmb_talla_hasta.addItem(texto, _clave_talla(p))
         if self.cmb_talla_hasta.count() > 0:
             self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
-        corrida_layout.addWidget(self.cmb_talla_desde)
-        corrida_layout.addWidget(QLabel("a talla:"))
-        corrida_layout.addWidget(self.cmb_talla_hasta)
-        corrida_layout.addWidget(QLabel("con"))
+
+        fila_desde = QHBoxLayout()
+        fila_desde.addWidget(QLabel("De:"))
+        fila_desde.addWidget(self.cmb_talla_desde)
+        c_layout.addLayout(fila_desde)
+
+        fila_hasta = QHBoxLayout()
+        fila_hasta.addWidget(QLabel("A:"))
+        fila_hasta.addWidget(self.cmb_talla_hasta)
+        c_layout.addLayout(fila_hasta)
+
+        fila_pares = QHBoxLayout()
+        fila_pares.addWidget(QLabel("Pares:"))
         self.spn_corrida = QSpinBox()
         self.spn_corrida.setRange(0, 9999)
         self.spn_corrida.setValue(10)
-        self.spn_corrida.setMinimumWidth(80)
-        corrida_layout.addWidget(self.spn_corrida)
-        corrida_layout.addWidget(QLabel("pares por talla"))
+        self.spn_corrida.setMinimumWidth(70)
+        fila_pares.addWidget(self.spn_corrida)
+        c_layout.addLayout(fila_pares)
 
-        btn_corrida = QPushButton("Aplicar Corrida")
+        btn_corrida = QPushButton("Aplicar")
         btn_corrida.setObjectName("btnPrimary")
         btn_corrida.clicked.connect(self._aplicar_corrida)
-        corrida_layout.addWidget(btn_corrida)
+        c_layout.addWidget(btn_corrida)
 
         btn_limpiar = QPushButton("Limpiar")
         btn_limpiar.setObjectName("btnSecondary")
         btn_limpiar.clicked.connect(self._limpiar_tallas)
-        corrida_layout.addWidget(btn_limpiar)
+        c_layout.addWidget(btn_limpiar)
 
         layout.addWidget(corrida_box)
 
-        self.lbl_total = QLabel("Total de pares: 0")
+        # Tarjeta de total estilo programación semanal
+        self.lbl_total = QLabel("0")
+        self.lbl_total.setAlignment(Qt.AlignCenter)
+        self.lbl_total.setMinimumHeight(60)
         self.lbl_total.setStyleSheet(
-            "font-weight: bold; font-size: 13px; color: #4f46e5;")
+            "background-color: #059669; color: #ffffff; font-weight: bold;"
+            " font-size: 20px; border-radius: 8px; padding: 8px;"
+        )
         layout.addWidget(self.lbl_total)
+        lbl_nota_total = QLabel("Total pares")
+        lbl_nota_total.setAlignment(Qt.AlignCenter)
+        lbl_nota_total.setStyleSheet(
+            "color: #64748b; font-size: 10px; margin-top: -4px;"
+        )
+        layout.addWidget(lbl_nota_total)
 
     def _aplicar_corrida(self) -> None:
         idx_desde = self.cmb_talla_desde.currentIndex()
@@ -301,9 +340,9 @@ class MatrizTallasWidget(QWidget):
             importe = sum(
                 float(celda.text().strip() or 0) * int(self.celdas[tid].text().strip() or 0)
                 for tid, celda in self.celdas_precios.items())
-            self.lbl_total.setText(f"Total de pares: {total}    |    Importe: ${importe:,.2f}")
+            self.lbl_total.setText(f"{total}  ·  ${importe:,.2f}")
         else:
-            self.lbl_total.setText(f"Total de pares: {total}")
+            self.lbl_total.setText(str(total))
 
     def _etiqueta_encabezado(self, texto: str) -> QLabel:
         lbl = QLabel(texto)

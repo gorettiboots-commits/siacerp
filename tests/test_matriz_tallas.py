@@ -54,7 +54,7 @@ class TestModoSinPrecios:
         assert valores["1"] == 6
         assert valores["2"] == 4
         assert valores["3"] == 0
-        assert "Total de pares: 10" in dlg.lbl_total.text()
+        assert dlg.lbl_total.text() == "10"
         dlg.close()
         dlg.deleteLater()
 
@@ -85,7 +85,7 @@ class TestModoConPrecios:
         dlg.celdas_precios["1"].setText("25.5")
         dlg.celdas_precios["2"].setText("30.0")
         texto = dlg.lbl_total.text()
-        assert "Total de pares: 10" in texto
+        assert "10" in texto
         # 6*25.5 + 4*30.0 = 153 + 120 = 273
         assert "$273.00" in texto
         dlg.close()
