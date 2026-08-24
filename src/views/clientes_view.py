@@ -557,10 +557,19 @@ class _DialogPedidoCliente(QDialog):
         btn.setIconSize(QSize(16, 16))
         btn.setToolTip("Configurar Tallas")
         btn.setCursor(Qt.PointingHandCursor)
-        btn.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
+        btn.clicked.connect(self._on_click_configurar_tallas)
         self.table_detalle.setCellWidget(row, 3, btn)
         self.table_detalle.setItem(row, 4, QTableWidgetItem("0"))
         self.table_detalle.setItem(row, 5, QTableWidgetItem("0"))
+
+    def _on_click_configurar_tallas(self) -> None:
+        btn = self.sender()
+        if not btn:
+            return
+        for r in range(self.table_detalle.rowCount()):
+            if self.table_detalle.cellWidget(r, 3) is btn:
+                self._configurar_tallas(r)
+                break
 
     def _actualizar_boton_tallas(self, row: int) -> None:
         matriz = self._puntos_fila.get(row, {})
@@ -568,7 +577,9 @@ class _DialogPedidoCliente(QDialog):
         btn = self.table_detalle.cellWidget(row, 3)
         if btn:
             btn.setToolTip(f"Configurar Tallas ({total} pr)")
-        self.table_detalle.item(row, 4).setText(str(total))
+        item_pares = self.table_detalle.item(row, 4)
+        if item_pares:
+            item_pares.setText(str(total))
         self._recalcular_total()
 
     def _agregar_linea(self) -> None:
@@ -582,7 +593,10 @@ class _DialogPedidoCliente(QDialog):
 
     def _configurar_tallas(self, row: int) -> None:
         puntos = self.controller.listar_puntos()
-        id_por_talla = {p["punto"]: p["id"] for p in puntos}
+        id_por_clave = {}
+        for p in puntos:
+            id_por_clave[str(p["punto"])] = p["id"]
+            id_por_clave[str(p["id"])] = p["id"]
         actual = self._puntos_fila.get(row, {})
         inicial = {p["punto"]: int(actual.get(p["id"], 0) or 0) for p in puntos}
         dlg = MatrizTallasDialog(puntos=puntos, titulo="TALLAS DEL PEDIDO",
@@ -590,15 +604,30 @@ class _DialogPedidoCliente(QDialog):
         dlg.establecer_valores(inicial)
         if dlg.exec() == QDialog.Accepted:
             valores = dlg.obtener_valores()
-            self._puntos_fila[row] = {id_por_talla[t]: n
-                                      for t, n in valores.items() if n > 0}
+            nueva = {}
+            for t_str, n in valores.items():
+                if int(n or 0) > 0 and str(t_str) in id_por_clave:
+                    nueva[id_por_clave[str(t_str)]] = int(n)
+            self._puntos_fila[row] = nueva
             self._actualizar_boton_tallas(row)
 
     def _quitar_linea(self) -> None:
         row = self.table_detalle.currentRow()
         if row >= 0:
+            # Guardar el dict antes de eliminar la fila
+            previo = dict(self._puntos_fila)
+            total_prev = self.table_detalle.rowCount()
             self.table_detalle.removeRow(row)
-            self._puntos_fila.pop(row, None)
+            # Reindexar: copia las entradas omitiendo 'row', reasignando indices 0..n-2
+            nuevos_puntos = {}
+            idx = 0
+            for r in range(total_prev):
+                if r == row:
+                    continue
+                if r in previo:
+                    nuevos_puntos[idx] = previo[r]
+                idx += 1
+            self._puntos_fila = nuevos_puntos
             self._recalcular_total()
 
     def _recalcular_total(self) -> None:
@@ -723,7 +752,11 @@ class _DialogLineaPedido(QDialog):
         valores = self.matriz.obtener_valores()
         self.pares = {}
         for p in self.puntos:
+            # obtener_valores() puede indexar por str(punto) o str(id)
+            # según cómo se construyó el widget: intentamos ambas claves
             pares = int(valores.get(str(p["punto"]), 0) or 0)
+            if pares == 0:
+                pares = int(valores.get(str(p["id"]), 0) or 0)
             if pares > 0:
                 self.pares[p["id"]] = pares
         self.modelo = modelo

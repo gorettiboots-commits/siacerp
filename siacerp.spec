@@ -14,6 +14,7 @@ datas = [
     (str(ROOT / 'src' / 'utils' / 'styles.qss'), 'src/utils'),
     (str(ROOT / 'src' / 'views' / 'assets'), 'src/views/assets'),
     (str(ROOT / 'config.example.ini'), '.'),
+    (str(ROOT / 'scripts' / 'pre_configurar.py'), 'scripts'),
 ]
 
 # ── Imports ocultos ─────────────────────────────────────────────

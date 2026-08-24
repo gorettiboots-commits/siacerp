@@ -192,7 +192,7 @@ class TestLineaConTallas:
         primera = puntos[0]
         celda = dlg.matriz.celdas[str(primera["punto"])]
         celda.setText("12")
-        assert dlg.matriz.lbl_total.text() == "Total de pares: 12"
+        assert dlg.matriz.lbl_total.text().strip() == "12"
         dlg.txt_modelo.setText("MODELO PRUEBA")
         dlg._save()
         assert dlg.modelo == "MODELO PRUEBA"

@@ -115,7 +115,12 @@ class ProgramacionModel:
             (folio.strip(),))
 
     def obtener_linea_con_tallas(self, linea_id: int) -> Optional[dict]:
-        linea = self.obtener_linea(linea_id)
+        linea = self.db.fetch_one(
+            "SELECT pl.*, p.suela, p.observaciones "
+            "FROM programacion_lineas pl "
+            "LEFT JOIN pedidos_cliente p ON p.id = pl.pedido_id "
+            "WHERE pl.id = ?",
+            (linea_id,))
         if not linea:
             return None
         linea["tallas"] = self.db.fetch_all(

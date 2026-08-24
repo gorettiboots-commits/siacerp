@@ -29,6 +29,7 @@ Movimientos_Inventario.xlsx
 # Empaquetado PyInstaller
 build/
 dist/
+installer_output/
 
 # Capturas de preview (pruebas de UI)
 ui_preview/

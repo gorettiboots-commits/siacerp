@@ -448,8 +448,6 @@ class ComplexGrid(QWidget):
     def _insertar_fila(self, t: QTableWidget, rec) -> None:
         r = t.rowCount()
         t.insertRow(r)
-        if self._acciones:
-            t.setRowHeight(r, max(t.verticalHeader().defaultSectionSize() * 2, 40))
         fila = self._fila_fn(rec) if self._fila_fn else self._fila_por_defecto(rec)
         claves = self._claves_fn(rec) if self._claves_fn else None
         for c, cfg in enumerate(self._col_config):

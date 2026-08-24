@@ -6,11 +6,12 @@ from PySide6.QtWidgets import (
 
 from src.components.grid_hibrido import GridHibrido
 from src.components.notificacion_flotante import notificar_flotante
-from src.components.preview_impresion import PreviewImpresion
+from src.components.preview_impresion import PAGINA_PEDIDO, PreviewImpresion
 from src.controllers.programacion_controller import ProgramacionController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import exportar_programacion_excel
-from src.utils.programacion_print import generar_html_programacion
+from src.utils.programacion_print import (
+    generar_html_orden_pedido, generar_html_programacion)
 from src.utils.ui_helpers import crear_tarjeta
 from src.views.linea_detalle_dialog import LineaDetalleDialog
 
@@ -108,6 +109,8 @@ class ProgramacionView(QWidget):
                                  estilo=self._estilo_linea, lista=self._lista_linea,
                                  tarjeta=self._tarjeta_linea)
         self.vista.set_acciones([
+            {"texto": "Vista Previa", "icono": "pdf", "color": "#77307E",
+             "callback": self._ver_orden_pedido},
             {"texto": "Eliminar", "icono": "eliminar", "color": "#dc2626",
              "habilitado": lambda rec: self._permiso_eliminar and rec.get(
                  "estatus", "programado") not in _PRODUCCION_INICIADA,
@@ -334,6 +337,38 @@ class ProgramacionView(QWidget):
             return
         self.controller.asignar_folio_prog(linea_id, nuevo)
         self._recargar_tabla()
+
+    def _ver_orden_pedido(self, rec=None) -> None:
+        """Muestra vista previa de la Orden de Pedido (hoja 13.5×21.5cm).
+
+        El visor muestra la réplica de la hoja pre-impresa con los datos
+        encima; al imprimir se envía solo el contenido posicionado para
+        llenar los espacios vacíos de la hoja ya impresa.
+        """
+        try:
+            if rec is None:
+                rec = self.vista.registro_seleccionado()
+            if rec is None:
+                QMessageBox.information(self, "Seleccionar",
+                                        "Seleccione una línea de la programación.")
+                return
+            linea = self.controller.obtener_linea_con_tallas(rec["id"])
+            if not linea:
+                QMessageBox.warning(self, "Error",
+                                    "No se pudo obtener la línea con tallas.")
+                return
+            html_visor = generar_html_orden_pedido(linea)
+            html_print = generar_html_orden_pedido(linea, solo_contenido=True)
+            titulo = (f"Orden de Pedido — {linea.get('folio_prog', '')} "
+                      f"{linea.get('cliente', '')}")
+            dlg = PreviewImpresion(html_visor, titulo=titulo, parent=self,
+                                   html_impresion=html_print)
+            dlg.cmb_pagina.setCurrentText(PAGINA_PEDIDO)
+            dlg.cmb_orientacion.setCurrentText("Vertical")
+            dlg.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Error",
+                                 f"{type(e).__name__}: {e}")
 
     def _eliminar_linea(self, rec=None) -> None:
         if rec is None:

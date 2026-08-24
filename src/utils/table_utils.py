@@ -9,6 +9,9 @@ def configurar_tabla_excel(table: QTableWidget) -> None:
         header.setSectionResizeMode(col, QHeaderView.Interactive)
     header.setStretchLastSection(True)
     table.verticalHeader().setSectionResizeMode(QHeaderView.Interactive)
+    # Alto de fila: 32px — 2px más que el default Qt (30px) para
+    # comodidad visual sin desperdiciar espacio.
+    table.verticalHeader().setDefaultSectionSize(32)
     # Doble clic en cabecera = auto-ajustar ancho de columna
     header.sectionDoubleClicked.connect(
         lambda logical: table.resizeColumnToContents(logical))

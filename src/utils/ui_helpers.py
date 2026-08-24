@@ -120,3 +120,67 @@ def crear_header(titulo: str, parent: QWidget | None = None) -> QFrame:
     layout.addStretch()
 
     return header
+
+
+def obtener_geometria_pantalla(widget: QWidget | None = None):
+    """Devuelve la geometría disponible (ancho y alto utilizable sin barra de tareas)."""
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QGuiApplication
+    
+    screen = None
+    if widget is not None:
+        try:
+            window = widget.window()
+            if window and window.windowHandle():
+                screen = window.windowHandle().screen()
+        except Exception:
+            screen = None
+
+    if screen is None:
+        screen = QGuiApplication.primaryScreen()
+
+    if screen is not None:
+        return screen.availableGeometry()
+
+    app = QApplication.instance()
+    if app and app.primaryScreen():
+        return app.primaryScreen().availableGeometry()
+
+    from PySide6.QtCore import QRect
+    return QRect(0, 0, 1366, 768)
+
+
+def adaptar_dialogo_a_pantalla(dialog: QWidget, factor_ancho: float = 0.95, factor_alto: float = 0.92) -> None:
+    """Calcula la resolución disponible y limita el tamaño del formulario/diálogo para que nada se salga."""
+    geom = obtener_geometria_pantalla(dialog)
+    max_w = int(geom.width() * factor_ancho)
+    max_h = int(geom.height() * factor_alto)
+
+    # Restringir tamaño máximo al área segura de la pantalla
+    dialog.setMaximumSize(max_w, max_h)
+
+    # Si el tamaño actual o mínimo excede la pantalla, ajustarlo proporcionalmente
+    w = min(dialog.width(), max_w)
+    h = min(dialog.height(), max_h)
+
+    min_w = min(dialog.minimumWidth(), max_w)
+    min_h = min(dialog.minimumHeight(), max_h)
+    dialog.setMinimumSize(min_w, min_h)
+    dialog.resize(w, h)
+
+
+def instalar_adaptador_resolucion_global() -> None:
+    """Instala un hook global en QDialog para autoajustar y centrar cualquier formulario antes de pintarse."""
+    from PySide6.QtWidgets import QDialog
+
+    orig_show_event = QDialog.showEvent
+
+    def _show_event_adaptado(self, event):
+        try:
+            adaptar_dialogo_a_pantalla(self)
+        except Exception:
+            pass
+        return orig_show_event(self, event)
+
+    QDialog.showEvent = _show_event_adaptado
+
