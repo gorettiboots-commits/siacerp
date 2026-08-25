@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "SIAC ERP"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Mario Felipe Luevano"
 #define MyAppExeName "SIAC_ERP.exe"
 #define MySourceDir "dist\SIAC_ERP"
