@@ -87,6 +87,15 @@ _TILES = {
           <rect x="24" y="15" width="16" height="13" fill="none" stroke="#ffffff" stroke-width="3"/>
           <path d="M24 30v8h16v-8M26 38v8h12v-8" fill="#0891b2" stroke="#ffffff" stroke-width="3"/>
         </svg>""",
+    "basedatos": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#0f766e"/>
+          <ellipse cx="32" cy="19" rx="15" ry="6" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <path d="M17 19v26c0 3.3 6.7 6 15 6s15-2.7 15-6V19"
+                fill="none" stroke="#ffffff" stroke-width="3"/>
+          <path d="M17 32c0 3.3 6.7 6 15 6s15-2.7 15-6"
+                fill="none" stroke="#ffffff" stroke-width="3"/>
+        </svg>""",
 }
 
 _GLIFOS = {

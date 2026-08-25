@@ -137,10 +137,11 @@ from src.components.campo_historico import CampoHistorico  # noqa: E402
 registrar_componente(
     "campo_historico",
     CampoHistorico,
-    "Campo de texto con histórico de capturas: al enfocar/hacer clic despliega "
-    "el histórico del campo y autocompleta mientras se escribe; registra la "
-    "captura al salir del campo. Incluye InstaladorHistorico para aplicarlo a "
-    "todo el sistema.",
+    "Campo de texto con histórico de capturas: el histórico se despliega "
+    "hasta que el usuario comienza a escribir y se filtra mientras escribe "
+    "(combo de búsqueda); no abre nada al enfocar ni al hacer clic; registra "
+    "la captura al salir del campo. Incluye InstaladorHistorico para aplicarlo "
+    "a todo el sistema.",
 )
 
 from src.components.notificacion_flotante import (  # noqa: E402

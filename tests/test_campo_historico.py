@@ -12,7 +12,13 @@ Se ejecutan headless (QT_QPA_PLATFORM=offscreen, ver conftest.py).
 """
 
 import pytest
-from PySide6.QtWidgets import QDialog, QFormLayout, QGridLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import (
+    QApplication, QDialog, QFormLayout, QGridLayout, QLabel, QLineEdit,
+    QVBoxLayout, QWidget,
+)
 
 from src.components import listar_componentes, obtener_componente
 from src.components.campo_historico import (
@@ -168,6 +174,38 @@ class TestComportamiento:
         edit = CampoHistorico("clave_manual")
         assert edit.property("_campoHistoricoAplicado") == "clave_manual"
         edit.deleteLater()
+
+    def test_historico_se_despliega_solo_al_escribir(self, modelo):
+        modelo.borrar("Suela")
+        modelo.registrar("Suela", "PIEL CARA")
+        modelo.registrar("Suela", "PIEL TERNERA")
+        form = QFormLayout(container := QWidget())
+        edit = QLineEdit()
+        form.addRow("Suela:", edit)
+        habilitar_campo(edit, modelo)
+        container.show()
+        popup = edit.completer().popup()
+
+        # Al recibir foco NO se despliega nada
+        QApplication.sendEvent(edit, QEvent(QEvent.FocusIn))
+        QTest.qWait(60)
+        assert not popup.isVisible()
+
+        # Al hacer clic NO se despliega nada
+        clic = QMouseEvent(QEvent.MouseButtonRelease, QPointF(5, 5),
+                           QPointF(5, 5), Qt.LeftButton, Qt.LeftButton,
+                           Qt.NoModifier)
+        QApplication.sendEvent(edit, clic)
+        QTest.qWait(60)
+        assert not popup.isVisible()
+
+        # Al comenzar a escribir el histórico se despliega filtrado
+        edit.setFocus()
+        QTest.keyClicks(edit, "CAR")
+        QTest.qWait(60)
+        assert popup.isVisible()
+        container.deleteLater()
+        modelo.borrar("Suela")
 
 
 # ------------------------------------------------- Aplicación global

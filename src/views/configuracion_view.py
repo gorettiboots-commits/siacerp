@@ -1,10 +1,13 @@
+from datetime import datetime
+
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox,
-    QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
+    QDoubleSpinBox, QRadioButton, QSpinBox, QStackedWidget, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from src.components.grid_hibrido import GridHibrido
@@ -13,6 +16,7 @@ from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
+from src.controllers.respaldo_controller import RespaldoController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
 from src.models.empresa_model import EmpresaModel
 from src.utils.icons import tile_icon
@@ -37,6 +41,9 @@ _SECCIONES = [
      "Usuarios del sistema y sus permisos por módulo."),
     ("impresion", "Impresión",
      "Impresora virtual SIAC para simular la impresión en pantalla."),
+    ("basedatos", "Base de Datos",
+     "Exporta e importa conjuntos de datos de la base de datos "
+     "(respaldos parciales por grupo de tablas)."),
 ]
 
 
@@ -212,6 +219,8 @@ class DialogConfiguracion(QDialog):
             return _TabAccesos(self.accesos_controller, self.permisos)
         if key == "impresion":
             return _TabImpresion(self.permisos)
+        if key == "basedatos":
+            return _TabBaseDatos(self.permisos, al_importar=self._cargar)
         raise ValueError(f"Sección de configuración desconocida: {key}")
 
     def _navegar(self, index: int) -> None:
@@ -1457,3 +1466,255 @@ class _TabImpresion(QWidget):
 
     def recargar(self) -> None:
         self.chk_virtual.setChecked(impresora_virtual_habilitada())
+
+
+class _TabBaseDatos(QWidget):
+    """Exportación e importación de conjuntos de datos de la base de datos.
+
+    Exporta grupos lógicos de tablas a un archivo JSON portable (con
+    imágenes) e importa respaldos eligiendo los conjuntos y el modo
+    (reemplazar lo local o agregar solo faltantes).
+    """
+
+    def __init__(self, permisos: set, al_importar=None) -> None:
+        super().__init__()
+        self.permisos = permisos or set()
+        self.controller = RespaldoController()
+        self._al_importar = al_importar
+        self._archivo: str | None = None
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        hint = QLabel(
+            "Exporta o importa grupos lógicos de datos (conjuntos) en un "
+            "archivo JSON portable, con imágenes incluidas. Use la "
+            "importación con cuidado: el modo Reemplazar borra los datos "
+            "locales de los conjuntos seleccionados.")
+        hint.setStyleSheet("color: #64748b; font-size: 12px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        # ------------------------------------------------------ Exportar
+        grp_exportar = QGroupBox("Exportar datos")
+        grp_exportar.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        lay_exp = QVBoxLayout(grp_exportar)
+        lay_exp.setSpacing(8)
+
+        self.lista_exportar = QListWidget()
+        self.lista_exportar.setMaximumHeight(170)
+        lay_exp.addWidget(self.lista_exportar)
+
+        btns_exp = QHBoxLayout()
+        self.btn_marcar = QPushButton("Quitar todas")
+        self.btn_marcar.setObjectName("btnSecondary")
+        self.btn_marcar.clicked.connect(self._alternar_marca)
+        btns_exp.addWidget(self.btn_marcar)
+        btns_exp.addStretch()
+        self.btn_exportar = QPushButton("Exportar seleccionados...")
+        self.btn_exportar.setObjectName("btnPrimary")
+        self.btn_exportar.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar.setEnabled(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.btn_exportar.clicked.connect(self._exportar)
+        btns_exp.addWidget(self.btn_exportar)
+        lay_exp.addLayout(btns_exp)
+        layout.addWidget(grp_exportar)
+
+        # ------------------------------------------------------ Importar
+        grp_importar = QGroupBox("Importar datos")
+        grp_importar.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        lay_imp = QVBoxLayout(grp_importar)
+        lay_imp.setSpacing(8)
+
+        fila_archivo = QHBoxLayout()
+        self.btn_cargar = QPushButton("Cargar archivo de respaldo...")
+        self.btn_cargar.setObjectName("btnSecondary")
+        self.btn_cargar.setCursor(Qt.PointingHandCursor)
+        self.btn_cargar.clicked.connect(self._cargar_archivo)
+        fila_archivo.addWidget(self.btn_cargar)
+        self.lbl_archivo = QLabel("Sin archivo cargado.")
+        self.lbl_archivo.setStyleSheet("color: #64748b; font-size: 11px;")
+        fila_archivo.addWidget(self.lbl_archivo, 1)
+        lay_imp.addLayout(fila_archivo)
+
+        self.lista_importar = QListWidget()
+        self.lista_importar.setMaximumHeight(170)
+        self.lista_importar.setVisible(False)
+        lay_imp.addWidget(self.lista_importar)
+
+        self.rb_reemplazar = QRadioButton(
+            "Reemplazar: borra los datos locales de los conjuntos "
+            "seleccionados y carga los del archivo")
+        self.rb_reemplazar.setChecked(True)
+        self.rb_agregar = QRadioButton(
+            "Agregar: incorpora solo los registros que falten, sin tocar "
+            "los existentes")
+        self.rb_reemplazar.setVisible(False)
+        self.rb_agregar.setVisible(False)
+        lay_imp.addWidget(self.rb_reemplazar)
+        lay_imp.addWidget(self.rb_agregar)
+
+        btns_imp = QHBoxLayout()
+        btns_imp.addStretch()
+        self.btn_importar = QPushButton("Importar seleccionados...")
+        self.btn_importar.setObjectName("btnPrimary")
+        self.btn_importar.setCursor(Qt.PointingHandCursor)
+        self.btn_importar.setEnabled(False)
+        self.btn_importar.clicked.connect(self._importar)
+        btns_imp.addWidget(self.btn_importar)
+        lay_imp.addLayout(btns_imp)
+        layout.addWidget(grp_importar)
+
+        layout.addStretch()
+
+    # ------------------------------------------------------------ exportar
+    def recargar(self) -> None:
+        self.lista_exportar.clear()
+        for c in self.controller.listar_conjuntos():
+            item = QListWidgetItem(
+                f"{c['nombre']}  ·  {c['filas']} filas  ·  "
+                f"{len(c['tablas'])} tablas")
+            item.setData(Qt.UserRole, c["clave"])
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.lista_exportar.addItem(item)
+        self._actualizar_boton_marca()
+
+    def _claves_marcadas(self, lista: QListWidget) -> list[str]:
+        claves = []
+        for i in range(lista.count()):
+            item = lista.item(i)
+            if item.checkState() == Qt.Checked:
+                claves.append(item.data(Qt.UserRole))
+        return claves
+
+    def _alternar_marca(self) -> None:
+        marcar = any(
+            self.lista_exportar.item(i).checkState() != Qt.Checked
+            for i in range(self.lista_exportar.count()))
+        estado = Qt.Checked if marcar else Qt.Unchecked
+        for i in range(self.lista_exportar.count()):
+            self.lista_exportar.item(i).setCheckState(estado)
+        self._actualizar_boton_marca()
+
+    def _actualizar_boton_marca(self) -> None:
+        todas = all(
+            self.lista_exportar.item(i).checkState() == Qt.Checked
+            for i in range(self.lista_exportar.count()))
+        self.btn_marcar.setText("Quitar todas" if todas else "Marcar todas")
+
+    def _exportar(self) -> None:
+        claves = self._claves_marcadas(self.lista_exportar)
+        if not claves:
+            QMessageBox.information(
+                self, "Seleccione", "Marque al menos un conjunto.")
+            return
+        predeterminado = f"respaldo_siac_{datetime.now():%Y%m%d_%H%M}.json"
+        ruta, _ = QFileDialog.getSaveFileName(
+            self, "Exportar base de datos", predeterminado,
+            "Respaldo SIAC (*.json)")
+        if not ruta:
+            return
+        try:
+            resumen = self.controller.exportar(claves, ruta)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error", f"No se pudo exportar:\n{e}")
+            return
+        notificar_flotante(
+            f"{resumen['filas']} filas exportadas en "
+            f"{len(resumen['tablas'])} tablas.\n{resumen['archivo']}",
+            tipo="success", titulo="Exportación completa", host=self)
+
+    # ------------------------------------------------------------ importar
+    def _cargar_archivo(self) -> None:
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, "Abrir respaldo de datos", "",
+            "Respaldo SIAC (*.json);;Todos los archivos (*)")
+        if not ruta:
+            return
+        try:
+            info = self.controller.inspeccionar(ruta)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Archivo no válido", f"No se pudo leer el respaldo:\n{e}")
+            return
+        self._archivo = ruta
+        self._info_archivo = info
+        self.lista_importar.clear()
+        for clave, datos in info["conjuntos"].items():
+            item = QListWidgetItem(
+                f"{clave}  ·  {datos['filas']} filas  ·  "
+                f"{len(datos['tablas'])} tablas")
+            item.setData(Qt.UserRole, clave)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.lista_importar.addItem(item)
+        generado = info.get("generado", "") or "fecha desconocida"
+        self.lbl_archivo.setText(
+            f"{ruta}  ·  generado: {generado}  ·  motor: "
+            f"{info.get('motor', '?')}")
+        self.lista_importar.setVisible(True)
+        self.rb_reemplazar.setVisible(True)
+        self.rb_agregar.setVisible(True)
+        self.btn_importar.setEnabled(
+            tiene(self.permisos, "configuracion", "editar"))
+
+    def _importar(self) -> None:
+        if not self._archivo:
+            return
+        claves = self._claves_marcadas(self.lista_importar)
+        if not claves:
+            QMessageBox.information(
+                self, "Seleccione", "Marque al menos un conjunto.")
+            return
+        reemplazar = self.rb_reemplazar.isChecked()
+        if reemplazar:
+            texto = ("Se BORRARÁN los datos locales de las tablas de los "
+                     "conjuntos seleccionados y se reemplazarán con el "
+                     f"contenido del archivo.\n\nConjuntos: "
+                     f"{', '.join(claves)}\n\nEsta acción no se puede "
+                     "deshacer. ¿Continuar?")
+        else:
+            texto = ("Se agregarán los registros faltantes de los conjuntos "
+                     f"seleccionados ({', '.join(claves)}). Los datos "
+                     "actuales no se modifican. ¿Continuar?")
+        resp = QMessageBox.warning(
+            self, "Confirmar importación", texto,
+            QMessageBox.Yes | QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            return
+        try:
+            resumen = self.controller.importar(
+                self._archivo, claves, reemplazar)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error", f"No se pudo importar:\n{e}")
+            return
+        errores = resumen.get("errores") or []
+        if errores or resumen.get("fk_violaciones"):
+            detalle = "\n".join(errores[:6])
+            extra = []
+            if resumen.get("fk_violaciones"):
+                extra.append(
+                    f"{resumen['fk_violaciones']} referencias quedaron sin "
+                    "correspondencia (FK).")
+            QMessageBox.warning(
+                self, "Importación con observaciones",
+                f"Importadas: {resumen['importadas']} filas · "
+                f"Omitidas: {resumen['omitidas']}.\n"
+                + (" ".join(extra) + "\n" if extra else "")
+                + (f"\n{detalle}" if detalle else ""))
+        else:
+            notificar_flotante(
+                f"{resumen['importadas']} filas importadas "
+                f"({resumen['omitidas']} omitidas).",
+                tipo="success", titulo="Importación completa", host=self)
+        if callable(self._al_importar):
+            self._al_importar()

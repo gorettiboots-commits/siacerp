@@ -1,9 +1,11 @@
 """Componente aprobado: campo de texto con histórico de capturas.
 
 Un `QLineEdit` habilitado que ya tiene capturas registradas vuelve a
-comportarse como captura Y como selector: al hacer clic (o recibir foco) se
-despliega el histórico de valores antes capturados en ese campo y, mientras se
-escribe, autocompleta. Al salir del campo se registra la nueva captura.
+comportarse como captura Y como combo de búsqueda: el histórico se despliega
+hasta que el usuario comienza a escribir y, mientras escribe, la lista se
+filtra con los valores coincidentes. NO se despliega nada al recibir el foco
+ni al hacer clic (navegar con Tab no abre popup ni roba interacciones). Al
+salir del campo se registra la nueva captura.
 
 Integración global sin tocar pantallas:
     from src.components.campo_historico import InstaladorHistorico
@@ -23,7 +25,7 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QEvent, QObject, QStringListModel, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QStringListModel, Qt
 from PySide6.QtWidgets import (
     QApplication, QCompleter, QDialog, QFormLayout, QGridLayout,
     QLabel, QLineEdit, QMainWindow, QWidget,
@@ -139,23 +141,14 @@ class _ControlHistorico(QObject):
         self._modelo.registrar(self._clave, valor)
         self._actualizar()
 
-    def _abrir_popup(self) -> None:
-        """Refresca el histórico y abre el selector (diferido al final del evento)."""
-        if not isValid(self._edit):
-            return
-        self._actualizar()
-        self._completer.complete()
-
     def eventFilter(self, obj, event) -> bool:  # type: ignore[override]
         if not isValid(self._edit):
             return False
-        if self._edit.isEnabled() and not self._edit.isReadOnly():
-            if event.type() == QEvent.FocusIn:
-                self._baseline = self._edit.text().strip()
-                QTimer.singleShot(0, self._abrir_popup)
-            elif (event.type() == QEvent.MouseButtonRelease
-                  and event.button() == Qt.LeftButton):
-                QTimer.singleShot(0, self._abrir_popup)
+        if (self._edit.isEnabled() and not self._edit.isReadOnly()
+                and event.type() == QEvent.FocusIn):
+            # Solo guarda el valor inicial: el histórico se despliega hasta
+            # que el usuario comienza a escribir (nada al enfocar ni al clic).
+            self._baseline = self._edit.text().strip()
         return False
 
 
