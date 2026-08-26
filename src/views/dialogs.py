@@ -4,8 +4,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
     QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
-    QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+    QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QSplitter,
+    QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.components.date_picker import DatePicker
@@ -2517,9 +2517,15 @@ class DialogAvanceEstacion(QDialog):
 class DialogFichaTecnica(QDialog):
     """Edición e impresión de la ficha técnica de un modelo.
 
-    Muestra el encabezado (proyecto, etapa, ID, ref. cliente, color), los
-    campos de característica agrupados por sección y las fotos de las piezas.
-    El guardado persiste la ficha y sus fotos en la BD.
+    Se abre en pantalla completa y organiza la información en paneles:
+      • Izquierda: datos generales del proyecto, comentarios/firmas y las
+        fotos de las piezas.
+      • Derecha (arriba): características agrupadas por sección, con un
+        buscador para localizar cualquier campo al instante.
+      • Derecha (abajo): materiales del modelo con cantidad por par editable
+        y el costo calculado en vivo (último precio de compra o, en su
+        defecto, el menor precio de proveedor activo).
+    El guardado persiste la ficha, sus fotos y las cantidades de materiales.
     """
 
     def __init__(self, controller: InventarioController,
@@ -2531,25 +2537,48 @@ class DialogFichaTecnica(QDialog):
         self.modelo_id = modelo_id
         self.modelo = self.produccion_controller.obtener_modelo(modelo_id) or {}
         self.setWindowTitle(f"Ficha técnica - {self.modelo.get('codigo', '')} {self.modelo.get('nombre', '')}".strip())
-        self.setMinimumSize(720, 600)
+        self.setMinimumSize(1024, 700)
         self.setModal(True)
+        self._maximizada = False
+        self._costos: dict[int, float] = {}
+        self._insumos: list[dict] = []
+        self._filas_caracteristica: list[tuple[QGroupBox, QLabel, QComboBox, str]] = []
         self._setup_ui()
+        self._cargar_materiales()
         self._load_data()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._maximizada:
+            self._maximizada = True
+            self.setWindowState(self.windowState() | Qt.WindowMaximized)
 
     def _setup_ui(self) -> None:
         from src.models.ficha_tecnica_model import CAMPOS_ENCABEZADO, CAMPOS_FICHA, TIPOS_FOTO
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
-        area = QScrollArea()
-        area.setWidgetResizable(True)
-        contenido = QWidget()
-        cl = QVBoxLayout(contenido)
-        cl.setSpacing(12)
+        titulo = QLabel(
+            f"{self.modelo.get('codigo', '')} — {self.modelo.get('nombre', '')}".strip(" —"))
+        titulo.setStyleSheet("font-size: 15pt; font-weight: bold;")
+        layout.addWidget(titulo)
 
-        # Encabezado
-        form = QFormLayout()
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+
+        # --------------------------------------------------------------
+        # Panel izquierdo: datos generales + comentarios + fotos
+        # --------------------------------------------------------------
+        panel_izq = QScrollArea()
+        panel_izq.setWidgetResizable(True)
+        panel_izq.setMaximumWidth(430)
+        izq = QWidget()
+        il = QVBoxLayout(izq)
+        il.setSpacing(12)
+
+        grp_datos = QGroupBox("Datos generales")
+        form = QFormLayout(grp_datos)
         form.setSpacing(8)
         self.campos_encabezado: dict[str, QLineEdit] = {}
         for etiqueta, col in CAMPOS_ENCABEZADO:
@@ -2558,25 +2587,82 @@ class DialogFichaTecnica(QDialog):
             self.campos_encabezado[col] = edit
             form.addRow(QLabel(f"{etiqueta}:"), edit)
         self.campos_encabezado["etapa"].setText("MUESTRA")
-        cl.addLayout(form)
+        il.addWidget(grp_datos)
+
+        # Comentarios y firmas
+        grp_extra = QGroupBox("Comentarios y firmas")
+        form_extra = QFormLayout(grp_extra)
+        form_extra.setSpacing(8)
+        self.txt_comentarios = QTextEdit()
+        self.txt_comentarios.setMaximumHeight(90)
+        self.txt_comentarios.setPlaceholderText("Comentarios generales (opcional)")
+        self.campos_extra_edits: dict[str, QLineEdit] = {}
+        for col in ("realizo", "recibio"):
+            edit = QLineEdit()
+            self.campos_extra_edits[col] = edit
+            form_extra.addRow(QLabel(f"{col.capitalize()}:"), edit)
+        form_extra.addRow("Comentarios:", self.txt_comentarios)
+        il.addWidget(grp_extra)
+
+        # Fotos de las piezas (rejilla de 2 columnas)
+        fotos_box = QGroupBox("Fotos de las piezas")
+        fgrid = QGridLayout(fotos_box)
+        fgrid.setSpacing(8)
+        self.widgets_foto: dict[str, WidgetImagen] = {}
+        for i, (etiqueta, tipo) in enumerate(TIPOS_FOTO):
+            widget = WidgetImagen()
+            widget.lbl_preview.setText(f"Sin imagen\n({etiqueta})")
+            self.widgets_foto[tipo] = widget
+            fgrid.addWidget(widget, i // 2, i % 2)
+        il.addWidget(fotos_box)
+        il.addStretch()
+        panel_izq.setWidget(izq)
+        splitter.addWidget(panel_izq)
+
+        # --------------------------------------------------------------
+        # Panel derecho: características (arriba) + materiales/costos (abajo)
+        # --------------------------------------------------------------
+        splitter_der = QSplitter(Qt.Vertical)
+        splitter_der.setChildrenCollapsible(False)
+
+        caracteristicas = QWidget()
+        cl = QVBoxLayout(caracteristicas)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(8)
+
+        fila_busqueda = QHBoxLayout()
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText("🔍 Buscar característica…")
+        self.txt_buscar.setClearButtonEnabled(True)
+        self.txt_buscar.textChanged.connect(self._filtrar_caracteristicas)
+        fila_busqueda.addWidget(self.txt_buscar)
+        cl.addLayout(fila_busqueda)
+
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        contenido = QWidget()
+        grid_secciones = QGridLayout(contenido)
+        grid_secciones.setSpacing(10)
 
         # Características agrupadas en secciones (los campos de firmas y
-        # comentarios se manejan aparte en form_extra).
+        # comentarios se manejan aparte en el panel izquierdo).
         secciones = self._secciones()
         self.campos_ficha: dict[str, QComboBox] = {}
         columnas_ficha = {c: etiqueta for etiqueta, c in CAMPOS_FICHA}
         campos_extra = {"comentarios", "realizo", "recibio"}
 
         # Cargar catálogo de insumos una sola vez para poblar combos
-        insumos = self.controller.insumos_activos()
+        self._insumos = self.controller.insumos_activos()
+        insumos = self._insumos
 
-        for titulo, columnas in secciones:
-            grupo = QGroupBox(titulo)
-            gform = QGridLayout(grupo)
+        for n_sec, (titulo_sec, columnas) in enumerate(secciones):
+            grupo = QGroupBox(titulo_sec)
+            gform = QFormLayout(grupo)
             gform.setSpacing(6)
-            for i, col in enumerate(columnas):
+            for col in columnas:
                 if col in campos_extra:
                     continue
+                lbl = QLabel(f"{columnas_ficha.get(col, col)}:")
                 combo = QComboBox()
                 combo.setEditable(True)
                 combo.setInsertPolicy(QComboBox.NoInsert)
@@ -2590,48 +2676,30 @@ class DialogFichaTecnica(QDialog):
                     if combo.findText(val) == -1:
                         combo.addItem(val)
                 combo.setPlaceholderText(columnas_ficha.get(col, col))
+                # Elegir un insumo del catálogo lo agrega a Materiales
+                combo.activated.connect(
+                    lambda _idx, c=col: self._on_insumo_elegido(c))
                 self.campos_ficha[col] = combo
-                gform.addWidget(QLabel(f"{columnas_ficha.get(col, col)}:"), i, 0)
-                gform.addWidget(combo, i, 1)
-            cl.addWidget(grupo)
-
-        # Comentarios y firmas
-        form_extra = QFormLayout()
-        form_extra.setSpacing(8)
-        self.txt_comentarios = QTextEdit()
-        self.txt_comentarios.setMaximumHeight(70)
-        self.txt_comentarios.setPlaceholderText("Comentarios generales (opcional)")
-        self.campos_extra = {
-            "comentarios": self.txt_comentarios,
-        }
-        self.campos_extra_edits: dict[str, QLineEdit] = {}
-        for col in ("realizo", "recibio"):
-            edit = QLineEdit()
-            self.campos_extra_edits[col] = edit
-            form_extra.addRow(QLabel(f"{col.capitalize()}:"), edit)
-        form_extra.addRow("Comentarios:", self.txt_comentarios)
-        cl.addLayout(form_extra)
-
-        # Fotos de las piezas
-        fotos_box = QGroupBox("Fotos de las piezas")
-        fgrid = QGridLayout(fotos_box)
-        fgrid.setSpacing(8)
-        self.widgets_foto: dict[str, WidgetImagen] = {}
-        for i, (etiqueta, tipo) in enumerate(TIPOS_FOTO):
-            widget = WidgetImagen()
-            widget.lbl_preview.setText(f"Sin imagen\n({etiqueta})")
-            self.widgets_foto[tipo] = widget
-            fgrid.addWidget(QLabel(f"{etiqueta}:"), i, 0)
-            fgrid.addWidget(widget, i, 1)
-        cl.addWidget(fotos_box)
+                gform.addRow(lbl, combo)
+                self._filas_caracteristica.append((grupo, lbl, combo, columnas_ficha.get(col, col)))
+            grid_secciones.addWidget(grupo, n_sec // 2, n_sec % 2)
 
         area.setWidget(contenido)
-        layout.addWidget(area)
+        cl.addWidget(area)
+        splitter_der.addWidget(caracteristicas)
+
+        splitter_der.addWidget(self._construir_panel_materiales())
+        splitter_der.setStretchFactor(0, 3)
+        splitter_der.setStretchFactor(1, 2)
+        splitter_der.setSizes([520, 320])
+        splitter.addWidget(splitter_der)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter)
 
         # Botones
         btns = QHBoxLayout()
-        btns.addStretch()
-        self.btn_imprimir = QPushButton("Imprimir")
+        self.btn_imprimir = QPushButton("🖨 Imprimir")
         self.btn_imprimir.setObjectName("btnSecondary")
         self.btn_imprimir.clicked.connect(self._imprimir)
         btn_cancel = QPushButton("Cancelar")
@@ -2641,9 +2709,167 @@ class DialogFichaTecnica(QDialog):
         btn_save.setObjectName("btnPrimary")
         btn_save.clicked.connect(self._save)
         btns.addWidget(self.btn_imprimir)
+        btns.addStretch()
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_save)
         layout.addLayout(btns)
+
+    def _construir_panel_materiales(self) -> QGroupBox:
+        """Panel inferior derecho: tabla de materiales con cantidades y costo."""
+        grupo = QGroupBox("Materiales · Cantidades y Costo por Par")
+        lay = QVBoxLayout(grupo)
+        lay.setSpacing(8)
+
+        toolbar = QHBoxLayout()
+        btn_add = QPushButton("＋ Agregar material")
+        btn_add.setObjectName("btnPrimary")
+        btn_add.clicked.connect(self._agregar_material)
+        btn_del = QPushButton("Quitar seleccionado")
+        btn_del.setObjectName("btnDanger")
+        btn_del.clicked.connect(self._quitar_material)
+        toolbar.addWidget(btn_add)
+        toolbar.addWidget(btn_del)
+        toolbar.addStretch()
+        lay.addLayout(toolbar)
+
+        self.tabla_mat = QTableWidget(0, 5)
+        self.tabla_mat.setHorizontalHeaderLabels([
+            "Material", "Código", "Cantidad por par", "Unidad", "Costo",
+        ])
+        self.tabla_mat.verticalHeader().setVisible(False)
+        header = self.tabla_mat.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for c in range(1, 5):
+            self.tabla_mat.setColumnWidth(c, 130 if c != 1 else 100)
+        self.tabla_mat.setSelectionBehavior(QTableWidget.SelectRows)
+        lay.addWidget(self.tabla_mat)
+
+        fila_total = QHBoxLayout()
+        fila_total.addStretch()
+        self.lbl_costo_total = QLabel("Costo total de materiales por par: $0.00")
+        self.lbl_costo_total.setStyleSheet(
+            "font-size: 13pt; font-weight: bold; color: #1B5E20;")
+        fila_total.addWidget(self.lbl_costo_total)
+        lay.addLayout(fila_total)
+        return grupo
+
+    def _agregar_fila_material(self, ins: dict) -> None:
+        """Agrega (o actualiza) una fila de material con cantidad y costo."""
+        iid = int(ins.get("insumo_id", ins.get("id", 0)))
+        if not iid:
+            return
+        for r in range(self.tabla_mat.rowCount()):
+            item = self.tabla_mat.item(r, 0)
+            if item is not None and item.data(Qt.UserRole) == iid:
+                return  # ya está en la lista
+        row = self.tabla_mat.rowCount()
+        self.tabla_mat.insertRow(row)
+
+        it_mat = QTableWidgetItem(ins.get("nombre") or ins.get("insumo_nombre") or "")
+        it_mat.setData(Qt.UserRole, iid)
+        self.tabla_mat.setItem(row, 0, it_mat)
+        it_cod = QTableWidgetItem(ins.get("codigo") or ins.get("insumo_codigo") or "")
+        it_cod.setFlags(it_cod.flags() & ~Qt.ItemIsEditable)
+        self.tabla_mat.setItem(row, 1, it_cod)
+
+        spn = QDoubleSpinBox()
+        spn.setRange(0, 999999)
+        spn.setDecimals(2)
+        spn.setValue(float(ins.get("cantidad_por_par", 0) or 0))
+        spn.valueChanged.connect(self._recalcular_costos)
+        self.tabla_mat.setCellWidget(row, 2, spn)
+
+        it_uni = QTableWidgetItem(ins.get("unidad_medida", "pieza") or "pieza")
+        it_uni.setFlags(it_uni.flags() & ~Qt.ItemIsEditable)
+        self.tabla_mat.setItem(row, 3, it_uni)
+
+        costo = float(self._costos.get(iid, 0) or 0)
+        it_costo = QTableWidgetItem(f"${costo:,.2f}")
+        it_costo.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        it_costo.setFlags(it_costo.flags() & ~Qt.ItemIsEditable)
+        it_costo.setData(Qt.UserRole, costo)
+        self.tabla_mat.setItem(row, 4, it_costo)
+
+    def _recalcular_costos(self) -> None:
+        """Recalcula el costo total por par con las cantidades en pantalla."""
+        total = 0.0
+        for r in range(self.tabla_mat.rowCount()):
+            spn = self.tabla_mat.cellWidget(r, 2)
+            it_costo = self.tabla_mat.item(r, 4)
+            if spn is None or it_costo is None:
+                continue
+            total += spn.value() * float(it_costo.data(Qt.UserRole) or 0)
+        self.lbl_costo_total.setText(
+            f"Costo total de materiales por par: ${total:,.2f}")
+
+    def _cargar_materiales(self) -> None:
+        bom = self.controller.obtener_bom(self.modelo_id)
+        self._costos = self.controller.costos_bom(self.modelo_id)
+        self.tabla_mat.setRowCount(0)
+        for b in sorted(bom, key=lambda x: (x.get("insumo_nombre") or "").lower()):
+            self._agregar_fila_material(b)
+        self._recalcular_costos()
+
+    def _on_insumo_elegido(self, col: str) -> None:
+        """Al elegir un insumo del catálogo en una característica, lo muestra
+        automáticamente en la tabla de Materiales para capturar su cantidad."""
+        combo = self.campos_ficha.get(col)
+        if combo is None or not combo.currentText().strip():
+            return
+        idx = combo.currentIndex()
+        if idx < 0:
+            return
+        insumo_id = combo.itemData(idx)
+        if insumo_id is None:
+            return
+        ins = next((i for i in self._insumos if i["id"] == insumo_id), None)
+        if ins is None:
+            return
+        if ins["id"] not in self._costos:
+            self._costos.update(self.controller.costos_bom(self.modelo_id, [ins["id"]]))
+        self._agregar_fila_material({
+            "insumo_id": ins["id"], "nombre": ins["nombre"],
+            "codigo": ins["codigo"], "cantidad_por_par": 0,
+            "unidad_medida": "pieza",
+        })
+
+    def _agregar_material(self) -> None:
+        dlg = DialogSeleccionarInsumo(self)
+        if dlg.exec() == QDialog.Accepted:
+            ins = dlg.get_seleccion()
+            if not ins:
+                return
+            if ins["id"] not in self._costos:
+                self._costos.update(self.controller.costos_bom(self.modelo_id, [ins["id"]]))
+            self._agregar_fila_material({
+                "insumo_id": ins["id"], "nombre": ins["nombre"],
+                "codigo": ins.get("codigo", ""), "cantidad_por_par": 0,
+                "unidad_medida": ins.get("unidad_medida", "pieza"),
+            })
+
+    def _quitar_material(self) -> None:
+        row = self.tabla_mat.currentRow()
+        if row >= 0:
+            self.tabla_mat.removeRow(row)
+            self._recalcular_costos()
+
+    def _filtrar_caracteristicas(self, texto: str) -> None:
+        """Muestra solo los campos cuya sección o etiqueta coincida con *texto*."""
+        texto = texto.strip().lower()
+        grupos: list[QGroupBox] = []
+        for grupo, _, _, _ in self._filas_caracteristica:
+            if grupo not in grupos:
+                grupos.append(grupo)
+        con_coincidencias: set[int] = set()
+        for n, (grupo, lbl, combo, etiqueta) in enumerate(self._filas_caracteristica):
+            coincide_grupo = bool(texto) and texto in grupo.title().lower()
+            visible = not texto or coincide_grupo or texto in etiqueta.lower()
+            lbl.setVisible(visible)
+            combo.setVisible(visible)
+            if visible:
+                con_coincidencias.add(grupos.index(grupo))
+        for n, grupo in enumerate(grupos):
+            grupo.setVisible(not texto or n in con_coincidencias)
 
     def _secciones(self) -> list[tuple[str, list[str]]]:
         from src.utils.ficha_tecnica_print import SECCIONES
@@ -2666,6 +2892,30 @@ class DialogFichaTecnica(QDialog):
         for tipo, widget in self.widgets_foto.items():
             widget.set_imagen(self.controller.obtener_foto_ficha(self.modelo_id, tipo))
 
+    def _guardar_materiales(self) -> None:
+        """Persiste cantidades/unidades de la tabla sin perder relaciones BOM
+        que no estén visibles en pantalla."""
+        capturados: dict[int, tuple[float, str]] = {}
+        for r in range(self.tabla_mat.rowCount()):
+            item = self.tabla_mat.item(r, 0)
+            spn = self.tabla_mat.cellWidget(r, 2)
+            it_uni = self.tabla_mat.item(r, 3)
+            if item is None or spn is None:
+                continue
+            iid = int(item.data(Qt.UserRole))
+            unidad = (it_uni.text() if it_uni else "") or "pieza"
+            capturados[iid] = (spn.value(), unidad)
+        finales: list[dict] = []
+        for b in self.controller.obtener_bom(self.modelo_id):
+            iid = b["insumo_id"]
+            cant, uni = capturados.pop(
+                iid, (float(b.get("cantidad_por_par", 0) or 0),
+                      b.get("unidad_medida") or "pieza"))
+            finales.append({"insumo_id": iid, "cantidad": cant, "unidad": uni})
+        for iid, (cant, uni) in capturados.items():
+            finales.append({"insumo_id": iid, "cantidad": cant, "unidad": uni})
+        self.controller.guardar_bom(self.modelo_id, finales)
+
     def _save(self) -> None:
         datos = {}
         for col, edit in self.campos_encabezado.items():
@@ -2687,14 +2937,36 @@ class DialogFichaTecnica(QDialog):
         self.controller.guardar_ficha(self.modelo_id, datos)
         for tipo, widget in self.widgets_foto.items():
             self.controller.guardar_foto_ficha(self.modelo_id, tipo, widget.get_imagen())
+        self._guardar_materiales()
         QMessageBox.information(self, "Ficha técnica", "Ficha técnica guardada.")
         self.accept()
 
     def _imprimir(self) -> None:
+        """Abre la vista previa con el formato profesional usando lo que hay
+        en pantalla (aunque aún no se haya guardado)."""
         from src.utils.ficha_tecnica_print import imprimir_ficha_tecnica
-        ficha = self.controller.obtener_ficha(self.modelo_id) or {}
-        fotos = {
-            tipo: self.controller.obtener_foto_ficha(self.modelo_id, tipo)
-            for tipo in ("producto", "tubo", "chinela", "talon", "suela")
-        }
-        imprimir_ficha_tecnica(self.modelo, ficha, fotos, self)
+        ficha: dict = {col: edit.text().strip()
+                       for col, edit in self.campos_encabezado.items()}
+        for col, combo in self.campos_ficha.items():
+            ficha[col] = combo.currentText().strip()
+        ficha["comentarios"] = self.txt_comentarios.toPlainText().strip()
+        for col, edit in self.campos_extra_edits.items():
+            ficha[col] = edit.text().strip()
+        fotos = {tipo: widget.get_imagen()
+                 for tipo, widget in self.widgets_foto.items()}
+        materiales: list[dict] = []
+        for r in range(self.tabla_mat.rowCount()):
+            item = self.tabla_mat.item(r, 0)
+            spn = self.tabla_mat.cellWidget(r, 2)
+            it_uni = self.tabla_mat.item(r, 3)
+            if item is None or spn is None:
+                continue
+            iid = int(item.data(Qt.UserRole))
+            materiales.append({
+                "nombre": item.text(),
+                "cantidad": spn.value(),
+                "unidad": it_uni.text() if it_uni else "",
+                "costo": float(self._costos.get(iid, 0) or 0),
+            })
+        imprimir_ficha_tecnica(self.modelo, ficha, fotos, self,
+                               materiales=materiales)

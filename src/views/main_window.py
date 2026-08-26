@@ -16,6 +16,7 @@ from src.utils.icons import mono_icon
 from src.utils.logs import registrar_log, set_usuario_actual
 from src.views.login_view import LoginView
 from src.views.clientes_view import ClientesView
+from src.views.dashboard_view import DashboardView
 from src.views.ordenes_compra_view import OrdenesCompraView
 from src.views.produccion_view import ProduccionView
 from src.views.programacion_view import ProgramacionView
@@ -190,6 +191,7 @@ class MainWindow(QMainWindow):
             "<tr><td><b>Ctrl+3</b></td><td>Inventario</td></tr>"
             "<tr><td><b>Ctrl+4</b></td><td>Clientes</td></tr>"
             "<tr><td><b>Ctrl+5</b></td><td>Programación</td></tr>"
+            "<tr><td><b>Ctrl+6</b></td><td>Dashboard</td></tr>"
             "<tr><td><b>Ctrl+K</b></td><td>Buscador Global</td></tr>"
             "<tr><td><b>Ctrl+,</b></td><td>Configuración</td></tr>"
             "<tr><td><b>Enter</b></td><td>Aceptar / Confirmar</td></tr>"
@@ -236,6 +238,7 @@ class MainWindow(QMainWindow):
         self._view_clientes = ClientesView()
         self._view_programacion = ProgramacionView()
         self._view_sandbox = SandboxView()
+        self._view_dashboard = DashboardView()
 
         self._video_splash = self._create_video_splash()
         self._content_area.addWidget(self._video_splash)
@@ -245,6 +248,10 @@ class MainWindow(QMainWindow):
         self._content_area.addWidget(self._view_clientes)
         self._content_area.addWidget(self._view_programacion)
         self._content_area.addWidget(self._view_sandbox)
+        self._content_area.addWidget(self._view_dashboard)
+
+        # Clic en tarjetas KPI del Dashboard → navegar al módulo correspondiente
+        self._view_dashboard.navegar_modulo.connect(self._ir_a_modulo_desde_dashboard)
 
         layout.addWidget(self._tool_bar)
         layout.addWidget(self._content_area, 1)
@@ -346,6 +353,25 @@ class MainWindow(QMainWindow):
             logo_btn.setAlignment(Qt.AlignCenter)
             logo_btn.setFixedSize(44, 52)
             lay.addWidget(logo_btn)
+
+        # --- Botón Dashboard (primer elemento del toolbar) ---
+        _color_dashboard = "#0D9488"
+        self.nav_dashboard = QToolButton()
+        self.nav_dashboard.setObjectName("navToolDashboard")
+        self.nav_dashboard.setText("Dashboard")
+        self.nav_dashboard.setToolTip("Dashboard del sistema (Ctrl+6)")
+        self.nav_dashboard.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self.nav_dashboard.setCheckable(True)
+        self.nav_dashboard.setAutoExclusive(True)
+        self.nav_dashboard.setFixedSize(78, 58)
+        self.nav_dashboard.setCursor(Qt.PointingHandCursor)
+        self.nav_dashboard.setIcon(mono_icon("dashboard", 26, _color_dashboard))
+        self.nav_dashboard.setIconSize(QSize(26, 26))
+        self.nav_dashboard.toggled.connect(
+            lambda checked: self.nav_dashboard.setIcon(mono_icon(
+                "dashboard", 26, "#ffffff" if checked else _color_dashboard)))
+        self.nav_dashboard.clicked.connect(lambda checked=False: self._mostrar_dashboard())
+        lay.addWidget(self.nav_dashboard)
 
         self.nav_ordenes = self._modulo_btn(
             "oc", "OC", mono_icon("oc", 26, "#1892D4"), 0)
@@ -456,6 +482,8 @@ class MainWindow(QMainWindow):
         sc.activated.connect(lambda: self._switch_view(3))
         sc = QShortcut(QKeySequence("Ctrl+5"), self)
         sc.activated.connect(lambda: self._switch_view(4))
+        sc = QShortcut(QKeySequence("Ctrl+6"), self)
+        sc.activated.connect(self._mostrar_dashboard)
         sc = QShortcut(QKeySequence("Ctrl+K"), self)
         sc.activated.connect(self._abrir_buscador)
         sc = QShortcut(QKeySequence("Ctrl+,"), self)
@@ -552,6 +580,21 @@ class MainWindow(QMainWindow):
     def _mostrar_sandbox(self) -> None:
         self._content_area.setCurrentWidget(self._view_sandbox)
         self.status_bar.showMessage("Módulo: Sandbox")
+
+    def _mostrar_dashboard(self) -> None:
+        if self._stack.currentWidget() != self._main_container:
+            return
+        self._view_dashboard.recargar()
+        self._content_area.setCurrentWidget(self._view_dashboard)
+        self.status_bar.showMessage("Módulo: Dashboard")
+
+    def _ir_a_modulo_desde_dashboard(self, modulo: str) -> None:
+        """Navega al módulo solicitado por una tarjeta KPI del Dashboard.
+        `_switch_view` valida los permisos del usuario."""
+        indices = {"ordenes_compra": 0, "produccion": 1, "inventario": 2,
+                   "clientes": 3, "programacion": 4}
+        if modulo in indices:
+            self._switch_view(indices[modulo])
 
     def _logout(self) -> None:
         if self._current_user:

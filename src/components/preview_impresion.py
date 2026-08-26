@@ -59,12 +59,41 @@ PAGINAS[PAGINA_PEDIDO] = QPageSize(
     QPageSize.ExactMatch)
 
 
+# QWebEngineView.setHtml falla SILENCIOSAMENTE con HTML mayor a ~2 MB
+# (límite del IPC de Chromium): la página queda en blanco. Para documentos
+# grandes se carga desde un archivo temporal vía load(), que no tiene límite.
+_LIMITE_SETHTML = 1_500_000
+
+
+def _cargar_en_web(view, html: str) -> None:
+    """Carga *html* en la vista WebEngine evitando el límite de setHtml."""
+    if len(html.encode("utf-8")) <= _LIMITE_SETHTML:
+        view.setHtml(html)
+        return
+    import os
+    import tempfile
+    from PySide6.QtCore import QUrl
+
+    fd, ruta = tempfile.mkstemp(suffix=".html")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    def _limpiar(_ok: bool, ruta=ruta) -> None:
+        try:
+            os.remove(ruta)
+        except OSError:
+            pass
+
+    view.loadFinished.connect(_limpiar)
+    view.load(QUrl.fromLocalFile(ruta))
+
+
 def _crear_motor(html: str, parent: QWidget):
     """Crea el motor de render: WebEngine (WYSIWYG) o QTextBrowser."""
     if _HAS_WEBENGINE:
         try:
             view = QWebEngineView(parent)
-            view.setHtml(html)
+            _cargar_en_web(view, html)
             view.setZoomFactor(1.0)
             return view, True
         except Exception:  # pragma: no cover — fallback defensivo
@@ -370,20 +399,31 @@ class PreviewImpresion(QDialog):
             estado["ok"] = exito
             loop.quit()
 
+        # Guardia: si la carga previa del visor aún estaba en curso al
+        # imprimir, su loadFinished "tardío" no debe disparar el PDF;
+        # solo cuenta una carga iniciada DESPUÉS de conectar las señales.
+        nuestra_carga = {"iniciada": False}
+
+        def _iniciada() -> None:
+            nuestra_carga["iniciada"] = True
+
         def _cargado(_ok: bool) -> None:
-            self._web.page().printToPdf(ruta, layout)
+            if nuestra_carga["iniciada"]:
+                self._web.page().printToPdf(ruta, layout)
 
         self._web.pdfPrintingFinished.connect(_terminado)
+        self._web.loadStarted.connect(_iniciada)
         self._web.loadFinished.connect(_cargado)
         QTimer.singleShot(20000, loop.quit)
         try:
-            self._web.setHtml(self._html_impresion)
+            _cargar_en_web(self._web, self._html_impresion)
             loop.exec()
         finally:
             self._web.pdfPrintingFinished.disconnect(_terminado)
+            self._web.loadStarted.disconnect(_iniciada)
             self._web.loadFinished.disconnect(_cargado)
             try:
-                self._web.setHtml(self._html)
+                _cargar_en_web(self._web, self._html)
             except RuntimeError:
                 pass
         if not estado["ok"]:

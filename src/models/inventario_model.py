@@ -117,6 +117,32 @@ class ListaMaterialesModel:
             (modelo_id,),
         )
 
+    def costos_insumos(self, insumo_ids: list[int]) -> dict[int, float]:
+        """Costo unitario por insumo.
+
+        Toma el último precio de compra registrado (detalle_orden_compra);
+        si el insumo no tiene compras, usa el menor precio activo de
+        proveedor. Devuelve {insumo_id: costo} (0 si no hay referencia).
+        """
+        if not insumo_ids:
+            return {}
+        marcadores = ", ".join("?" for _ in insumo_ids)
+        filas = self.db.fetch_all(
+            f"""SELECT i.id AS insumo_id,
+                   (SELECT doc.precio_unitario FROM detalle_orden_compra doc
+                    WHERE doc.insumo_id = i.id
+                    ORDER BY doc.id DESC LIMIT 1) AS ultimo_costo,
+                   (SELECT MIN(pi.precio) FROM proveedor_insumos pi
+                    WHERE pi.insumo_id = i.id AND pi.activo = 1
+                      AND pi.precio > 0) AS precio_proveedor
+            FROM insumos i WHERE i.id IN ({marcadores})""",
+            tuple(insumo_ids))
+        return {
+            f["insumo_id"]: float(f["ultimo_costo"] or 0)
+            or float(f["precio_proveedor"] or 0)
+            for f in filas
+        }
+
     def agregar(self, modelo_id: int, insumo_id: int,
                 cantidad: float = 0, unidad: str = "pieza") -> bool:
         """Inserta un insumo en la BOM del modelo si no existía.

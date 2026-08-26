@@ -596,6 +596,15 @@ QFrame#card:hover {
     border: 1px solid #0078D7;
 }
 
+/* Tarjeta KPI clicable del Dashboard: borde resaltado al pasar el cursor */
+QFrame#card[clicable="true"] {
+    border: 1px solid #A9C5C1;
+}
+QFrame#card[clicable="true"]:hover {
+    border: 2px solid #0D9488;
+    background-color: #F0FDFA;
+}
+
 QLabel#imgPreview {
     background-color: #F5F5F5;
     border: 1px dashed #A0A0A0;

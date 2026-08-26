@@ -185,6 +185,20 @@ class InventarioController:
         """Catálogo de insumos activos."""
         return self.ficha_model.insumos_activos()
 
+    def costos_bom(self, modelo_id: int,
+                   insumo_ids: list[int] | None = None) -> dict[int, float]:
+        """Costo unitario por insumo de la BOM (último precio de compra;
+        si no hay compras, menor precio de proveedor activo)."""
+        if insumo_ids is None:
+            insumo_ids = [b["insumo_id"] for b in self.obtener_bom(modelo_id)]
+        return self.bom_model.costos_insumos(insumo_ids)
+
+    def guardar_bom(self, modelo_id: int, insumos: list[dict]) -> None:
+        """Reemplaza la lista de materiales del modelo con cantidades."""
+        self.bom_model.guardar(modelo_id, insumos)
+        registrar_log("inventario", "editar", "lista_materiales", modelo_id,
+                      datos={"modelo_id": modelo_id, "insumos": insumos})
+
     def agregar_insumo_a_lista(self, modelo_id: int, insumo_id: int) -> bool:
         """Agrega insumo a la lista de materiales del modelo si no existía.
 

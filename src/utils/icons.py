@@ -216,6 +216,13 @@ _GLIFOS = {
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M32 14v36M14 32h36" stroke="#COLOR" stroke-width="4.5" stroke-linecap="round"/>
         </svg>""",
+    "dashboard": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="10" y="10" width="20" height="16" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="34" y="10" width="20" height="28" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="10" y="30" width="20" height="24" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="34" y="42" width="20" height="12" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+        </svg>""",
     "info": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <circle cx="32" cy="32" r="20" fill="none" stroke="#COLOR" stroke-width="3.5"/>

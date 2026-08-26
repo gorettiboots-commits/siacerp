@@ -188,7 +188,10 @@ class ProduccionView(QWidget):
         tab_bom = QWidget()
         subtabs.addTab(tab_modelos, "Modelos")
         subtabs.addTab(tab_variantes, "Variantes")
-        subtabs.addTab(tab_bom, "Lista de Materiales")
+        self.tab_bom_index = subtabs.addTab(tab_bom, "Lista de Materiales")
+        # Refrescar la lista de materiales al entrar a la pestaña, para que
+        # refleje los materiales capturados en la ficha técnica u otros cambios.
+        subtabs.currentChanged.connect(self._on_subtab_catalogo_cambio)
         layout.addWidget(subtabs)
 
         # Modelos
@@ -377,6 +380,16 @@ class ProduccionView(QWidget):
             return
         dlg = DialogFichaTecnica(self.inv_controller, self.controller, m["id"])
         dlg.exec()
+        # La ficha puede haber modificado la lista de materiales: refrescar.
+        self._cargar_bom(m["id"])
+
+    def _on_subtab_catalogo_cambio(self, idx: int) -> None:
+        """Al entrar a la pestaña Lista de Materiales, recarga su contenido."""
+        if idx != getattr(self, "tab_bom_index", -1):
+            return
+        m = self.grid_modelos.registro_seleccionado()
+        if m is not None:
+            self._cargar_bom(m["id"])
 
     def _nueva_variante(self) -> None:
         dlg = DialogVariante(self.controller)
