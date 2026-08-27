@@ -350,6 +350,65 @@ class DatabaseManager:
         self._migrar_impresiones_historico()
         self._migrar_fichas_tecnicas()
         self._migrar_movimientos_inventario()
+        self._migrar_empresa_id()
+
+    def _migrar_empresa_id(self) -> None:
+        """Multi-tenant: agrega empresa_id a las tablas principales.
+
+        Permite que multiples terminales de la misma empresa compartan
+        los mismos datos, y que diferentes empresas esten aisladas.
+        Lee el empresa_id de config.ini [supabase] empresa_id.
+        """
+        try:
+            import configparser
+            config = configparser.ConfigParser()
+            ruta = Path(__file__).resolve().parent.parent.parent / 'config.ini'
+            config.read(str(ruta))
+            empresa_id = config.get('supabase', 'empresa_id', fallback='')
+            if not empresa_id:
+                print("Migracion empresa_id: omitida (empresa_id no configurado)")
+                return
+
+            conn = self.connect()
+            cursor = conn.cursor()
+
+            # Tablas que necesitan empresa_id
+            tablas_empresa = [
+                'insumos', 'modelos', 'variantes', 'proveedores',
+                'ordenes_compra', 'detalle_orden_compra',
+                'ordenes_produccion', 'seguimiento_produccion',
+                'usuarios', 'clientes', 'pedidos_cliente',
+                'programacion_semana', 'programacion_lineas',
+                'configuracion_empresa', 'logs_sistema',
+            ]
+
+            for tabla in tablas_empresa:
+                try:
+                    if self.engine == 'sqlite':
+                        cols = [r[1] for r in cursor.execute(
+                            f"PRAGMA table_info({tabla})").fetchall()]
+                        if 'empresa_id' not in cols:
+                            cursor.execute(
+                                f"ALTER TABLE {tabla} ADD COLUMN empresa_id TEXT NOT NULL DEFAULT '{empresa_id}'")
+                            print(f"  {tabla}: empresa_id agregado")
+                        else:
+                            # Actualizar registros sin empresa_id
+                            cursor.execute(
+                                f"UPDATE {tabla} SET empresa_id = ? WHERE empresa_id = '' OR empresa_id IS NULL",
+                                (empresa_id,))
+                    else:
+                        cursor.execute(
+                            f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS empresa_id TEXT NOT NULL DEFAULT '{empresa_id}'")
+                        cursor.execute(
+                            f"UPDATE {tabla} SET empresa_id = %s WHERE empresa_id = '' OR empresa_id IS NULL",
+                            (empresa_id,))
+                except Exception as e:
+                    print(f"  {tabla}: migracion empresa_id omitida - {e}")
+
+            conn.commit()
+            print(f"Migracion empresa_id completada: {empresa_id[:8]}...")
+        except Exception as e:
+            print(f"Migracion empresa_id omitida: {e}")
 
     def _migrar_impresiones_historico(self) -> None:
         """Garantiza la tabla del histórico de la cola de impresión.
