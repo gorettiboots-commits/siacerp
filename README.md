@@ -903,6 +903,58 @@ Las siguientes tablas tienen la columna `empresa_id` para aislamiento multi-tena
 | SIAC ERP | `operador@siac.com` | `operador123` | operador |
 | Calzado Durán | `admin@durancalzado.com` | `admin123` | admin |
 | Calzado Rivera | `admin@riveracalzado.com` | `admin123` | admin |
+| **Global** | `superadmin@siac.com` | `superadmin123` | **super_admin** |
+
+### Super Admin (gestión de licencias)
+
+El rol `super_admin` tiene acceso total a **todas las empresas** del sistema. Está diseñado para:
+
+- **Gestionar licencias**: ver y activar/desactivar empresas
+- **Supervisar el sistema**: ver estadísticas globales de todas las empresas
+- **Administrar usuarios**: ver todos los usuarios de todas las empresas
+- **Soporte técnico**: acceder a datos de cualquier empresa para diagnóstico
+
+#### Dashboard de Super Admin en el escritorio
+
+Al hacer login con `superadmin@siac.com`, aparece el botón **"Admin"** en el toolbar:
+
+| Sección | Contenido |
+|---|---|
+| **KPIs globales** | Total empresas, usuarios, insumos, OCs, OPs |
+| **Tabla empresas** | Nombre, RFC, estado, métricas por empresa |
+| **Tabla usuarios** | Username, nombre, rol, estado, empresa |
+| **Acciones** | Botón activar/desactivar por empresa |
+
+#### Cómo funciona el aislamiento
+
+```
+Rol: super_admin (empresa_id: NULL)
+  → RLS: es_super_admin(uid) retorna TRUE
+  → Ve TODOS los datos de TODAS las empresas
+  → Puede gestionar licencias
+
+Rol: admin (empresa_id: UUID)
+  → RLS: empresa_id = su empresa
+  → Solo ve datos de SU empresa
+
+Rol: operador (empresa_id: UUID)
+  → RLS: empresa_id = su empresa
+  → Solo ve datos de SU empresa
+```
+
+#### Registrar una nueva empresa
+
+```bash
+python scripts/registrar_empresa.py \
+    --nombre "Nombre Empresa" \
+    --rfc "RFC000000XXX" \
+    --email-admin "admin@empresa.com" \
+    --password-admin "admin123"
+```
+
+#### App móvil: Super Admin
+
+El super_admin también puede hacer login en la app móvil. En el servicio de auth se incluye el helper `esSuperAdmin()` para verificar el rol.
 
 ---
 
