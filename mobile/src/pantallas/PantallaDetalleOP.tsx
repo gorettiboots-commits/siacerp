@@ -15,7 +15,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { colores, fuentes } from '../theme';
 import type { ProduccionStackParamList } from '../navegacion';
 import type { SeguimientoMovil } from '../tipos';
-import { obtenerSeguimiento, cambiarEstatus, avanzarEstacion } from '../servicios/produccion';
+import { obtenerSeguimiento, cambiarEstatusLinea, avanzarEstacion, actualizarAvance } from '../servicios/produccion';
 
 type Route = RouteProp<ProduccionStackParamList, 'DetalleOP'>;
 
@@ -58,18 +58,18 @@ export function PantallaDetalleOP() {
   const handleCambiarEstatus = async (seguimientoId: number, nuevoEstatus: string) => {
     Alert.alert(
       'Cambiar estatus',
-      `¿Cambiar a "${nuevoEstatus}"?`,
+      `¿Cambiar a "${nuevoEstatus.replace('_', ' ')}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Confirmar',
           onPress: async () => {
-            const resultado = await cambiarEstatus(seguimientoId, nuevoEstatus);
+            const resultado = await cambiarEstatusLinea(seguimientoId, nuevoEstatus);
             if (resultado.ok) {
-              Alert.alert('Éxito', resultado.mensaje);
+              Alert.alert('Éxito', 'Estatus actualizado');
               cargarSeguimiento();
             } else {
-              Alert.alert('Error', resultado.mensaje);
+              Alert.alert('Error', resultado.error || 'Error desconocido');
             }
           },
         },
@@ -80,10 +80,10 @@ export function PantallaDetalleOP() {
   const handleAvanzar = async (seguimientoId: number) => {
     const resultado = await avanzarEstacion(opId, seguimientoId);
     if (resultado.ok) {
-      Alert.alert('Avance', resultado.mensaje);
+      Alert.alert('Avance', 'Estación avanzada correctamente');
       cargarSeguimiento();
     } else {
-      Alert.alert('Error', resultado.mensaje);
+      Alert.alert('Error', resultado.error || 'No se pudo avanzar');
     }
   };
 
@@ -96,8 +96,12 @@ export function PantallaDetalleOP() {
 
     const defect = parseInt(defectuosos, 10) || 0;
 
-    const { cambiarEstatus: actualizar } = await import('../servicios/produccion');
-    const resultado = await actualizar(seguimientoId, 'en_proceso', pares, defect);
+    const resultado = await actualizarAvance(
+      seguimientoId,
+      pares,
+      defect,
+      observaciones || undefined,
+    );
     if (resultado.ok) {
       Alert.alert('Avance guardado', `${pares} pares procesados, ${defect} defectuosos`);
       setEditando(null);
@@ -106,7 +110,7 @@ export function PantallaDetalleOP() {
       setObservaciones('');
       cargarSeguimiento();
     } else {
-      Alert.alert('Error', resultado.mensaje);
+      Alert.alert('Error', resultado.error || 'Error al guardar');
     }
   };
 
