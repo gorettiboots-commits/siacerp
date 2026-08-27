@@ -9,28 +9,82 @@
 ## [Unreleased] — 2026-08-26
 
 ### Added
-- **Dashboard del sistema:** Pantalla de resumen con 6 tarjetas KPI clicables que navegan a cada módulo del sistema
-  - OC pendientes, compras del mes, producción en curso, insumos stock bajo, pares en PT, movimientos del día
-  - Gráfica de barras de compras por mes (QPainter, sin dependencias externas)
-  - Tablas de detalle: últimas OC, OPs en curso, stock bajo, movimientos recientes
-- **Ficha técnica rediseñada:** Layout split con paneles izquierdo/derecho
-  - Panel izquierdo: datos generales, comentarios/firmas, fotos de piezas (rejilla 2 columnas)
-  - Panel derecho superior: características por sección con buscador en tiempo real
-  - Panel derecho inferior: materiales del modelo con cantidad por par editable y costo calculado en vivo
-- **Costos BOM en ficha técnica:** Costo unitario por insumo (último precio de compra o menor precio de proveedor activo)
-- **Impresión de ficha técnica profesional:** Formato "Hoja de especificación de diseño" con identidad visual mint/salvia, secciones de datos generales, fotos, especificaciones, materiales y firmas
-- **Carga de HTML grande en preview_impresion:** Archivos temporales para documentos >1.5MB (límite de IPC Chromium en WebEngine)
-- **Estilos QSS para tarjetas KPI clicable:** Borde teal resaltado al pasar el cursor
-- **Ícono "dashboard"** en `src/utils/icons.py`
+- **App móvil completa (React Native + Supabase):**
+  - Pantalla de login con autenticación Supabase Auth
+  - Pantalla de Inventario con búsqueda y alertas de stock bajo
+  - Pantalla de Detalle de Insumo con indicador visual
+  - Pantalla de Órdenes de Compra con filtros por estatus
+  - Pantalla de Detalle de OC con partidas y costos
+  - Pantalla de Producción con filtros y badge de prioridad
+  - Pantalla de Detalle OP con **Kanban vertical** de estaciones
+  - Cambio de estatus: Iniciar, Avanzar, Editar pares procesados
+  - Reporte de incidencias desde el móvil
+  - React Navigation (Stack + Tabs) con 4 módulos
+  - Navegación: Inventario, Órdenes, Producción, Etiquetas
+- **Arquitectura multi-tenant completa:**
+  - `empresa_id` en 15 tablas de la BD local del escritorio
+  - `empresa_id` en 10 tablas de Supabase
+  - RLS (Row Level Security) por empresa en todas las tablas
+  - Aislamiento total: cada empresa solo ve sus datos
+  - 3 empresas de prueba creadas y verificadas
+- **Servicio de conexión a Supabase para escritorio** (`supabase_service.py`):
+  - Login con Supabase Auth
+  - Verificación de licencia por empresa
+  - CRUD con service_role key (bypass RLS)
+  - Listado de usuarios por empresa
+- **Servicio de sincronización bidireccional** (`sync_service.py`):
+  - Sync local → Supabase (sube datos modificados)
+  - Sync Supabase → local (baja datos de otras terminales)
+  - Intervalo configurable (default: 5 minutos)
+  - Funciona en background con threading
+  - Upsert inteligente (inserta o actualiza)
+- **Migración `empresa_id` en BD local** (`_migrar_empresa_id`):
+  - 15 tablas migradas automáticamente al arrancar
+  - Compatible SQLite y PostgreSQL
+  - Lee `empresa_id` de `config.ini [supabase]`
+- **Script de registro de empresas** (`registrar_empresa.py`):
+  - Crea empresa, usuario Auth y perfil en un solo comando
+  - Usa service_role key (no necesita login previo)
+  - Maneja duplicados automáticamente
+  - Muestra `empresa_id` para configurar nueva terminal
+- **Esquema Supabase multi-tenant** (`schema_multi_tenant.sql`):
+  - Tabla `empresas` con RLS
+  - `empresa_id` en todas las tablas de datos
+  - Índices para rendimiento
+  - Policies RLS por empresa
+- **Migraciones Supabase** (`migrar_multi_tenant_paso1.sql`, `paso2.sql`):
+  - Paso 1: Crear tabla empresas + agregar empresa_id
+  - Paso 2: Actualizar políticas RLS multi-tenant
+- **Pantalla DetalleOC** (`PantallaDetalleOC.tsx`):
+  - Detalle de orden de compra con partidas y costos
+- **Tipos TypeScript actualizados** (`tipos.ts`):
+  - Interfaces para todas las entidades multi-tenant
+- **Documentación multi-tenant en README:**
+  - Sección dedicada con diagramas de arquitectura
+  - Guia de registro y configuración de terminales
+  - Tabla de tablas con empresa_id
+  - Credenciales de prueba
 
 ### Changed
-- **DialogFichaTecnica:** Reestructurado completamente con `QSplitter` horizontal y vertical, mínimo 1024×700, maximización automática
-- **Producción - Lista de Materiales:** Refresca automáticamente al entrar a la pestaña o cerrar ficha técnica
-- **preview_impresion:** Corrige carrera de condiciones al imprimir PDF desde WebEngine (guardia de carga)
+- **Dashboard del sistema:** Pantalla de resumen con 6 tarjetas KPI clicables
+  - OC pendientes, compras del mes, producción en curso, insumos stock bajo, pares en PT, movimientos del día
+  - Gráfica de barras de compras por mes (QPainter)
+- **Ficha técnica rediseñada:** Layout split con paneles izquierdo/derecho
+  - Panel izquierdo: datos generales, comentarios/firmas, fotos
+  - Panel derecho: características + materiales con costos
+- **Costos BOM en ficha técnica:** Costo unitario por insumo
+- **Impresión de ficha técnica profesional:** Formato "Hoja de especificación de diseño"
+- **Carga de HTML grande en preview_impresion:** Archivos temporales >1.5MB
+- **App móvil - Tab bar:** Respeta área segura de Android (`useSafeAreaInsets`)
+- **config.ini:** Agregado `service_role_key` y `empresa_id`
+- **.gitignore:** Agregado `mobile/.env`, `mobile/node_modules/`, `mobile/.expo/`
+- **Tabla de sincronización README:** Actualizada con multi-tenant
 
 ### Fixed
 - Impresión de ficha técnica mostraba página en blanco con HTML grande
 - `loadFinished` tardío podía disparar PDF sin datos
+- App móvil: tab bar se mostraba detrás de botones de Android
+- Script registrar_empresa.py: manejo de respuestas vacías de Supabase
 
 ---
 
@@ -204,14 +258,18 @@
 
 | Métrica | Valor |
 |---|---|
-| **Commits totales** | 90+ |
+| **Commits totales** | 93+ |
 | **Primera actividad** | 2026-08-04 |
 | **Última actividad** | 2026-08-26 |
 | **Contribuyentes** | 3 |
 | **Pull requests mergeados** | 10+ |
 | **Componentes aprobados** | 11 |
-| **Archivos de código fuente** | 60+ |
+| **Archivos de código fuente** | 75+ |
 | **Pruebas pytest** | 17 |
+| **App móvil (pantallas)** | 10 |
+| **Servicios móviles** | 4 |
+| **Empresas multi-tenant** | 3 |
+| **Tablas con empresa_id** | 25 |
 
 ---
 
