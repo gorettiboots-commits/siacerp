@@ -14,6 +14,10 @@ export async function iniciarSesion(
   email: string,
   password: string,
 ): Promise<{ ok: boolean; usuario?: UsuarioMovil; error?: string }> {
+  if (!supabase) {
+    return { ok: false, error: 'Supabase no configurado. Verifica las credenciales.' };
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -104,6 +108,8 @@ export function esSuperAdmin(): boolean {
 
 /** Verifica si hay sesión activa */
 export async function verificarSesion(): Promise<UsuarioMovil | null> {
+  if (!supabase) return null;
+
   const { data: { session } } = await supabase.auth.getSession();
 
   if (!session) return null;
