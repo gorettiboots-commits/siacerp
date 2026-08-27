@@ -57,14 +57,16 @@ export async function iniciarSesion(
 
   empresaActual = perfil.empresa_id;
 
-  // Registrar actividad
-  await supabase.from('logs_movil').insert({
-    empresa_id: empresaActual,
-    usuario_id: usuarioActual.id,
-    accion: 'login',
-    entidad: 'sesion',
-    detalle: { email },
-  });
+  // Registrar actividad (super_admin puede no tener empresa_id)
+  if (empresaActual) {
+    await supabase.from('logs_movil').insert({
+      empresa_id: empresaActual,
+      usuario_id: usuarioActual.id,
+      accion: 'login',
+      entidad: 'sesion',
+      detalle: { email },
+    }).catch(() => {});
+  }
 
   return { ok: true, usuario: usuarioActual };
 }
@@ -93,6 +95,11 @@ export function obtenerUsuarioActual(): UsuarioMovil | null {
 /** Obtiene el empresa_id actual */
 export function obtenerEmpresaId(): string | null {
   return empresaActual;
+}
+
+/** Verifica si el usuario actual es super_admin */
+export function esSuperAdmin(): boolean {
+  return usuarioActual?.rol === 'super_admin';
 }
 
 /** Verifica si hay sesión activa */

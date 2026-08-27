@@ -9,6 +9,11 @@
 ## [Unreleased] — 2026-08-26
 
 ### Added
+- **Rol super_admin:** Usuario con acceso total a todas las empresas
+  - Función SQL `es_super_admin()` (SECURITY DEFINER) para evitar recursión en RLS
+  - Policies RLS actualizadas: super_admin ve todos los datos de todas las empresas
+  - Credenciales: `superadmin@siac.com` / `superadmin123`
+  - Helper `esSuperAdmin()` en auth service del móvil
 - **App móvil completa (React Native + Supabase):**
   - Pantalla de login con autenticación Supabase Auth
   - Pantalla de Inventario con búsqueda y alertas de stock bajo
