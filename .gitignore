@@ -45,3 +45,8 @@ Thumbs.db
 video.mp4
 logo.png
 IMG_4082.MOV
+
+# App móvil
+mobile/.env
+mobile/node_modules/
+mobile/.expo/
