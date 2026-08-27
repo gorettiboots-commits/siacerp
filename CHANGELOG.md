@@ -14,6 +14,15 @@
   - Policies RLS actualizadas: super_admin ve todos los datos de todas las empresas
   - Credenciales: `superadmin@siac.com` / `superadmin123`
   - Helper `esSuperAdmin()` en auth service del móvil
+- **Dashboard de super_admin en escritorio:**
+  - Botón "Admin" en toolbar (visible solo para super_admin)
+  - KPIs globales: total empresas, usuarios, insumos, OCs, OPs
+  - Tabla de empresas con nombre, RFC, estado y métricas
+  - Tabla de usuarios con username, nombre, rol, estado
+  - Selección de empresa para ver sus usuarios
+  - **Botón activar/desactivar** empresas con confirmación
+  - Carga lazy (se instancia solo al primer clic)
+  - Arquitectura MVC completa: model, controller, view
 - **App móvil completa (React Native + Supabase):**
   - Pantalla de login con autenticación Supabase Auth
   - Pantalla de Inventario con búsqueda y alertas de stock bajo
@@ -269,12 +278,13 @@
 | **Contribuyentes** | 3 |
 | **Pull requests mergeados** | 10+ |
 | **Componentes aprobados** | 11 |
-| **Archivos de código fuente** | 75+ |
+| **Archivos de código fuente** | 80+ |
 | **Pruebas pytest** | 17 |
 | **App móvil (pantallas)** | 10 |
 | **Servicios móviles** | 4 |
 | **Empresas multi-tenant** | 3 |
 | **Tablas con empresa_id** | 25 |
+| **Roles de usuario** | 3 (admin, operador, super_admin) |
 
 ---
 
