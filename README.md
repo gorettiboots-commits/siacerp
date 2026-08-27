@@ -956,6 +956,35 @@ python scripts/registrar_empresa.py \
 
 El super_admin también puede hacer login en la app móvil. En el servicio de auth se incluye el helper `esSuperAdmin()` para verificar el rol.
 
+#### Funciones del super_admin en código
+
+```python
+from src.utils.supabase_service import SupabaseService
+
+sb = SupabaseService()
+sb.login('superadmin@siac.com', 'superadmin123')
+
+# Verificar licencia
+licencia = sb.verificar_licencia()
+
+# Listar todas las empresas
+empresas = sb.service_call('/rest/v1/empresas?select=*')
+
+# Listar todos los usuarios
+usuarios = sb.listar_usuarios_empresa()  # Ve todos por ser super_admin
+
+# Activar/desactivar empresa
+sb.service_call('/rest/v1/empresas?id=eq.UUID', 'PATCH', {'activo': False})
+```
+
+#### Resumen de permisos por rol
+
+| Rol | Empresas | Datos | Acciones |
+|---|---|---|---|
+| `super_admin` | Todas | Todos | Gestionar empresas, ver todo |
+| `admin` | Su empresa | Su empresa | CRUD en su empresa |
+| `operador` | Su empresa | Su empresa | Lectura + producción |
+
 ---
 
 ## Distribución y empaquetado
