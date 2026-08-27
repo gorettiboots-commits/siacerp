@@ -1,5 +1,6 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
 
 
 def _subtotal_detalle_oc(d: dict) -> float:
@@ -145,13 +146,17 @@ class OrdenCompraModel:
         return ordenes
 
     def listar(self) -> list[dict]:
+        where_emp = donde_empresa('oc')
+        params = parametros_empresa()
         ordenes = self.db.fetch_all(
-            """SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
+            f"""SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
                       p.email as proveedor_email, p.rfc as proveedor_rfc,
                       p.direccion as proveedor_direccion
                FROM ordenes_compra oc
                LEFT JOIN proveedores p ON p.id = oc.proveedor_id
-               ORDER BY oc.created_at DESC"""
+               WHERE 1=1 {where_emp}
+               ORDER BY oc.created_at DESC""",
+            tuple(params)
         )
         return self._con_proveedores(ordenes)
 

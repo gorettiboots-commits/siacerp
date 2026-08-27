@@ -8,6 +8,7 @@ sin funciones propias de un motor.
 from datetime import datetime
 
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
 
 
 class DashboardModel:
@@ -27,31 +28,41 @@ class DashboardModel:
             fila = self.db.fetch_one(sql, params)
             return list(fila.values())[0] if fila else 0
 
+        emp = parametros_empresa()
+        emp_w = ' AND empresa_id = ?' if emp else ''
+
+        def _con_emp(sql_base: str, extra_params: tuple = ()) -> tuple:
+            """Agrega filtro empresa y retorna (sql, params)."""
+            if emp:
+                return (sql_base + emp_w, extra_params + tuple(emp))
+            return (sql_base, extra_params)
+
         return {
-            "oc_pendientes": uno(
-                "SELECT COUNT(*) FROM ordenes_compra WHERE estatus = 'pendiente'"),
-            "oc_mes": uno(
+            "oc_pendientes": uno(*_con_emp(
+                "SELECT COUNT(*) FROM ordenes_compra WHERE estatus = 'pendiente'")),
+            "oc_mes": uno(*_con_emp(
                 "SELECT COUNT(*) FROM ordenes_compra "
-                "WHERE substr(fecha_emision, 1, 7) = ?", (mes,)),
-            "oc_importe_mes": uno(
+                "WHERE substr(fecha_emision, 1, 7) = ?", (mes,))),
+            "oc_importe_mes": uno(*_con_emp(
                 "SELECT COALESCE(SUM(total), 0) FROM ordenes_compra "
-                "WHERE substr(fecha_emision, 1, 7) = ?", (mes,)),
-            "op_planeadas": uno(
-                "SELECT COUNT(*) FROM ordenes_produccion WHERE estatus = 'planeada'"),
-            "op_produccion": uno(
-                "SELECT COUNT(*) FROM ordenes_produccion WHERE estatus = 'en_produccion'"),
-            "op_terminadas_mes": uno(
+                "WHERE substr(fecha_emision, 1, 7) = ?", (mes,))),
+            "op_planeadas": uno(*_con_emp(
+                "SELECT COUNT(*) FROM ordenes_produccion WHERE estatus = 'planeada'")),
+            "op_produccion": uno(*_con_emp(
+                "SELECT COUNT(*) FROM ordenes_produccion WHERE estatus = 'en_produccion'")),
+            "op_terminadas_mes": uno(*_con_emp(
                 "SELECT COUNT(*) FROM ordenes_produccion WHERE estatus = 'terminada' "
-                "AND substr(fecha_entrega, 1, 7) = ?", (mes,)),
-            "insumos_bajo_stock": uno(
+                "AND substr(fecha_entrega, 1, 7) = ?", (mes,))),
+            "insumos_bajo_stock": uno(*_con_emp(
                 "SELECT COUNT(*) FROM insumos "
-                "WHERE activo = 1 AND stock_actual <= stock_minimo"),
-            "modelos_activos": uno(
-                "SELECT COUNT(*) FROM modelos WHERE activo = 1"),
+                "WHERE activo = 1 AND stock_actual <= stock_minimo")),
+            "modelos_activos": uno(*_con_emp(
+                "SELECT COUNT(*) FROM modelos WHERE activo = 1")),
             "pares_pt": uno(
                 "SELECT COALESCE(SUM(pares), 0) FROM inventario_pt"),
-            "clientes_activos": uno(
-                "SELECT COUNT(*) FROM clientes WHERE activo = 1"),
+            "clientes_activos": uno(*_con_emp(
+                "SELECT COUNT(*) FROM clientes WHERE activo = 1")),
+            # movimiento_inventario no tiene empresa_id, no se filtra
             "movimientos_hoy": uno(
                 "SELECT COUNT(*) FROM movimiento_inventario "
                 "WHERE substr(created_at, 1, 10) = ?", (hoy,)),
@@ -62,50 +73,64 @@ class DashboardModel:
     # ------------------------------------------------------------------
 
     def obtener_ultimas_oc(self, limite: int = 8) -> list[dict]:
+        where_emp = donde_empresa('oc')
+        params = parametros_empresa()
         return self.db.fetch_all(
-            """SELECT oc.folio, oc.estatus, oc.tipo, oc.total, oc.fecha_emision,
+            f"""SELECT oc.folio, oc.estatus, oc.tipo, oc.total, oc.fecha_emision,
                       p.nombre AS proveedor_nombre
                FROM ordenes_compra oc
                LEFT JOIN proveedores p ON p.id = oc.proveedor_id
+               WHERE 1=1 {where_emp}
                ORDER BY oc.id DESC LIMIT ?""",
-            (limite,))
+            (*params, limite))
 
     def obtener_ops_en_curso(self, limite: int = 8) -> list[dict]:
+        where_emp = donde_empresa('op')
+        params = parametros_empresa()
         return self.db.fetch_all(
-            """SELECT op.folio, op.estatus, op.prioridad, op.total_pares,
+            f"""SELECT op.folio, op.estatus, op.prioridad, op.total_pares,
                       op.fecha_entrega, v.codigo_variante,
                       m.nombre AS modelo_nombre
                FROM ordenes_produccion op
                LEFT JOIN variantes v ON v.id = op.variante_id
                LEFT JOIN modelos m ON m.id = v.modelo_id
-               WHERE op.estatus != 'terminada'
+               WHERE op.estatus != 'terminada' {where_emp}
                ORDER BY op.fecha_entrega ASC LIMIT ?""",
-            (limite,))
+            (*params, limite))
 
     def obtener_stock_bajo(self, limite: int = 10) -> list[dict]:
+        where_emp = donde_empresa()
+        params = parametros_empresa()
         return self.db.fetch_all(
-            """SELECT codigo, nombre, stock_actual, stock_minimo, unidad_medida
+            f"""SELECT codigo, nombre, stock_actual, stock_minimo, unidad_medida
                FROM insumos
-               WHERE activo = 1 AND stock_actual <= stock_minimo
+               WHERE activo = 1 AND stock_actual <= stock_minimo {where_emp}
                ORDER BY (stock_actual - stock_minimo) ASC LIMIT ?""",
-            (limite,))
+            (*params, limite))
 
     def obtener_movimientos_recientes(self, limite: int = 10) -> list[dict]:
+        # movimiento_inventario no tiene empresa_id; filtramos via insumos
+        where_emp = donde_empresa('i')
+        params = parametros_empresa()
         return self.db.fetch_all(
-            """SELECT m.created_at, m.tipo_movimiento, m.cantidad,
+            f"""SELECT m.created_at, m.tipo_movimiento, m.cantidad,
                       i.nombre AS insumo_nombre, i.unidad_medida
                FROM movimiento_inventario m
                JOIN insumos i ON i.id = m.insumo_id
+               WHERE 1=1 {where_emp}
                ORDER BY m.id DESC LIMIT ?""",
-            (limite,))
+            (*params, limite))
 
     def obtener_compras_por_mes(self, meses: int = 6) -> list[dict]:
-        """Total de compras por mes (últimos *meses* con actividad)."""
+        """Total de compras por mes (ultimos *meses* con actividad)."""
+        where_emp = donde_empresa()
+        params = parametros_empresa()
         filas = self.db.fetch_all(
-            """SELECT substr(fecha_emision, 1, 7) AS mes,
+            f"""SELECT substr(fecha_emision, 1, 7) AS mes,
                       SUM(total) AS total
                FROM ordenes_compra
+               WHERE 1=1 {where_emp}
                GROUP BY substr(fecha_emision, 1, 7)
                ORDER BY mes DESC LIMIT ?""",
-            (meses,))
+            (*params, meses))
         return list(reversed(filas))

@@ -65,6 +65,7 @@ class AccesosController:
         return self.permisos_model.claves_totales()
 
     def permisos_login(self, user: dict) -> set[str]:
-        if user.get("rol") == "admin":
+        rol = user.get("rol", "")
+        if rol in ("admin", "super_admin"):
             return self.claves_totales()
         return self.permisos_usuario(user["id"])

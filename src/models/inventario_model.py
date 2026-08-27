@@ -1,5 +1,6 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
 
 
 class InsumoModel:
@@ -10,11 +11,14 @@ class InsumoModel:
         self.db = DatabaseManager()
 
     def listar(self, solo_activos: bool = True) -> list[dict]:
-        query = f"SELECT {', '.join(self._COLUMNAS)} FROM insumos"
+        where_emp = donde_empresa()
+        params = list(parametros_empresa())
+        query = f"SELECT {', '.join(self._COLUMNAS)} FROM insumos WHERE 1=1"
         if solo_activos:
-            query += " WHERE activo = 1"
+            query += " AND activo = 1"
+        query += where_emp
         query += " ORDER BY nombre"
-        return self.db.fetch_all(query)
+        return self.db.fetch_all(query, tuple(params))
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"

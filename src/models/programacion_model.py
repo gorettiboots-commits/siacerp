@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
 
 
 _MESES = {
@@ -59,9 +60,12 @@ class ProgramacionModel:
 
     def listar_semanas(self) -> list[dict]:
         self.asegurar_semanas()
+        emp_params = parametros_empresa()
+        where_emp = " AND empresa_id = ?" if emp_params else ""
         return self.db.fetch_all(
-            "SELECT * FROM programacion_semana WHERE activo = 1 "
-            "ORDER BY fecha_inicio, orden")
+            f"SELECT * FROM programacion_semana WHERE activo = 1 {where_emp} "
+            "ORDER BY fecha_inicio, orden",
+            tuple(emp_params))
 
     def obtener_semana(self, semana_id: int) -> Optional[dict]:
         return self.db.fetch_one(
@@ -100,6 +104,10 @@ class ProgramacionModel:
         if estatus:
             condiciones.append("pl.estatus = ?")
             params.append(estatus)
+        emp_params = parametros_empresa()
+        if emp_params:
+            condiciones.append("pl.empresa_id = ?")
+            params += emp_params
         if condiciones:
             query += " WHERE " + " AND ".join(condiciones)
         query += " ORDER BY s.fecha_inicio, s.orden, pl.orden, pl.id"

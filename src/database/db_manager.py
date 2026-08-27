@@ -380,28 +380,36 @@ class DatabaseManager:
                 'usuarios', 'clientes', 'pedidos_cliente',
                 'programacion_semana', 'programacion_lineas',
                 'configuracion_empresa', 'logs_sistema',
+                'inventario_pt', 'movimiento_inventario',
             ]
 
             for tabla in tablas_empresa:
                 try:
+                    # 'usuarios' necesita empresa_id nullable (super_admin no tiene empresa)
+                    es_usuarios = (tabla == 'usuarios')
+                    nullable = '' if es_usuarios else ' NOT NULL'
+                    default = '' if es_usuarios else f" DEFAULT '{empresa_id}'"
+
                     if self.engine == 'sqlite':
                         cols = [r[1] for r in cursor.execute(
                             f"PRAGMA table_info({tabla})").fetchall()]
                         if 'empresa_id' not in cols:
                             cursor.execute(
-                                f"ALTER TABLE {tabla} ADD COLUMN empresa_id TEXT NOT NULL DEFAULT '{empresa_id}'")
+                                f"ALTER TABLE {tabla} ADD COLUMN empresa_id TEXT{nullable}{default}")
                             print(f"  {tabla}: empresa_id agregado")
                         else:
-                            # Actualizar registros sin empresa_id
-                            cursor.execute(
-                                f"UPDATE {tabla} SET empresa_id = ? WHERE empresa_id = '' OR empresa_id IS NULL",
-                                (empresa_id,))
+                            # Actualizar registros sin empresa_id (solo tablas NOT NULL)
+                            if not es_usuarios:
+                                cursor.execute(
+                                    f"UPDATE {tabla} SET empresa_id = ? WHERE empresa_id = '' OR empresa_id IS NULL",
+                                    (empresa_id,))
                     else:
                         cursor.execute(
-                            f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS empresa_id TEXT NOT NULL DEFAULT '{empresa_id}'")
-                        cursor.execute(
-                            f"UPDATE {tabla} SET empresa_id = %s WHERE empresa_id = '' OR empresa_id IS NULL",
-                            (empresa_id,))
+                            f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS empresa_id TEXT{nullable}{default}")
+                        if not es_usuarios:
+                            cursor.execute(
+                                f"UPDATE {tabla} SET empresa_id = %s WHERE empresa_id = '' OR empresa_id IS NULL",
+                                (empresa_id,))
                 except Exception as e:
                     print(f"  {tabla}: migracion empresa_id omitida - {e}")
 

@@ -1,5 +1,6 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
 
 
 class ModeloModel:
@@ -161,13 +162,17 @@ class OrdenProduccionModel:
         self.db = DatabaseManager()
 
     def listar(self) -> list[dict]:
+        where_emp = donde_empresa('op')
+        params = parametros_empresa()
         return self.db.fetch_all(
-            """SELECT op.*, v.codigo_variante, m.nombre as modelo_nombre,
+            f"""SELECT op.*, v.codigo_variante, m.nombre as modelo_nombre,
                       v.color, v.piel, v.talla
                FROM ordenes_produccion op
                JOIN variantes v ON v.id = op.variante_id
                JOIN modelos m ON m.id = v.modelo_id
-               ORDER BY op.created_at DESC"""
+               WHERE 1=1 {where_emp}
+               ORDER BY op.created_at DESC""",
+            tuple(params)
         )
 
     def listar_tallas(self) -> list[dict]:

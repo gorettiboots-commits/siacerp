@@ -1,5 +1,6 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
 
 
 class MovimientoInventarioGrupoModel:
@@ -70,10 +71,12 @@ class MovimientoInventarioGrupoModel:
 
     def listar_grupos(self, limite: int = 200) -> list[dict]:
         """Lista grupos de movimientos (más recientes primero)."""
+        where_emp = donde_empresa()
+        params = parametros_empresa()
         return self.db.fetch_all(
-            "SELECT * FROM movimientos_inventario "
-            "ORDER BY created_at DESC LIMIT ?",
-            (limite,),
+            f"SELECT * FROM movimientos_inventario WHERE 1=1 {where_emp}"
+            " ORDER BY created_at DESC LIMIT ?",
+            (*params, limite),
         )
 
     def obtener_por_grupo(self, movimiento_id: int) -> list[dict]:

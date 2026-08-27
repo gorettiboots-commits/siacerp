@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from src.controllers.accesos_controller import AccesosController
 from src.models.accesos_model import tiene
 from src.utils.icons import mono_icon
+from src.utils.empresa_context import establecer_empresa_id
 from src.utils.logs import registrar_log, set_usuario_actual
 from src.views.login_view import LoginView
 from src.views.clientes_view import ClientesView
@@ -578,29 +579,46 @@ class MainWindow(QMainWindow):
         self._imprimir_etiquetas_action.setEnabled(tiene_prog_export)
 
     def _on_login(self, credentials: dict) -> None:
-        user = AccesosController().autenticar(
-            credentials["username"], credentials["password"])
+        try:
+            user = AccesosController().autenticar(
+                credentials["username"], credentials["password"])
+        except Exception as e:
+            from src.views.login_view import LoginView
+            for w in self._stack.findChildren(LoginView):
+                w.lbl_error.setText(f"Error de conexion: {e}")
+                w.lbl_error.setVisible(True)
+                w.btn_login.setEnabled(True)
+                w.btn_login.setText("Iniciar Sesion")
+            return
+
         if user:
             self._current_user = user
             set_usuario_actual(user)
-            self._permisos = AccesosController().permisos_login(user)
+            establecer_empresa_id(user.get('empresa_id'))
+            try:
+                self._permisos = AccesosController().permisos_login(user)
+            except Exception:
+                self._permisos = set()
             self._stack.setCurrentWidget(self._main_container)
             self._aplicar_permisos()
-            self._content_area.setCurrentWidget(self._video_splash)
-            self._splash_player.stop()
-            self._splash_player.setPosition(0)
-            self._splash_stack.setCurrentIndex(0)
-            self._splash_player.play()
+            try:
+                self._content_area.setCurrentWidget(self._video_splash)
+                self._splash_player.stop()
+                self._splash_player.setPosition(0)
+                self._splash_stack.setCurrentIndex(0)
+                self._splash_player.play()
+            except Exception:
+                pass
             self.status_bar.showMessage(
                 f"Conectado como: {user['nombre_completo']} ({user['rol']})")
             self.setWindowTitle(f"SIAC ERP - {user['nombre_completo']}")
         else:
             from src.views.login_view import LoginView
             for w in self._stack.findChildren(LoginView):
-                w.lbl_error.setText("Usuario o contraseña incorrectos")
+                w.lbl_error.setText("Usuario o contrasena incorrectos")
                 w.lbl_error.setVisible(True)
                 w.btn_login.setEnabled(True)
-                w.btn_login.setText("Iniciar Sesión")
+                w.btn_login.setText("Iniciar Sesion")
 
     def _mostrar_sandbox(self) -> None:
         self._content_area.setCurrentWidget(self._view_sandbox)
@@ -640,6 +658,7 @@ class MainWindow(QMainWindow):
                           datos={"username": self._current_user.get("username")})
         self._current_user = None
         set_usuario_actual(None)
+        establecer_empresa_id(None)
         self._permisos = set()
         self._config_action.setEnabled(False)
         self._crear_etiqueta_action.setEnabled(False)
