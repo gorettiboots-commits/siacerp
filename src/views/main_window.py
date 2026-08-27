@@ -257,7 +257,7 @@ class MainWindow(QMainWindow):
 
         # Super Admin (carga lazy)
         self._idx_super_admin = self._content_area.count()  # Índice futuro
-        self._nav_super_admin = None  # Se crea bajo demanda
+        # NOTA: _nav_super_admin ya se creo en _create_tool_bar()
 
         layout.addWidget(self._tool_bar)
         layout.addWidget(self._content_area, 1)
