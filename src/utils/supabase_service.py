@@ -91,11 +91,13 @@ class SupabaseService:
                     return {'ok': False, 'error': 'Usuario desactivado'}
 
                 # Verificar que la empresa del usuario coincida con la configurada
-                if p['empresa_id'] != self.empresa_id:
-                    return {
-                        'ok': False,
-                        'error': 'Este usuario no pertenece a esta empresa'
-                    }
+                # Super_admin puede no tener empresa_id (acceso total)
+                if p.get('rol') != 'super_admin':
+                    if p.get('empresa_id') and p['empresa_id'] != self.empresa_id:
+                        return {
+                            'ok': False,
+                            'error': 'Este usuario no pertenece a esta empresa'
+                        }
 
                 self._conectado = True
                 return {
