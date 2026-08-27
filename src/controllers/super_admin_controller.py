@@ -40,6 +40,10 @@ class SuperAdminController:
         """Retorna los usuarios de una empresa."""
         return self.model.listar_usuarios_empresa(empresa_id)
 
+    def cambiar_estado_empresa(self, empresa_id: str, activo: bool) -> dict:
+        """Activa o desactiva una empresa."""
+        return self.model.cambiar_estado_empresa(empresa_id, activo)
+
     def obtener_todos_usuarios(self) -> list[dict]:
         """Retorna todos los usuarios del sistema."""
         return self.model.obtener_todos_los_usuarios()

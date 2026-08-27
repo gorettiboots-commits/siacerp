@@ -7,9 +7,9 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QSplitter, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox,
+    QPushButton, QScrollArea, QSplitter, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from src.controllers.super_admin_controller import SuperAdminController
@@ -135,8 +135,8 @@ class SuperAdminView(QWidget):
         el.addWidget(lbl_emp)
 
         self.tabla_empresas = _tabla(
-            ["Nombre", "RFC", "Estado", "Usuarios", "Insumos", "OCs", "OPs"],
-            [180, 120, 80, 80, 80, 80, 80])
+            ["Nombre", "RFC", "Estado", "Usuarios", "Insumos", "OCs", "OPs", "Acciones"],
+            [180, 120, 80, 80, 80, 80, 80, 120])
         self.tabla_empresas.cellClicked.connect(self._on_empresa_clic)
         el.addWidget(self.tabla_empresas)
         cl.addWidget(grp_empresas, 3)
@@ -186,6 +186,34 @@ class SuperAdminView(QWidget):
                 f"Empresa: {nombre} ({len(usuarios)} usuarios)")
             self._cargar_tabla_usuarios(usuarios)
 
+    def _toggle_empresa(self, empresa_id: str, activo_actual: bool, nombre: str) -> None:
+        """Activa o desactiva una empresa."""
+        nuevo_estado = not activo_actual
+        accion = "activar" if nuevo_estado else "desactivar"
+
+        respuesta = QMessageBox.question(
+            self,
+            f"{accion.title()} empresa",
+            f"¿Desea {accion} la empresa '{nombre}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if respuesta != QMessageBox.Yes:
+            return
+
+        resultado = self.controller.cambiar_estado_empresa(empresa_id, nuevo_estado)
+
+        if resultado.get('ok'):
+            QMessageBox.information(
+                self, "Exito",
+                f"Empresa '{nombre}' {accion}da correctamente.")
+            self.recargar()
+        else:
+            QMessageBox.warning(
+                self, "Error",
+                f"No se pudo {accion} la empresa: {resultado.get('error', 'Error desconocido')}")
+
     def _cargar_tabla_usuarios(self, usuarios: list[dict]) -> None:
         """Carga la tabla de usuarios."""
         self.tabla_usuarios.setRowCount(0)
@@ -217,7 +245,7 @@ class SuperAdminView(QWidget):
             empresas = self.controller.obtener_empresas_con_estadisticas()
             self._empresas_datos = empresas
             self.tabla_empresas.setRowCount(0)
-            for emp in empresas:
+            for idx, emp in enumerate(empresas):
                 estado = "Activa" if emp.get('activo', True) else "Inactiva"
                 _fila(self.tabla_empresas, [
                     emp.get('nombre', ''),
@@ -227,8 +255,21 @@ class SuperAdminView(QWidget):
                     str(emp.get('insumos', 0)),
                     str(emp.get('ocs', 0)),
                     str(emp.get('ops', 0)),
+                    '',  # Columna de acciones
                 ], {3: Qt.AlignCenter, 4: Qt.AlignCenter,
                     5: Qt.AlignCenter, 6: Qt.AlignCenter})
+                # Boton de activar/desactivar
+                btn = QPushButton("Desactivar" if emp.get('activo', True) else "Activar")
+                btn.setObjectName("btnSecondary")
+                btn.setFixedHeight(28)
+                btn.setCursor(Qt.PointingHandCursor)
+                eid = emp['id']
+                activo = emp.get('activo', True)
+                nombre = emp.get('nombre', '')
+                btn.clicked.connect(
+                    lambda checked=False, _eid=eid, _activo=activo, _n=nombre:
+                    self._toggle_empresa(_eid, _activo, _n))
+                self.tabla_empresas.setCellWidget(idx, 7, btn)
 
             # Todos los usuarios
             usuarios = self.controller.obtener_todos_usuarios()

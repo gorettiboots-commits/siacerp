@@ -99,6 +99,20 @@ class SuperAdminModel:
         except Exception:
             return []
 
+    def cambiar_estado_empresa(self, empresa_id: str, activo: bool) -> dict:
+        """Activa o desactiva una empresa."""
+        if not self.sb.configurado:
+            return {'ok': False, 'error': 'Supabase no configurado'}
+        try:
+            self.sb.service_call(
+                f'/rest/v1/empresas?id=eq.{empresa_id}',
+                method='PATCH',
+                data={'activo': activo}
+            )
+            return {'ok': True}
+        except Exception as e:
+            return {'ok': False, 'error': str(e)}
+
     def estadisticas_globales(self) -> dict:
         """Obtiene estadisticas globales de todas las empresas."""
         empresas = self.listar_empresas()
