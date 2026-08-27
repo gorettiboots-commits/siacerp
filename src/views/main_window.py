@@ -239,6 +239,7 @@ class MainWindow(QMainWindow):
         self._view_programacion = ProgramacionView()
         self._view_sandbox = SandboxView()
         self._view_dashboard = DashboardView()
+        self._view_super_admin = None  # Se carga bajo demanda
 
         self._video_splash = self._create_video_splash()
         self._content_area.addWidget(self._video_splash)
@@ -252,6 +253,10 @@ class MainWindow(QMainWindow):
 
         # Clic en tarjetas KPI del Dashboard → navegar al módulo correspondiente
         self._view_dashboard.navegar_modulo.connect(self._ir_a_modulo_desde_dashboard)
+
+        # Super Admin (carga lazy)
+        self._idx_super_admin = self._content_area.count()  # Índice futuro
+        self._nav_super_admin = None  # Se crea bajo demanda
 
         layout.addWidget(self._tool_bar)
         layout.addWidget(self._content_area, 1)
@@ -437,6 +442,22 @@ class MainWindow(QMainWindow):
         self.nav_sandbox.clicked.connect(self._mostrar_sandbox)
         lay.addWidget(self.nav_sandbox)
 
+        # Botón Super Admin (solo super_admin)
+        self._nav_super_admin = QToolButton()
+        self._nav_super_admin.setObjectName("navToolSuperAdmin")
+        self._nav_super_admin.setText("Admin")
+        self._nav_super_admin.setToolTip("Panel de Administración (Super Admin)")
+        self._nav_super_admin.setIcon(mono_icon("dashboard", 26, "#7C3AED"))
+        self._nav_super_admin.setIconSize(QSize(26, 26))
+        self._nav_super_admin.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        self._nav_super_admin.setCheckable(True)
+        self._nav_super_admin.setAutoExclusive(True)
+        self._nav_super_admin.setFixedSize(78, 58)
+        self._nav_super_admin.setCursor(Qt.PointingHandCursor)
+        self._nav_super_admin.setVisible(False)
+        self._nav_super_admin.clicked.connect(self._mostrar_super_admin)
+        lay.addWidget(self._nav_super_admin)
+
         # Cierre de sesión
         self.nav_salir = QToolButton()
         self.nav_salir.setText("Cerrar Sesión")
@@ -533,6 +554,10 @@ class MainWindow(QMainWindow):
         self.nav_programacion.setVisible(tiene(self._permisos, "programacion", "ver"))
         self.nav_sandbox.setVisible(
             bool(self._current_user) and self._current_user.get("rol") == "admin")
+        # Super Admin: visible solo para rol super_admin
+        es_super = bool(self._current_user) and self._current_user.get("rol") == "super_admin"
+        if self._nav_super_admin:
+            self._nav_super_admin.setVisible(es_super)
         self._config_action.setEnabled(
             tiene(self._permisos, "configuracion", "ver")
             or tiene(self._permisos, "usuarios", "ver"))
@@ -581,6 +606,19 @@ class MainWindow(QMainWindow):
         self._content_area.setCurrentWidget(self._view_sandbox)
         self.status_bar.showMessage("Módulo: Sandbox")
 
+    def _mostrar_super_admin(self) -> None:
+        """Muestra el dashboard de super_admin (multi-empresa)."""
+        if self._stack.currentWidget() != self._main_container:
+            return
+        if not self._view_super_admin:
+            from src.views.super_admin_view import SuperAdminView
+            self._view_super_admin = SuperAdminView()
+            self._content_area.addWidget(self._view_super_admin)
+            self._idx_super_admin = self._content_area.count() - 1
+        self._view_super_admin.recargar()
+        self._content_area.setCurrentWidget(self._view_super_admin)
+        self.status_bar.showMessage("Módulo: Panel de Administración (Super Admin)")
+
     def _mostrar_dashboard(self) -> None:
         if self._stack.currentWidget() != self._main_container:
             return
@@ -608,6 +646,8 @@ class MainWindow(QMainWindow):
         self._imprimir_etiquetas_action.setEnabled(False)
         self._cola_impresion_action.setEnabled(False)
         self._logs_action.setVisible(False)
+        if self._nav_super_admin:
+            self._nav_super_admin.setVisible(False)
         self._stack.setCurrentWidget(self._login_view)
         for w in self._stack.findChildren(LoginView):
             w.txt_user.clear()
