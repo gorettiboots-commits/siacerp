@@ -556,7 +556,8 @@ class MainWindow(QMainWindow):
         self.nav_sandbox.setVisible(
             bool(self._current_user) and self._current_user.get("rol") == "admin")
         # Super Admin: visible solo para rol super_admin
-        es_super = bool(self._current_user) and self._current_user.get("rol") == "super_admin"
+        rol = self._current_user.get('rol', '') if self._current_user else ''
+        es_super = rol == 'super_admin'
         if self._nav_super_admin:
             self._nav_super_admin.setVisible(es_super)
         self._config_action.setEnabled(

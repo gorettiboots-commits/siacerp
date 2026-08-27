@@ -545,6 +545,22 @@ QToolButton#navToolSandbox:checked {
     border-color: #ca8a04;
 }
 
+QToolButton#navToolSuperAdmin {
+    background-color: transparent;
+    color: #7C3AED;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 11px;
+}
+QToolButton#navToolSuperAdmin:hover { background-color: #ede9fe; }
+QToolButton#navToolSuperAdmin:pressed { background-color: #ddd6fe; }
+QToolButton#navToolSuperAdmin:checked {
+    background-color: #7C3AED;
+    color: #ffffff;
+    border-color: #7C3AED;
+}
+
 QToolButton#navToolSalir {
     background-color: transparent;
     color: #dc2626;
