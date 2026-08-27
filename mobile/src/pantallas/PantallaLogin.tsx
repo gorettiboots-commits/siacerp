@@ -35,7 +35,7 @@ export function PantallaLogin({ onLogin }: Props) {
     if (resultado.ok) {
       onLogin();
     } else {
-      Alert.alert('Error de inicio de sesión', resultado.mensaje || 'Error desconocido');
+      Alert.alert('Error de inicio de sesión', resultado.error || 'Error desconocido');
     }
   };
 
