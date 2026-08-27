@@ -28,6 +28,7 @@
 - [Componentes reutilizables](#componentes-reutilizables)
 - [Sistema de reportes](#sistema-de-reportes)
 - [Integración móvil y Supabase](#integración-móvil-y-supabase)
+- [Arquitectura multi-tenant](#arquitectura-multi-tenant)
 - [Distribución y empaquetado](#distribución-y-empaquetado)
 - [Importación de proveedores](#importación-de-proveedores-e-insumos)
 - [Respaldo y restauración](#respaldo-y-restauración)
@@ -306,8 +307,10 @@ sequenceDiagram
 | Escenario | Estado |
 |---|---|
 | Escritorio ↔ Escritorio (misma BD) | ✅ Funcional (SQLite o PostgreSQL) |
+| Escritorio ↔ Escritorio (multi-tenant) | ✅ Funcional (vía Supabase, sync cada 5 min) |
 | Móvil → Escritorio (cola de impresión) | ✅ Funcional (vía Supabase) |
-| Escritorio ↔ Móvil (datos completos) | 🎯 Futuro (RD-5: Supabase sync) |
+| Escritorio ↔ Móvil (datos completos) | ✅ Funcional (Supabase + empresa_id) |
+| Multi-tenant (aislamiento por empresa) | ✅ Funcional (RLS por empresa_id) |
 
 ---
 
@@ -625,8 +628,18 @@ siacerp/
 ├── video.mp4                   # Video de bienvenida (splash)
 ├── default.jpg / logo.png      # Imágenes de la raíz
 ├── scripts/
-│   └── importar_directorio.py  # Importación masiva desde Excel
+│   ├── importar_directorio.py  # Importación masiva desde Excel
+│   ├── registrar_empresa.py    # Registro de nuevas empresas
+│   └── sincronizar_supabase_v5.py  # Sincronización a Supabase
 ├── sitio web/                  # Landing page de la marca Goretti
+├── mobile/                     # App móvil (React Native)
+│   ├── App.tsx                 # Entry point con React Navigation
+│   ├── src/
+│   │   ├── pantallas/          # Login, Inventario, OCs, Producción
+│   │   ├── servicios/          # auth, inventario, ordenes, produccion
+│   │   ├── tipos.ts            # Interfaces TypeScript
+│   │   └── lib/supabase.ts     # Cliente Supabase
+│   └── supabase/               # Esquema y migraciones Supabase
 ├── tests/                      # Pruebas pytest
 │   ├── conftest.py             # Fixtures Qt para pruebas
 │   └── test_*.py               # Pruebas por módulo/componente
@@ -691,6 +704,8 @@ siacerp/
         ├── programacion_print.py
         ├── logs.py             # Logging del sistema
         ├── respaldo_bd_utils.py
+        ├── supabase_service.py # Conexion a Supabase (multi-tenant)
+        ├── sync_service.py     # Sincronizacion local <-> Supabase
         └── styles.qss          # Estilos globales QSS
 ```
 
@@ -729,6 +744,8 @@ El sistema incluye una aplicación móvil complementaria desarrollada en **React
 - Captura de pedidos de cliente desde el campo
 - Solicitud de impresión de etiquetas
 - Consulta de inventario
+- Visualización de órdenes de compra y producción
+- Cambio de estatus de producción (Kanban)
 
 La app móvil se conecta al sistema a través de **Supabase** (Backend as a Service).
 
@@ -752,15 +769,140 @@ App Móvil → Supabase (impresiones_etiqueta) → SIAC ERP (Cola de Impresión)
 [supabase]
 url = https://tu-proyecto.supabase.co
 anon_key = tu-anon-key-aqui
+service_role_key = tu-service-role-key
+empresa_id = uuid-de-tu-empresa
 ```
 
-O mediante variables de entorno:
+---
+
+## Arquitectura multi-tenant
+
+**SIAC ERP** soporta múltiples empresas (tenants) en una sola instancia de Supabase, con aislamiento total de datos. Cada empresa tiene sus propios usuarios, inventario, órdenes de compra y producción.
+
+### Concepto
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SUPABASE (multi-tenant)                   │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │  SIAC ERP     │  │  Calzado     │  │  Calzado     │     │
+│  │  (empresa A)  │  │  Durán (B)   │  │  Rivera (C)  │     │
+│  │               │  │              │  │              │     │
+│  │ 24 insumos    │  │ 0 insumos    │  │ 0 insumos    │     │
+│  │ 1 OC          │  │ 0 OCs        │  │ 0 OCs        │     │
+│  │ 3 OPs         │  │ 0 OPs        │  │ 0 OPs        │     │
+│  └──────────────┘  └──────────────┘  └──────────────┘     │
+│        │                  │                  │              │
+│        └──────────────────┴──────────────────┘              │
+│              RLS filtra por empresa_id                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Flujo de datos
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  TERMINAL 1 (escritorio - SIAC ERP)                         │
+│  BD local SQLite + empresa_id                               │
+│  Funciona SIN internet                                      │
+│  ↕ Sync cada 5 min con Supabase                             │
+├─────────────────────────────────────────────────────────────┤
+│                    SUPABASE                                  │
+│  RLS filtra por empresa_id → aislamiento total              │
+│  Auth gestiona usuarios y sesiones                          │
+├─────────────────────────────────────────────────────────────┤
+│  TERMINAL 2 (otra computadora - misma empresa)              │
+│  BD local SQLite + Mismo empresa_id                         │
+│  ↕ Sync cada 5 min → comparten datos                        │
+├─────────────────────────────────────────────────────────────┤
+│  APP MÓVIL (React Native)                                   │
+│  Supabase directo → misma empresa                           │
+│  Lee datos en tiempo real                                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Prioridad de datos
+
+| Nivel | Fuente de datos | Prioridad | Internet |
+|---|---|---|---|
+| **Escritorio** | BD local SQLite | **ALTA** (funciona offline) | No requiere |
+| **Sync** | Supabase (intermedio) | MEDIA (cada 5 min) | Requiere |
+| **Móvil** | Supabase directo | BAJA (solo lectura) | Requiere |
+
+### Ventajas del diseño
+
+- ✅ El escritorio **funciona sin internet** (BD local es la fuente de verdad)
+- ✅ Múltiples terminales comparten datos vía Supabase
+- ✅ La app móvil tiene acceso en tiempo real
+- ✅ Cada empresa está **aislada** (RLS por empresa_id)
+- ✅ El licenciamiento se valida en Supabase
+- ✅ Sin costo adicional por terminal (mismo proyecto Supabase)
+
+### Registrar una nueva empresa
+
 ```bash
-export SUPABASE_URL=https://tu-proyecto.supabase.co
-export SUPABASE_ANON_KEY=tu-anon-key-aqui
+python scripts/registrar_empresa.py \
+    --nombre "Nombre de la Empresa" \
+    --rfc "RFC000000XXX" \
+    --email-admin "admin@empresa.com" \
+    --password-admin "admin123"
 ```
 
-> 💡 **Futuro:** Supabase se usará para sincronización de datos entre estaciones de trabajo (RD-5).
+El script muestra el `empresa_id` (UUID) que se debe configurar en la nueva terminal.
+
+### Configurar una nueva terminal
+
+1. Copiar el proyecto a la nueva computadora
+2. Instalar dependencias: `pip install -r requirements.txt`
+3. Editar `config.ini`:
+
+```ini
+[database]
+engine = sqlite
+sqlite_path = goretti_erp.db
+
+[supabase]
+url = https://tu-proyecto.supabase.co
+anon_key = tu-anon-key
+service_role_key = tu-service-role-key
+empresa_id = UUID-DE-LA-EMPRESA
+```
+
+4. Ejecutar: `python main.py`
+5. La BD local se crea automáticamente y se sincroniza con Supabase
+
+### Tablas con empresa_id
+
+Las siguientes tablas tienen la columna `empresa_id` para aislamiento multi-tenant:
+
+| Tabla | Descripción |
+|---|---|
+| `insumos` | Materia prima |
+| `modelos` | Modelos de zapato |
+| `variantes` | Variantes (color/piel) |
+| `proveedores` | Proveedores |
+| `ordenes_compra` | Órdenes de compra |
+| `detalle_orden_compra` | Detalle de OC |
+| `ordenes_produccion` | Órdenes de producción |
+| `seguimiento_produccion` | Avance por estación |
+| `usuarios` | Usuarios del sistema |
+| `clientes` | Clientes |
+| `pedidos_cliente` | Pedidos de cliente |
+| `programacion_semana` | Programación semanal |
+| `programacion_lineas` | Líneas de programación |
+| `configuracion_empresa` | Datos de empresa |
+| `logs_sistema` | Logs del sistema |
+
+### Credenciales de prueba
+
+| Empresa | Email | Password | Rol |
+|---|---|---|---|
+| SIAC ERP | `admin@siac.com` | `admin123` | admin |
+| SIAC ERP | `operador@siac.com` | `operador123` | operador |
+| Calzado Durán | `admin@durancalzado.com` | `admin123` | admin |
+| Calzado Rivera | `admin@riveracalzado.com` | `admin123` | admin |
 
 ---
 
