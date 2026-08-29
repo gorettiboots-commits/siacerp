@@ -29,7 +29,11 @@ const config: ExpoConfig = {
   web: {
     favicon: './assets/favicon.png',
   },
-  extra: {},
+  extra: {
+    eas: {
+      projectId: 'd231f1e6-a804-49bc-964c-4ce300dd2711',
+    },
+  },
 };
 
 export default config;

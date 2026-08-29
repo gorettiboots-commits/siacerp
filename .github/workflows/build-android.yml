@@ -1,0 +1,69 @@
+# ============================================================
+# Build Android APK con EAS Build al crear un Release
+# ============================================================
+# Requiere configurar el secret EXPO_TOKEN en GitHub:
+#   Settings → Secrets → Actions → New repository secret
+#   Name: EXPO_TOKEN
+#   Value: <tu token de Expo — obténlo con `eas whoami --token`>
+# ============================================================
+
+name: Build Android APK
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile (preview/production)'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  build-android:
+    name: Build APK (${{ github.event.inputs.profile || 'preview' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Expo CLI
+        run: npm install -g eas-cli@latest
+
+      - name: Install dependencies (mobile)
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build Android APK
+        working-directory: mobile
+        run: |
+          eas build \
+            --platform android \
+            --profile ${{ github.event.inputs.profile || 'preview' }} \
+            --non-interactive \
+            --message "Build from GitHub Actions — ${{ github.event_name }}"
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Build completado ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Profile**: ${{ github.event.inputs.profile || 'preview' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repo**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Descarga el APK desde [Expo Dashboard](https://expo.dev)" >> $GITHUB_STEP_SUMMARY

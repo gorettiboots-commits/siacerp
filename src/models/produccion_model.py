@@ -10,18 +10,23 @@ class ModeloModel:
     def __init__(self) -> None:
         self.db = DatabaseManager()
 
+    def buscar(self, termino: str) -> list[dict]:
+        q = "%" + termino + "%"
+        where_emp = donde_empresa()
+        params: list = [q, q] + parametros_empresa()
+        return self.db.fetch_all(
+            f"SELECT {', '.join(self._COLUMNAS)} FROM modelos"
+            f" WHERE activo=1 AND (codigo LIKE ? OR nombre LIKE ?)"
+            f"{where_emp} ORDER BY nombre",
+            tuple(params),
+        )
+
     def listar(self, solo_activos: bool = True) -> list[dict]:
         query = f"SELECT {', '.join(self._COLUMNAS)} FROM modelos"
         if solo_activos:
             query += " WHERE activo = 1"
         query += " ORDER BY nombre"
         return self.db.fetch_all(query)
-
-    def buscar(self, termino: str) -> list[dict]:
-        q = "%" + termino + "%"
-        return self.db.fetch_all(
-            f"SELECT {', '.join(self._COLUMNAS)} FROM modelos WHERE activo=1 AND (codigo LIKE ? OR nombre LIKE ?) ORDER BY nombre", (q, q)
-        )
 
     def obtener(self, modelo_id: int) -> Optional[dict]:
         return self.db.fetch_one("SELECT * FROM modelos WHERE id = ?", (modelo_id,))
@@ -66,11 +71,17 @@ class VarianteModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa('v')
+        params: list = [q, q, q, q] + parametros_empresa()
         return self.db.fetch_all(
-            """SELECT v.*, m.nombre as modelo_nombre
-               FROM variantes v JOIN modelos m ON m.id = v.modelo_id
-               WHERE v.activo=1 AND (v.codigo_variante LIKE ? OR v.color LIKE ? OR v.piel LIKE ? OR v.talla LIKE ?)
-               ORDER BY v.codigo_variante""", (q, q, q, q)
+            "SELECT v.*, m.nombre as modelo_nombre"
+            " FROM variantes v JOIN modelos m ON m.id = v.modelo_id"
+            " WHERE v.activo=1 AND (v.codigo_variante LIKE ?"
+            " OR v.color LIKE ? OR v.piel LIKE ?"
+            " OR v.talla LIKE ?)"
+            + where_emp +
+            " ORDER BY v.codigo_variante",
+            tuple(params),
         )
 
     def obtener(self, variante_id: int) -> Optional[dict]:
@@ -181,13 +192,19 @@ class OrdenProduccionModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa('op')
+        params: list = [q, q, q] + parametros_empresa()
         return self.db.fetch_all(
-            """SELECT op.*, v.codigo_variante, m.nombre as modelo_nombre, v.color, v.piel
-               FROM ordenes_produccion op
-               JOIN variantes v ON v.id = op.variante_id
-               JOIN modelos m ON m.id = v.modelo_id
-               WHERE op.folio LIKE ? OR m.nombre LIKE ? OR v.codigo_variante LIKE ?
-               ORDER BY op.created_at DESC""", (q, q, q)
+            "SELECT op.*, v.codigo_variante, m.nombre as modelo_nombre,"
+            " v.color, v.piel"
+            " FROM ordenes_produccion op"
+            " JOIN variantes v ON v.id = op.variante_id"
+            " JOIN modelos m ON m.id = v.modelo_id"
+            " WHERE (op.folio LIKE ? OR m.nombre LIKE ?"
+            "        OR v.codigo_variante LIKE ?)"
+            + where_emp +
+            " ORDER BY op.created_at DESC",
+            tuple(params),
         )
 
     def obtener(self, op_id: int) -> Optional[dict]:

@@ -50,3 +50,7 @@ IMG_4082.MOV
 mobile/.env
 mobile/node_modules/
 mobile/.expo/
+
+# Chrome downloads
+*.crdownload
+Unconfirmed*

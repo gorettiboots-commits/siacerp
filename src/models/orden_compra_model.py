@@ -27,11 +27,13 @@ class ProveedorModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa()
+        params: list = [q, q, q] + parametros_empresa()
         return self.db.fetch_all(
             "SELECT * FROM proveedores WHERE activo=1 AND "
-            "(rfc LIKE ? OR nombre LIKE ? OR nombre_comercial LIKE ?) "
-            "ORDER BY nombre",
-            (q, q, q),
+            "(rfc LIKE ? OR nombre LIKE ? OR nombre_comercial LIKE ?)"
+            + where_emp + " ORDER BY nombre",
+            tuple(params),
         )
 
     def obtener(self, proveedor_id: int) -> Optional[dict]:
@@ -162,25 +164,28 @@ class OrdenCompraModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa('oc')
+        params: list = [q, q, q, q, q] + parametros_empresa()
         ordenes = self.db.fetch_all(
-            """SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
-                      p.email as proveedor_email, p.rfc as proveedor_rfc,
-                      p.direccion as proveedor_direccion
-               FROM ordenes_compra oc
-               LEFT JOIN proveedores p ON p.id = oc.proveedor_id
-               WHERE oc.folio LIKE ? OR EXISTS (
-                    SELECT 1 FROM detalle_orden_compra d
-                    JOIN proveedores dp ON dp.id = d.proveedor_id
-                    WHERE d.orden_compra_id = oc.id
-                      AND (dp.nombre LIKE ? OR dp.rfc LIKE ?)
-               ) OR EXISTS (
-                    SELECT 1 FROM detalle_orden_compra d2
-                    JOIN insumos i ON i.id = d2.insumo_id
-                    WHERE d2.orden_compra_id = oc.id
-                      AND (i.nombre LIKE ? OR i.codigo LIKE ?)
-               )
-               ORDER BY oc.created_at DESC""",
-            (q, q, q, q, q),
+            "SELECT oc.*, p.nombre as proveedor_nombre,"
+            " p.telefono as proveedor_telefono,"
+            " p.email as proveedor_email, p.rfc as proveedor_rfc,"
+            " p.direccion as proveedor_direccion"
+            " FROM ordenes_compra oc"
+            " LEFT JOIN proveedores p ON p.id = oc.proveedor_id"
+            " WHERE (oc.folio LIKE ? OR EXISTS ("
+            "    SELECT 1 FROM detalle_orden_compra d"
+            "    JOIN proveedores dp ON dp.id = d.proveedor_id"
+            "    WHERE d.orden_compra_id = oc.id"
+            "      AND (dp.nombre LIKE ? OR dp.rfc LIKE ?)"
+            " ) OR EXISTS ("
+            "    SELECT 1 FROM detalle_orden_compra d2"
+            "    JOIN insumos i ON i.id = d2.insumo_id"
+            "    WHERE d2.orden_compra_id = oc.id"
+            "      AND (i.nombre LIKE ? OR i.codigo LIKE ?)))"
+            + where_emp +
+            " ORDER BY oc.created_at DESC",
+            tuple(params),
         )
         return self._con_proveedores(ordenes)
 

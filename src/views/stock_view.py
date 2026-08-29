@@ -19,6 +19,16 @@ class StockView(QWidget):
         self._setup_ui()
         self._load_insumos()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_mov.set_datos([])
+        self.grid_conflicto.set_datos([])
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (insumos, movimientos, conflicto)."""
+        self._load_insumos()
+
     def set_permisos(self, permisos) -> None:
         self.vista.establecer_boton_modulo(
             "nuevo", tiene(permisos, "inventario", "crear"))

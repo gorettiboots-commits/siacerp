@@ -47,6 +47,16 @@ class ClientesView(QWidget):
         self._load_pedidos()
         self._load_clientes()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_cli.set_datos([])
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (pedidos y clientes)."""
+        self._load_pedidos()
+        self._load_clientes()
+
     def set_permisos(self, permisos) -> None:
         self._permiso_editar = tiene(permisos, "clientes", "editar")
         self._permiso_programar = tiene(permisos, "programacion", "editar")

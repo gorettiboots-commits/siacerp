@@ -20,10 +20,13 @@ class ClienteModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa()
+        params: list = [q, q, q] + parametros_empresa()
         return self.db.fetch_all(
             "SELECT * FROM clientes WHERE activo=1 AND "
-            "(nombre LIKE ? OR rfc LIKE ? OR nombre_comercial LIKE ?) ORDER BY nombre",
-            (q, q, q),
+            "(nombre LIKE ? OR rfc LIKE ? OR nombre_comercial LIKE ?)"
+            + where_emp + " ORDER BY nombre",
+            tuple(params),
         )
 
     def obtener(self, cliente_id: int) -> Optional[dict]:
@@ -73,6 +76,7 @@ class PedidoClienteModel:
 
     def buscar(self, termino: str, cliente_id: int | None = None) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa('pc')
         query = (
             "SELECT pc.*, c.nombre as cliente_nombre "
             "FROM pedidos_cliente pc "
@@ -80,8 +84,9 @@ class PedidoClienteModel:
             "WHERE (pc.folio LIKE ? OR c.nombre LIKE ? OR EXISTS ("
             "    SELECT 1 FROM detalle_pedido_cliente d "
             "    WHERE d.pedido_id = pc.id AND d.modelo LIKE ?))"
+            + where_emp
         )
-        params: list = [q, q, q]
+        params: list = [q, q, q] + parametros_empresa()
         if cliente_id:
             query += " AND pc.cliente_id = ?"
             params.append(cliente_id)

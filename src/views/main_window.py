@@ -579,6 +579,44 @@ class MainWindow(QMainWindow):
         self._crear_etiqueta_action.setEnabled(tiene_prog_export)
         self._imprimir_etiquetas_action.setEnabled(tiene_prog_export)
 
+    def _recargar_vistas(self) -> None:
+        """Recarga los datos de todas las vistas tras login/cambio de empresa.
+
+        Asegura que cada pantalla pida datos frescos a la BD usando el
+        empresa_id del usuario recién autenticado.
+        """
+        for vista in (
+            self._view_ordenes,
+            self._view_produccion,
+            self._view_stock,
+            self._view_clientes,
+            self._view_programacion,
+            self._view_dashboard,
+        ):
+            try:
+                vista.recargar()
+            except Exception as exc:
+                print(f"Error recargando {type(vista).__name__}: {exc}")
+
+    def _limpiar_vistas(self) -> None:
+        """Vacía los datos de todas las vistas (logout).
+
+        Evita que queden datos de una empresa en memoria cuando el usuario
+        cierra sesión.
+        """
+        for vista in (
+            self._view_ordenes,
+            self._view_produccion,
+            self._view_stock,
+            self._view_clientes,
+            self._view_programacion,
+            self._view_dashboard,
+        ):
+            try:
+                vista.limpiar()
+            except Exception as exc:
+                print(f"Error limpiando {type(vista).__name__}: {exc}")
+
     def _on_login(self, credentials: dict) -> None:
         try:
             user = AccesosController().autenticar(
@@ -602,6 +640,7 @@ class MainWindow(QMainWindow):
                 self._permisos = set()
             self._stack.setCurrentWidget(self._main_container)
             self._aplicar_permisos()
+            self._recargar_vistas()
             try:
                 self._content_area.setCurrentWidget(self._video_splash)
                 self._splash_player.stop()
@@ -661,6 +700,7 @@ class MainWindow(QMainWindow):
         set_usuario_actual(None)
         establecer_empresa_id(None)
         self._permisos = set()
+        self._limpiar_vistas()
         self._config_action.setEnabled(False)
         self._crear_etiqueta_action.setEnabled(False)
         self._imprimir_etiquetas_action.setEnabled(False)

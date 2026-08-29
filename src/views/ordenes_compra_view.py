@@ -22,6 +22,15 @@ class OrdenesCompraView(QWidget):
         self._setup_ui()
         self._load_ordenes()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_prov.set_datos([])
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (OC y proveedores)."""
+        self._load_ordenes()
+
     def set_permisos(self, permisos) -> None:
         self.vista.establecer_boton_modulo(
             "nueva_orden", tiene(permisos, "ordenes_compra", "crear"))

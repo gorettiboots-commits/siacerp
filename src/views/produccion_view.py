@@ -25,6 +25,20 @@ class ProduccionView(QWidget):
         self._setup_ui()
         self._load_ops()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_modelos.set_datos([])
+        self.grid_variantes.set_datos([])
+        self.grid_bom.set_datos([])
+        self.grid_pt.set_datos([])
+        if hasattr(self, 'kanban'):
+            self.kanban.recargar()
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (OPs, catálogos, PT)."""
+        self._load_ops()
+
     def set_permisos(self, permisos) -> None:
         self._permisos = permisos or set()
         self.vista.establecer_boton_modulo(

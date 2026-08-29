@@ -1,0 +1,22 @@
+name: Create Production Builds
+
+on:
+  push:
+    branches:
+      - main
+      - productivo1
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs_on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: npm install -g eas-cli@latest
+      - run: cd mobile && npm ci
+      - run: cd mobile && eas build --platform android --profile production --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

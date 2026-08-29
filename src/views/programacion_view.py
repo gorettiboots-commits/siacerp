@@ -55,6 +55,15 @@ class ProgramacionView(QWidget):
         self._setup_ui()
         self._cargar_semanas()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.cmb_semana.clear()
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (semanas y tabla)."""
+        self._cargar_semanas()
+
     def set_permisos(self, permisos) -> None:
         self._permiso_eliminar = tiene(permisos, "programacion", "eliminar")
         self.vista.establecer_boton_modulo(

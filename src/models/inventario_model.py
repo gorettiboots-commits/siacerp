@@ -22,9 +22,13 @@ class InsumoModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa()
+        params: list = [q, q, q] + parametros_empresa()
         return self.db.fetch_all(
-            f"SELECT {', '.join(self._COLUMNAS)} FROM insumos WHERE activo = 1 AND (codigo LIKE ? OR nombre LIKE ? OR categoria LIKE ?) ORDER BY nombre",
-            (q, q, q),
+            f"SELECT {', '.join(self._COLUMNAS)} FROM insumos"
+            f" WHERE activo = 1 AND (codigo LIKE ? OR nombre LIKE ?"
+            f" OR categoria LIKE ?){where_emp} ORDER BY nombre",
+            tuple(params),
         )
 
     def listar_categorias(self, excluir_id: Optional[int] = None) -> list[str]:
