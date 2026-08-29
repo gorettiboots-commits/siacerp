@@ -36,6 +36,8 @@ export type TabParamList = {
   OCTab: NavigatorScreenParams<OCStackParamList>;
   ProduccionTab: NavigatorScreenParams<ProduccionStackParamList>;
   EtiquetasTab: NavigatorScreenParams<EtiquetasStackParamList>;
+  AdminTab: undefined;
+  PerfilTab: undefined;
 };
 
 // ─── Root navigator ─────────────────────────────────────────

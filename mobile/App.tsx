@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colores } from './src/theme';
 import type {
   RootStackParamList,
@@ -27,8 +28,10 @@ import { PantallaDetalleOP } from './src/pantallas/PantallaDetalleOP';
 import { PantallaInicio } from './src/pantallas/PantallaInicio';
 import { PantallaFlejes } from './src/pantallas/PantallaFlejes';
 import { PantallaPartidas } from './src/pantallas/PantallaPartidas';
+import { PantallaCerrarSesion } from './src/pantallas/PantallaCerrarSesion';
+import { PantallaSuperAdmin } from './src/pantallas/PantallaSuperAdmin';
 
-import { obtenerUsuarioActual } from './src/servicios/auth';
+import { obtenerUsuarioActual, esSuperAdmin } from './src/servicios/auth';
 import type { UsuarioMovil } from './src/tipos';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -92,9 +95,11 @@ function EtiquetasNavigator() {
   }
 }
 
-function MainTabs() {
+function MainTabs({ onLogout }: { onLogout: () => void }) {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 60 + insets.bottom;
+  const usuario = obtenerUsuarioActual();
+  const admin = esSuperAdmin();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -110,17 +115,82 @@ function MainTabs() {
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
-      <Tab.Screen name="InventarioTab" component={InventarioNavigator} options={{ tabBarLabel: 'Inventario' }} />
-      <Tab.Screen name="OCTab" component={OCNavigator} options={{ tabBarLabel: 'Ordenes' }} />
-      <Tab.Screen name="ProduccionTab" component={ProduccionNavigator} options={{ tabBarLabel: 'Produccion' }} />
-      <Tab.Screen name="EtiquetasTab" component={EtiquetasNavigator} options={{ tabBarLabel: 'Etiquetas' }} />
+      <Tab.Screen
+        name="InventarioTab"
+        component={InventarioNavigator}
+        options={{
+          tabBarLabel: 'Inventario',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cube-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="OCTab"
+        component={OCNavigator}
+        options={{
+          tabBarLabel: 'Ordenes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="receipt-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ProduccionTab"
+        component={ProduccionNavigator}
+        options={{
+          tabBarLabel: 'Producción',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="construct-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="EtiquetasTab"
+        component={EtiquetasNavigator}
+        options={{
+          tabBarLabel: 'Etiquetas',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="pricetag-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      {admin && (
+        <Tab.Screen
+          name="AdminTab"
+          component={PantallaSuperAdmin}
+          options={{
+            tabBarLabel: 'Admin',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="shield-checkmark-outline" size={size} color={color} />
+            ),
+          }}
+        />
+      )}
+      <Tab.Screen
+        name="PerfilTab"
+        options={{
+          tabBarLabel: 'Salir',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="log-out-outline" size={size} color={color} />
+          ),
+        }}
+      >
+        {({ navigation }) => (
+          <PantallaCerrarSesion
+            onLogout={() => {
+              onLogout();
+            }}
+          />
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
 
 export default function Raiz() {
   const [cargando, setCargando] = useState(true);
-  const [usuario, setUsuario] = useState<UsuarioMovil | null>(null);
+  const [sesionActiva, setSesionActiva] = useState<UsuarioMovil | null>(null);
 
   useEffect(() => {
     verificarSesion();
@@ -128,8 +198,12 @@ export default function Raiz() {
 
   const verificarSesion = async () => {
     const u = await obtenerUsuarioActual();
-    setUsuario(u);
+    setSesionActiva(u);
     setCargando(false);
+  };
+
+  const handleLogout = () => {
+    setSesionActiva(null);
   };
 
   if (cargando) {
@@ -144,8 +218,10 @@ export default function Raiz() {
     <SafeAreaProvider>
       <NavigationContainer>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          {usuario ? (
-            <RootStack.Screen name="Main" component={MainTabs} />
+          {sesionActiva ? (
+            <RootStack.Screen name="Main">
+              {() => <MainTabs onLogout={handleLogout} />}
+            </RootStack.Screen>
           ) : (
             <RootStack.Screen name="Auth">
               {() => <AuthNavigator onLogin={() => verificarSesion()} />}

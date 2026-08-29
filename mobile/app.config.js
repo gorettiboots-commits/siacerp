@@ -1,6 +1,6 @@
-import type { ExpoConfig } from 'expo/config';
 
-const config: ExpoConfig = {
+
+const config = {
   name: 'SIAC ERP',
   slug: 'siac-erp',
   version: '1.0.0',
@@ -36,4 +36,4 @@ const config: ExpoConfig = {
   },
 };
 
-export default config;
+module.exports = config;
