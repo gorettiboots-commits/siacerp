@@ -1,0 +1,9 @@
+{
+  "version": "2026.8.30",
+  "url_descarga": "https://github.com/gorettiboots-commits/siacerp/releases/latest",
+  "url_changelog": "https://github.com/gorettiboots-commits/siacerp/blob/main/CHANGELOG.md",
+  "fecha": "2026-08-30",
+  "mensaje": "Módulo Clientes/Pedidos/Programación en móvil, selector de empresa, RLS mejorado, auto-actualizador",
+  "obligatorio": false,
+  "hash_sha256": ""
+}

@@ -392,7 +392,241 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- -----------------------------------------------------------
--- 8. TRIGGERS
+-- 8. CLIENTES, PEDIDOS Y PROGRAMACIÓN (+ empresa_id)
+-- -----------------------------------------------------------
+-- Módulo de clientes, pedidos y programación semanal.
+-- El admin puede crear/editar pedidos y programar desde el móvil.
+
+-- Clientes
+CREATE TABLE IF NOT EXISTS clientes_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    nombre TEXT NOT NULL,
+    rfc TEXT,
+    nombre_comercial TEXT,
+    telefono TEXT,
+    email TEXT,
+    direccion TEXT,
+    activo BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id)
+);
+
+ALTER TABLE clientes_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen clientes de su empresa"
+    ON clientes_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Admin inserta clientes de su empresa"
+    ON clientes_movil FOR INSERT
+    WITH CHECK (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'admin'
+        )
+    );
+
+CREATE POLICY "Admin actualiza clientes de su empresa"
+    ON clientes_movil FOR UPDATE
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'admin'
+        )
+    );
+
+-- Pedidos de cliente
+CREATE TABLE IF NOT EXISTS pedidos_cliente_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    folio TEXT NOT NULL,
+    folio_pedido TEXT,
+    cliente_id BIGINT NOT NULL,
+    cliente_nombre TEXT NOT NULL,
+    fecha_pedido TEXT,
+    fecha_programado TEXT,
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    estatus TEXT NOT NULL DEFAULT 'pendiente',
+    suela TEXT,
+    horma TEXT,
+    observaciones TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id)
+);
+
+ALTER TABLE pedidos_cliente_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen pedidos de su empresa"
+    ON pedidos_cliente_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Admin inserta pedidos de su empresa"
+    ON pedidos_cliente_movil FOR INSERT
+    WITH CHECK (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'admin'
+        )
+    );
+
+CREATE POLICY "Admin actualiza pedidos de su empresa"
+    ON pedidos_cliente_movil FOR UPDATE
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'admin'
+        )
+    );
+
+-- Detalle de pedido
+CREATE TABLE IF NOT EXISTS detalle_pedido_cliente_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    pedido_id BIGINT NOT NULL,
+    modelo TEXT NOT NULL,
+    piel TEXT,
+    color TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id),
+    FOREIGN KEY (pedido_id, empresa_id)
+        REFERENCES pedidos_cliente_movil(id, empresa_id)
+);
+
+ALTER TABLE detalle_pedido_cliente_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen detalle pedidos de su empresa"
+    ON detalle_pedido_cliente_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+-- Puntos/tallas por detalle de pedido
+CREATE TABLE IF NOT EXISTS detalle_pedido_puntos_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    detalle_id BIGINT NOT NULL,
+    talla_id BIGINT NOT NULL,
+    talla TEXT NOT NULL,
+    pares INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id),
+    FOREIGN KEY (detalle_id, empresa_id)
+        REFERENCES detalle_pedido_cliente_movil(id, empresa_id)
+);
+
+ALTER TABLE detalle_pedido_puntos_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen puntos pedidos de su empresa"
+    ON detalle_pedido_puntos_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+-- Programación semanal
+CREATE TABLE IF NOT EXISTS programacion_semana_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    nombre TEXT NOT NULL,
+    fecha_inicio TEXT NOT NULL,
+    orden INTEGER NOT NULL DEFAULT 0,
+    activo BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id)
+);
+
+ALTER TABLE programacion_semana_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen semanas de su empresa"
+    ON programacion_semana_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+-- Líneas de programación
+CREATE TABLE IF NOT EXISTS programacion_lineas_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    semana_id BIGINT NOT NULL,
+    orden INTEGER NOT NULL DEFAULT 0,
+    folio_prog TEXT,
+    folio_pedido TEXT,
+    cliente TEXT,
+    modelo TEXT,
+    piel TEXT,
+    color TEXT,
+    fecha_prog TEXT,
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    estatus TEXT NOT NULL DEFAULT 'programacion_incompleta',
+    pedido_id BIGINT,
+    detalle_pedido_id BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id),
+    FOREIGN KEY (semana_id, empresa_id)
+        REFERENCES programacion_semana_movil(id, empresa_id)
+);
+
+ALTER TABLE programacion_lineas_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen líneas de su empresa"
+    ON programacion_lineas_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+-- Tallas por línea de programación
+CREATE TABLE IF NOT EXISTS programacion_linea_tallas_movil (
+    id BIGINT NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    linea_id BIGINT NOT NULL,
+    talla TEXT NOT NULL,
+    orden NUMERIC NOT NULL DEFAULT 0,
+    pares INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, empresa_id),
+    FOREIGN KEY (linea_id, empresa_id)
+        REFERENCES programacion_lineas_movil(id, empresa_id)
+);
+
+ALTER TABLE programacion_linea_tallas_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios leen tallas línea de su empresa"
+    ON programacion_linea_tallas_movil FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+-- -----------------------------------------------------------
+-- 9. TRIGGERS
 -- -----------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION trigger_actualizar_timestamp()

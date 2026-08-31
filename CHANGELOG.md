@@ -6,16 +6,53 @@
 
 ---
 
-## [Unreleased] — 2026-08-26
+## [Unreleased] — 2026-08-30
 
 ### Added
-- **Rol super_admin:** Usuario con acceso total a todas las empresas
+- **Módulo Clientes, Pedidos y Programación en app móvil:**
+  - Pantalla de listado de clientes con búsqueda
+  - Pantalla de listado de pedidos con filtros por estatus
+  - Pantalla de detalle de pedido con matriz de tallas
+  - Pantalla de programación semanal con selector de semana
+  - Solo visible para rol `admin` (no super_admin)
+  - Tab «Clientes» y tab «Prog.» en el tab bar
+- **Selector de empresa para super_admin en app móvil:**
+  - Pantalla `PantallaCambiarEmpresa` para cambiar contexto
+  - Barra de empresa en la parte superior de la app
+  - Botón «Ver datos» en cada empresa del panel Admin
+  - Botón «Quitar filtro» para volver a vista global
+  - Todas las pantallas se recargan al cambiar empresa
+  - Sistema de listeners `registrarCambioEmpresa()`
+- **Panel de administración móvil mejorado:**
+  - Botón «Activar/Desactivar» por empresa con confirmación
+  - Al desactivar: bloquea login en desktop y móvil
+  - Botón «Ver datos» para cambiar contexto
+- **Protocolo de validación RLS en AGENTS.md (sección 6.4):**
+  - Reglas D-11 a D-17 para validación de Row Level Security
+  - Template SQL completo para tablas multi-tenant
+  - Errores comunes a evitar
+  - Checklist de conformidad actualizado (12 items nuevos)
+- **Template de servicios TypeScript multi-tenant (sección 6.5):**
+  - Reglas D-18 a D-20 para servicios del móvil
+  - Template completo con 5 funciones (listar, buscar, obtener, crear, actualizar)
+  - Patrón `obtenerEmpresaId()` para super_admin context
+- **Migración SQL `migrar_rls_super_admin.sql`:**
+  - Función `es_super_admin()` (SECURITY DEFINER)
+  - Función `empresa_esta_activa()` (SECURITY DEFINER)
+  - Función `verificar_login_movil()` (SECURITY DEFINER)
+  - 20+ políticas de bypass RLS para super_admin
+  - Políticas de empresa activa en todas las tablas
+  - 5 políticas DELETE faltantes agregadas
+  - `empresa_id DROP NOT NULL` para perfiles de super_admin
+- **Verificación de empresa activa en login:**
+  - App móvil: verifica empresa antes de permitir login (excepto super_admin)
+  - Escritorio: verifica empresa vía Supabase después de login local
+  - Mensaje de error «Empresa desactivada» cuando aplica
+- **Rol super_admin:** Usuario con acceso total a todas las empresas (funcionalidad interna)
   - Función SQL `es_super_admin()` (SECURITY DEFINER) para evitar recursión en RLS
   - Policies RLS actualizadas: super_admin ve todos los datos de todas las empresas
-  - Credenciales: `superadmin@siac.com` / `superadmin123`
-  - Helper `esSuperAdmin()` en auth service del móvil
 - **Dashboard de super_admin en escritorio:**
-  - Botón "Admin" en toolbar (visible solo para super_admin)
+  - Panel de administración interna (solo visible con rol super_admin)
   - KPIs globales: total empresas, usuarios, insumos, OCs, OPs
   - Tabla de empresas con nombre, RFC, estado y métricas
   - Tabla de usuarios con username, nombre, rol, estado
@@ -80,6 +117,11 @@
   - Credenciales de prueba
 
 ### Changed
+- **AGENTS.md:** Agregadas reglas D-11 a D-20 (RLS + servicios TypeScript multi-tenant)
+- **Checklist de conformidad:** 12 items nuevos de verificación RLS y TypeScript
+- **App móvil auth.ts:** Verifica empresa activa antes de login, soporte `empresaContexto`
+- **App móvil App.tsx:** Barra de empresa para super_admin, recarga automática al cambiar contexto
+- **Escritorio main_window.py:** Verifica empresa activa vía Supabase después de login local
 - **Dashboard del sistema:** Pantalla de resumen con 6 tarjetas KPI clicables
   - OC pendientes, compras del mes, producción en curso, insumos stock bajo, pares en PT, movimientos del día
   - Gráfica de barras de compras por mes (QPainter)
@@ -274,17 +316,18 @@
 |---|---|
 | **Commits totales** | 93+ |
 | **Primera actividad** | 2026-08-04 |
-| **Última actividad** | 2026-08-26 |
+| **Última actividad** | 2026-08-30 |
 | **Contribuyentes** | 3 |
 | **Pull requests mergeados** | 10+ |
 | **Componentes aprobados** | 11 |
 | **Archivos de código fuente** | 80+ |
 | **Pruebas pytest** | 17 |
-| **App móvil (pantallas)** | 10 |
-| **Servicios móviles** | 4 |
+| **App móvil (pantallas)** | 14 |
+| **Servicios móviles** | 7 |
 | **Empresas multi-tenant** | 3 |
 | **Tablas con empresa_id** | 25 |
 | **Roles de usuario** | 3 (admin, operador, super_admin) |
+| **Reglas AGENTS.md** | 30+ (D-01 a D-20, N-*, A-*, etc.) |
 
 ---
 

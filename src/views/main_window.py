@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QUrl
-from PySide6.QtGui import QAction, QFont, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QPixmap, QShortcut
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from PySide6.QtWidgets import (
@@ -87,6 +87,9 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("SIAC ERP")
+        _icono = Path(__file__).resolve().parent / "assets" / "icono_siac.png"
+        if _icono.exists():
+            self.setWindowIcon(QIcon(str(_icono)))
         disp = QApplication.primaryScreen().availableGeometry()
         min_w = min(1100, int(disp.width() * 0.95))
         min_h = min(700, int(disp.height() * 0.90))
@@ -631,6 +634,26 @@ class MainWindow(QMainWindow):
             return
 
         if user:
+            # Verificar que la empresa esté activa en Supabase
+            rol = user.get("rol", "")
+            if rol != "super_admin":
+                try:
+                    from src.utils.supabase_service import SupabaseService
+                    sb = SupabaseService()
+                    if sb.configurado:
+                        licencia = sb.verificar_licencia()
+                        if not licencia.get('ok'):
+                            from src.views.login_view import LoginView
+                            for w in self._stack.findChildren(LoginView):
+                                w.lbl_error.setText(
+                                    licencia.get('error', 'Empresa no disponible'))
+                                w.lbl_error.setVisible(True)
+                                w.btn_login.setEnabled(True)
+                                w.btn_login.setText("Iniciar Sesion")
+                            return
+                except Exception:
+                    pass  # Si Supabase no está disponible, continuar con login local
+
             self._current_user = user
             set_usuario_actual(user)
             establecer_empresa_id(user.get('empresa_id'))

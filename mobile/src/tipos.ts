@@ -88,6 +88,87 @@ export interface DetalleOCMovil {
   precio_unitario: number;
 }
 
+// ─── Clientes ─────────────────────────────────────────────
+
+export interface ClienteMovil {
+  id: number;
+  empresa_id: string;
+  nombre: string;
+  rfc?: string;
+  nombre_comercial?: string;
+  telefono?: string;
+  email?: string;
+  direccion?: string;
+  activo: boolean;
+}
+
+// ─── Pedidos de Cliente ────────────────────────────────────
+
+export interface PedidoClienteMovil {
+  id: number;
+  empresa_id: string;
+  folio: string;
+  folio_pedido?: string;
+  cliente_id: number;
+  cliente_nombre: string;
+  fecha_pedido?: string;
+  fecha_programado?: string;
+  total_pares: number;
+  estatus: string;
+  suela?: string;
+  horma?: string;
+  observaciones?: string;
+}
+
+export interface DetallePedidoMovil {
+  id: number;
+  empresa_id: string;
+  pedido_id: number;
+  modelo: string;
+  piel?: string;
+  color?: string;
+  puntos?: PuntoPedidoMovil[];
+}
+
+export interface PuntoPedidoMovil {
+  talla_id: number;
+  talla: string;
+  pares: number;
+}
+
+// ─── Programación ──────────────────────────────────────────
+
+export interface ProgramacionSemanaMovil {
+  id: number;
+  empresa_id: string;
+  nombre: string;
+  fecha_inicio: string;
+  orden: number;
+  activo: boolean;
+}
+
+export interface ProgramacionLineaMovil {
+  id: number;
+  empresa_id: string;
+  semana_id: number;
+  semana?: string;
+  folio_prog?: string;
+  folio_pedido?: string;
+  cliente?: string;
+  modelo?: string;
+  piel?: string;
+  color?: string;
+  fecha_prog?: string;
+  total_pares: number;
+  estatus: string;
+  tallas?: ProgramacionTallaMovil[];
+}
+
+export interface ProgramacionTallaMovil {
+  talla: string;
+  pares: number;
+}
+
 // ─── Produccion ────────────────────────────────────────────
 
 export interface OrdenProduccionMovil {

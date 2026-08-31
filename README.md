@@ -895,95 +895,11 @@ Las siguientes tablas tienen la columna `empresa_id` para aislamiento multi-tena
 | `configuracion_empresa` | Datos de empresa |
 | `logs_sistema` | Logs del sistema |
 
-### Credenciales de prueba
+### Credenciales por defecto
 
-| Empresa | Email | Password | Rol |
-|---|---|---|---|
-| SIAC ERP | `admin@siac.com` | `admin123` | admin |
-| SIAC ERP | `operador@siac.com` | `operador123` | operador |
-| Calzado Durán | `admin@durancalzado.com` | `admin123` | admin |
-| Calzado Rivera | `admin@riveracalzado.com` | `admin123` | admin |
-| **Global** | `superadmin@siac.com` | `superadmin123` | **super_admin** |
-
-### Super Admin (gestión de licencias)
-
-El rol `super_admin` tiene acceso total a **todas las empresas** del sistema. Está diseñado para:
-
-- **Gestionar licencias**: ver y activar/desactivar empresas
-- **Supervisar el sistema**: ver estadísticas globales de todas las empresas
-- **Administrar usuarios**: ver todos los usuarios de todas las empresas
-- **Soporte técnico**: acceder a datos de cualquier empresa para diagnóstico
-
-#### Dashboard de Super Admin en el escritorio
-
-Al hacer login con `superadmin@siac.com`, aparece el botón **"Admin"** en el toolbar:
-
-| Sección | Contenido |
-|---|---|
-| **KPIs globales** | Total empresas, usuarios, insumos, OCs, OPs |
-| **Tabla empresas** | Nombre, RFC, estado, métricas por empresa |
-| **Tabla usuarios** | Username, nombre, rol, estado, empresa |
-| **Acciones** | Botón activar/desactivar por empresa |
-
-#### Cómo funciona el aislamiento
-
-```
-Rol: super_admin (empresa_id: NULL)
-  → RLS: es_super_admin(uid) retorna TRUE
-  → Ve TODOS los datos de TODAS las empresas
-  → Puede gestionar licencias
-
-Rol: admin (empresa_id: UUID)
-  → RLS: empresa_id = su empresa
-  → Solo ve datos de SU empresa
-
-Rol: operador (empresa_id: UUID)
-  → RLS: empresa_id = su empresa
-  → Solo ve datos de SU empresa
-```
-
-#### Registrar una nueva empresa
-
-```bash
-python scripts/registrar_empresa.py \
-    --nombre "Nombre Empresa" \
-    --rfc "RFC000000XXX" \
-    --email-admin "admin@empresa.com" \
-    --password-admin "admin123"
-```
-
-#### App móvil: Super Admin
-
-El super_admin también puede hacer login en la app móvil. En el servicio de auth se incluye el helper `esSuperAdmin()` para verificar el rol.
-
-#### Funciones del super_admin en código
-
-```python
-from src.utils.supabase_service import SupabaseService
-
-sb = SupabaseService()
-sb.login('superadmin@siac.com', 'superadmin123')
-
-# Verificar licencia
-licencia = sb.verificar_licencia()
-
-# Listar todas las empresas
-empresas = sb.service_call('/rest/v1/empresas?select=*')
-
-# Listar todos los usuarios
-usuarios = sb.listar_usuarios_empresa()  # Ve todos por ser super_admin
-
-# Activar/desactivar empresa
-sb.service_call('/rest/v1/empresas?id=eq.UUID', 'PATCH', {'activo': False})
-```
-
-#### Resumen de permisos por rol
-
-| Rol | Empresas | Datos | Acciones |
-|---|---|---|---|
-| `super_admin` | Todas | Todos | Gestionar empresas, ver todo |
-| `admin` | Su empresa | Su empresa | CRUD en su empresa |
-| `operador` | Su empresa | Su empresa | Lectura + producción |
+| Usuario | Contraseña | Rol |
+|---|---|---|
+| `admin` | Se configura en el instalador | admin |
 
 ---
 
@@ -1142,8 +1058,8 @@ Todos los derechos reservados — © 2026.
 | **Pruebas pytest** | 17 |
 | **Archivos de código** | 60+ |
 | **Primer commit** | 2026-08-04 |
-| **Último commit** | 2026-08-26 |
-| **Días de desarrollo** | 22 |
+| **Último commit** | 2026-08-30 |
+| **Días de desarrollo** | 26 |
 
 ---
 

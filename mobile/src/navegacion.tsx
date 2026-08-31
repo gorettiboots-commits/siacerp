@@ -29,6 +29,16 @@ export type EtiquetasStackParamList = {
   Preview: undefined;
 };
 
+export type ClientesPedidosStackParamList = {
+  ListaClientes: undefined;
+  ListaPedidos: undefined;
+  DetallePedido: { pedidoId: number; folio: string };
+};
+
+export type ProgramacionStackParamList = {
+  ProgramacionLista: undefined;
+};
+
 // ─── Tabs principales ───────────────────────────────────────
 
 export type TabParamList = {
@@ -36,6 +46,8 @@ export type TabParamList = {
   OCTab: NavigatorScreenParams<OCStackParamList>;
   ProduccionTab: NavigatorScreenParams<ProduccionStackParamList>;
   EtiquetasTab: NavigatorScreenParams<EtiquetasStackParamList>;
+  ClientesPedidosTab: NavigatorScreenParams<ClientesPedidosStackParamList>;
+  ProgramacionTab: NavigatorScreenParams<ProgramacionStackParamList>;
   AdminTab: undefined;
   PerfilTab: undefined;
 };

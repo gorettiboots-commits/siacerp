@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colores, fuentes } from '../theme';
 import { supabase } from '../lib/supabase';
+import { cambiarEmpresaContexto } from '../servicios/auth';
 
 interface EmpresaStats {
   id: string;
@@ -31,6 +33,7 @@ interface UsuarioInfo {
   nombre_completo: string;
   rol: string;
   activo: boolean;
+  empresa_id?: string;
 }
 
 function TarjetaKPI({ titulo, valor, color }: { titulo: string; valor: string; color: string }) {
@@ -55,6 +58,7 @@ export function PantallaSuperAdmin() {
   const [empresas, setEmpresas] = useState<EmpresaStats[]>([]);
   const [empresaSeleccionada, setEmpresaSeleccionada] = useState<string | null>(null);
   const [usuarios, setUsuarios] = useState<UsuarioInfo[]>([]);
+  const [cambiandoEstado, setCambiandoEstado] = useState<string | null>(null);
 
   const cargarDatos = async () => {
     if (!supabase) return;
@@ -75,26 +79,22 @@ export function PantallaSuperAdmin() {
       let totalOps = 0;
 
       for (const emp of empresasData) {
-        // Contar usuarios
         const { count: usCount } = await supabase
           .from('perfiles_usuario')
           .select('*', { count: 'exact', head: true })
           .eq('empresa_id', emp.id)
           .eq('activo', true);
 
-        // Contar insumos
         const { count: insCount } = await supabase
           .from('insumos_movil')
           .select('*', { count: 'exact', head: true })
           .eq('empresa_id', emp.id);
 
-        // Contar OCs
         const { count: ocCount } = await supabase
           .from('ordenes_compra_movil')
           .select('*', { count: 'exact', head: true })
           .eq('empresa_id', emp.id);
 
-        // Contar OPs
         const { count: opCount } = await supabase
           .from('ordenes_produccion_movil')
           .select('*', { count: 'exact', head: true })
@@ -131,28 +131,37 @@ export function PantallaSuperAdmin() {
         total_ops: totalOps,
       });
 
-      // Cargar todos los usuarios si no hay empresa seleccionada
-      if (!empresaSeleccionada) {
-        await cargarUsuarios();
+      // Si hay empresa seleccionada, recargar sus usuarios
+      if (empresaSeleccionada) {
+        await cargarUsuarios(empresaSeleccionada);
+      } else {
+        await cargarTodosUsuarios();
       }
     } catch (e) {
       console.error('Error cargando datos super admin:', e);
     }
   };
 
-  const cargarUsuarios = async (empresaId?: string) => {
+  const cargarUsuarios = async (empresaId: string) => {
     if (!supabase) return;
 
-    let query = supabase
+    const { data } = await supabase
       .from('perfiles_usuario')
-      .select('id, username, nombre_completo, rol, activo')
+      .select('id, username, nombre_completo, rol, activo, empresa_id')
+      .eq('empresa_id', empresaId)
       .order('username');
 
-    if (empresaId) {
-      query = query.eq('empresa_id', empresaId);
-    }
+    setUsuarios(data || []);
+  };
 
-    const { data } = await query;
+  const cargarTodosUsuarios = async () => {
+    if (!supabase) return;
+
+    const { data } = await supabase
+      .from('perfiles_usuario')
+      .select('id, username, nombre_completo, rol, activo, empresa_id')
+      .order('username');
+
     setUsuarios(data || []);
   };
 
@@ -174,48 +183,156 @@ export function PantallaSuperAdmin() {
   const onEmpresaPress = async (empresaId: string) => {
     const nuevaSeleccion = empresaSeleccionada === empresaId ? null : empresaId;
     setEmpresaSeleccionada(nuevaSeleccion);
-    await cargarUsuarios(nuevaSeleccion || undefined);
+    if (nuevaSeleccion) {
+      await cargarUsuarios(nuevaSeleccion);
+    } else {
+      await cargarTodosUsuarios();
+    }
+  };
+
+  const toggleEmpresa = async (empresaId: string, activoActual: boolean, nombre: string) => {
+    const accion = activoActual ? 'desactivar' : 'activar';
+    Alert.alert(
+      `${accion.charAt(0).toUpperCase() + accion.slice(1)} empresa`,
+      `¿Desea ${accion} la empresa "${nombre}"?\n\n${activoActual ? 'Los usuarios no podrán iniciar sesión en desktop ni móvil.' : 'Los usuarios podrán iniciar sesión nuevamente.'}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: accion.charAt(0).toUpperCase() + accion.slice(1),
+          style: activoActual ? 'destructive' : 'default',
+          onPress: async () => {
+            if (!supabase) return;
+            setCambiandoEstado(empresaId);
+            try {
+              const { error } = await supabase
+                .from('empresas')
+                .update({ activo: !activoActual })
+                .eq('id', empresaId);
+
+              if (error) {
+                Alert.alert('Error', `No se pudo ${accion} la empresa: ${error.message}`);
+              } else {
+                Alert.alert('Éxito', `Empresa "${nombre}" ${accion}da correctamente.`);
+                await cargarDatos();
+              }
+            } catch (e) {
+              Alert.alert('Error', `No se pudo ${accion} la empresa.`);
+            }
+            setCambiandoEstado(null);
+          },
+        },
+      ],
+    );
   };
 
   const renderEmpresa = ({ item }: { item: EmpresaStats }) => (
-    <Pressable
+    <View
       style={[
         styles.empresaCard,
         empresaSeleccionada === item.id && styles.empresaCardSeleccionada,
         !item.activo && styles.empresaCardInactiva,
       ]}
-      onPress={() => onEmpresaPress(item.id)}
     >
-      <View style={styles.empresaHeader}>
-        <Ionicons name="business" size={20} color={item.activo ? colores.primario : colores.textoSuave} />
-        <View style={styles.empresaInfo}>
-          <Text style={styles.empresaNombre}>{item.nombre}</Text>
-          {item.rfc && <Text style={styles.empresaRfc}>RFC: {item.rfc}</Text>}
+      <Pressable
+        style={styles.empresaPressable}
+        onPress={() => onEmpresaPress(item.id)}
+      >
+        <View style={styles.empresaHeader}>
+          <Ionicons
+            name="business"
+            size={20}
+            color={item.activo ? colores.primario : colores.textoSuave}
+          />
+          <View style={styles.empresaInfo}>
+            <Text style={styles.empresaNombre}>{item.nombre}</Text>
+            {item.rfc && <Text style={styles.empresaRfc}>RFC: {item.rfc}</Text>}
+          </View>
+          <View
+            style={[
+              styles.estadoBadge,
+              { backgroundColor: item.activo ? '#d1fae5' : '#fee2e2' },
+            ]}
+          >
+            <Text
+              style={[
+                styles.estadoTexto,
+                { color: item.activo ? colores.exito : colores.peligro },
+              ]}
+            >
+              {item.activo ? 'Activa' : 'Inactiva'}
+            </Text>
+          </View>
         </View>
-        <View style={[styles.estadoBadge, { backgroundColor: item.activo ? '#d1fae5' : '#fee2e2' }]}>
-          <Text style={[styles.estadoTexto, { color: item.activo ? colores.exito : colores.peligro }]}>
-            {item.activo ? 'Activa' : 'Inactiva'}
+        <View style={styles.empresaStats}>
+          <Text style={styles.statTexto}>{item.usuarios} usuarios</Text>
+          <Text style={styles.statTexto}>{item.insumos} insumos</Text>
+          <Text style={styles.statTexto}>{item.ocs} OCs</Text>
+          <Text style={styles.statTexto}>{item.ops} OPs</Text>
+        </View>
+      </Pressable>
+
+      {/* Botones de acción */}
+      <View style={styles.botonesRow}>
+        {/* Cambiar contexto */}
+        {item.activo && (
+          <Pressable
+            style={[styles.botonAccion, { backgroundColor: '#EFF6FF' }]}
+            onPress={() => cambiarEmpresaContexto(item.id, item.nombre)}
+          >
+            <Ionicons name="swap-horizontal" size={14} color={colores.primario} />
+            <Text style={[styles.textoBotonAccion, { color: colores.primario }]}>
+              Ver datos
+            </Text>
+          </Pressable>
+        )}
+
+        {/* Activar/desactivar */}
+        <Pressable
+          style={[styles.botonAccion, { backgroundColor: item.activo ? '#FEE2E2' : '#D1FAE5' }]}
+          onPress={() => toggleEmpresa(item.id, item.activo, item.nombre)}
+          disabled={cambiandoEstado === item.id}
+        >
+          {cambiandoEstado === item.id ? (
+            <ActivityIndicator size="small" color={colores.textoSuave} />
+          ) : (
+            <Ionicons
+              name={item.activo ? 'ban-outline' : 'checkmark-circle-outline'}
+              size={14}
+              color={item.activo ? colores.peligro : colores.exito}
+            />
+          )}
+          <Text
+            style={[styles.textoBotonAccion, { color: item.activo ? colores.peligro : colores.exito }]}>
+            {item.activo ? 'Desactivar' : 'Activar'}
           </Text>
-        </View>
+        </Pressable>
       </View>
-      <View style={styles.empresaStats}>
-        <Text style={styles.statTexto}>{item.usuarios} usuarios</Text>
-        <Text style={styles.statTexto}>{item.insumos} insumos</Text>
-        <Text style={styles.statTexto}>{item.ocs} OCs</Text>
-        <Text style={styles.statTexto}>{item.ops} OPs</Text>
-      </View>
-    </Pressable>
+    </View>
   );
 
   const renderUsuario = ({ item }: { item: UsuarioInfo }) => (
     <View style={styles.usuarioCard}>
       <Ionicons name="person" size={16} color={colores.textoSuave} />
       <View style={styles.usuarioInfo}>
-        <Text style={styles.usuarioNombre}>{item.nombre_completo || item.username}</Text>
-        <Text style={styles.usuarioRol}>{item.rol} — @{item.username}</Text>
+        <Text style={styles.usuarioNombre}>
+          {item.nombre_completo || item.username}
+        </Text>
+        <Text style={styles.usuarioRol}>
+          {item.rol} — @{item.username}
+        </Text>
       </View>
-      <View style={[styles.estadoBadge, { backgroundColor: item.activo ? '#d1fae5' : '#fee2e2' }]}>
-        <Text style={[styles.estadoTexto, { color: item.activo ? colores.exito : colores.peligro }]}>
+      <View
+        style={[
+          styles.estadoBadge,
+          { backgroundColor: item.activo ? '#d1fae5' : '#fee2e2' },
+        ]}
+      >
+        <Text
+          style={[
+            styles.estadoTexto,
+            { color: item.activo ? colores.exito : colores.peligro },
+          ]}
+        >
           {item.activo ? 'Activo' : 'Inactivo'}
         </Text>
       </View>
@@ -232,6 +349,10 @@ export function PantallaSuperAdmin() {
       </SafeAreaView>
     );
   }
+
+  const empresaSeleccionadaInfo = empresaSeleccionada
+    ? empresas.find((e) => e.id === empresaSeleccionada)
+    : null;
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -263,18 +384,24 @@ export function PantallaSuperAdmin() {
               scrollEnabled={false}
             />
 
-            {/* Lista de usuarios */}
+            {/* Sección de usuarios */}
             <Text style={styles.seccionTitulo}>
-              Usuarios {empresaSeleccionada ? `(${usuarios.length})` : `del Sistema (${usuarios.length})`}
+              {empresaSeleccionadaInfo
+                ? `Usuarios de ${empresaSeleccionadaInfo.nombre}`
+                : 'Todos los Usuarios'}
+              {' '}({usuarios.length})
             </Text>
+
             {empresaSeleccionada && (
               <Pressable
                 style={styles.botonLimpiar}
                 onPress={() => onEmpresaPress(empresaSeleccionada)}
               >
+                <Ionicons name="close-circle" size={14} color={colores.primario} />
                 <Text style={styles.botonLimpiarTexto}>Mostrar todos</Text>
               </Pressable>
             )}
+
             <FlatList
               data={usuarios}
               renderItem={renderUsuario}
@@ -350,10 +477,13 @@ const styles = StyleSheet.create({
   empresaCard: {
     backgroundColor: colores.tarjeta,
     borderRadius: 10,
-    padding: 12,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colores.borde,
+    overflow: 'hidden',
+  },
+  empresaPressable: {
+    padding: 12,
   },
   empresaCardSeleccionada: {
     borderColor: colores.primario,
@@ -401,6 +531,23 @@ const styles = StyleSheet.create({
     fontSize: fuentes.pequena,
     fontWeight: '600',
   },
+  botonesRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: colores.borde,
+  },
+  botonAccion: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  textoBotonAccion: {
+    fontSize: fuentes.etiqueta,
+    fontWeight: '600',
+  },
   usuarioCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -425,12 +572,15 @@ const styles = StyleSheet.create({
     color: colores.textoSuave,
   },
   botonLimpiar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: colores.primario + '15',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
     marginBottom: 8,
+    gap: 4,
   },
   botonLimpiarTexto: {
     fontSize: fuentes.pequena,
