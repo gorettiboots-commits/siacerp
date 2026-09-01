@@ -4,7 +4,7 @@
 ; ============================================================
 
 #define MyAppName "SIAC ERP"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "Mario Felipe Luevano"
 #define MyAppExeName "SIAC_ERP.exe"
 #define MySourceDir "dist\SIAC_ERP"
@@ -52,7 +52,12 @@ var
   EditDomicilio: TNewMemo;
   EditTelefono: TNewEdit;
   EditEmail: TNewEdit;
+  EditAdminUser: TNewEdit;
+  EditAdminPassword: TNewEdit;
+  EditAdminPassword2: TNewEdit;
+  EditAdminNombre: TNewEdit;
   PaginaEmpresaID: Integer;
+  PaginaAdminID: Integer;
 
 procedure CrearPaginaEmpresa;
 var
@@ -146,10 +151,73 @@ begin
   EditEmail.Width := ScaleX(360);
 end;
 
+procedure CrearPaginaAdmin;
+var
+  Pagina: TWizardPage;
+  L1, L2, L3, L4: TLabel;
+begin
+  Pagina := CreateCustomPage(wpSelectDir, 'Usuario Administrador',
+    'Configure las credenciales del usuario administrador del sistema.');
+  PaginaAdminID := Pagina.ID;
+
+  L1 := TLabel.Create(Pagina);
+  L1.Parent := Pagina.Surface;
+  L1.Caption := 'Nombre de usuario:';
+  L1.Left := ScaleX(16);
+  L1.Top := ScaleY(16);
+
+  EditAdminUser := TNewEdit.Create(Pagina);
+  EditAdminUser.Parent := Pagina.Surface;
+  EditAdminUser.Left := ScaleX(16);
+  EditAdminUser.Top := ScaleY(36);
+  EditAdminUser.Width := ScaleX(360);
+  EditAdminUser.Text := 'admin';
+
+  L2 := TLabel.Create(Pagina);
+  L2.Parent := Pagina.Surface;
+  L2.Caption := 'Contrasena:';
+  L2.Left := ScaleX(16);
+  L2.Top := ScaleY(76);
+
+  EditAdminPassword := TNewEdit.Create(Pagina);
+  EditAdminPassword.Parent := Pagina.Surface;
+  EditAdminPassword.Left := ScaleX(16);
+  EditAdminPassword.Top := ScaleY(96);
+  EditAdminPassword.Width := ScaleX(360);
+  EditAdminPassword.PasswordChar := '*';
+
+  L3 := TLabel.Create(Pagina);
+  L3.Parent := Pagina.Surface;
+  L3.Caption := 'Confirmar contrasena:';
+  L3.Left := ScaleX(16);
+  L3.Top := ScaleY(136);
+
+  EditAdminPassword2 := TNewEdit.Create(Pagina);
+  EditAdminPassword2.Parent := Pagina.Surface;
+  EditAdminPassword2.Left := ScaleX(16);
+  EditAdminPassword2.Top := ScaleY(156);
+  EditAdminPassword2.Width := ScaleX(360);
+  EditAdminPassword2.PasswordChar := '*';
+
+  L4 := TLabel.Create(Pagina);
+  L4.Parent := Pagina.Surface;
+  L4.Caption := 'Nombre completo (opcional):';
+  L4.Left := ScaleX(16);
+  L4.Top := ScaleY(196);
+
+  EditAdminNombre := TNewEdit.Create(Pagina);
+  EditAdminNombre.Parent := Pagina.Surface;
+  EditAdminNombre.Left := ScaleX(16);
+  EditAdminNombre.Top := ScaleY(216);
+  EditAdminNombre.Width := ScaleX(360);
+  EditAdminNombre.Text := 'Administrador del Sistema';
+end;
+
 procedure InitializeWizard;
 begin
   CrearPaginaEmpresa;
   CrearPaginaContacto;
+  CrearPaginaAdmin;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -160,6 +228,24 @@ begin
     if Trim(EditNombreEmpresa.Text) = '' then
     begin
       MsgBox('Debe ingresar el nombre de la empresa.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+  if CurPageID = PaginaAdminID then
+  begin
+    if Trim(EditAdminUser.Text) = '' then
+    begin
+      MsgBox('Debe ingresar un nombre de usuario.', mbError, MB_OK);
+      Result := False;
+    end
+    else if Trim(EditAdminPassword.Text) = '' then
+    begin
+      MsgBox('Debe ingresar una contrasena.', mbError, MB_OK);
+      Result := False;
+    end
+    else if EditAdminPassword.Text <> EditAdminPassword2.Text then
+    begin
+      MsgBox('Las contrasenas no coinciden.', mbError, MB_OK);
       Result := False;
     end;
   end;
@@ -185,6 +271,10 @@ begin
       Params := Params + '--telefono "' + EditTelefono.Text + '" ';
     if Trim(EditEmail.Text) <> '' then
       Params := Params + '--email "' + EditEmail.Text + '" ';
+    Params := Params + '--admin-user "' + EditAdminUser.Text + '" ';
+    Params := Params + '--admin-password "' + EditAdminPassword.Text + '" ';
+    if Trim(EditAdminNombre.Text) <> '' then
+      Params := Params + '--admin-nombre "' + EditAdminNombre.Text + '" ';
     Exec(ExePath, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;

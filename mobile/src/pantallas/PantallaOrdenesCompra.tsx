@@ -14,7 +14,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colores, fuentes } from '../theme';
 import type { OCStackParamList } from '../navegacion';
 import type { OrdenCompraMovil } from '../tipos';
-import { listarOrdenesCompra, buscarOrdenesCompra } from '../servicios/ordenes_compra';
+import { listarOCs, buscarOCs } from '../servicios/ordenes_compra';
 
 type Nav = NativeStackNavigationProp<OCStackParamList, 'ListaOCs'>;
 
@@ -33,14 +33,19 @@ export function PantallaOrdenesCompra() {
   const [cargando, setCargando] = useState(true);
 
   const cargarOrdenes = async (filtro?: string) => {
-    setCargando(true);
-    const resultado = termino.trim()
-      ? await buscarOrdenesCompra(termino)
-      : await listarOrdenesCompra(filtro || undefined);
-    if (resultado.ok) {
-      setOrdenes(resultado.datos);
+    try {
+      setCargando(true);
+      const resultado = termino.trim()
+        ? await buscarOCs(termino)
+        : await listarOCs(filtro || undefined);
+      if (resultado.ok) {
+        setOrdenes(resultado.datos);
+      }
+      setCargando(false);
+    } catch (e: any) {
+      console.error('[OC] Error:', e.message);
+      setCargando(false);
     }
-    setCargando(false);
   };
 
   useEffect(() => {
@@ -50,8 +55,8 @@ export function PantallaOrdenesCompra() {
   const handleBuscar = async () => {
     setCargando(true);
     const resultado = termino.trim()
-      ? await buscarOrdenesCompra(termino)
-      : await listarOrdenesCompra(ordenamiento !== 'todas' ? ordenamiento : undefined);
+      ? await buscarOCs(termino)
+      : await listarOCs(ordenamiento !== 'todas' ? ordenamiento : undefined);
     if (resultado.ok) {
       setOrdenes(resultado.datos);
     }

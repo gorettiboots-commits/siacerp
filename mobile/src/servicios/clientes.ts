@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { obtenerEmpresaId } from './auth';
+
+/** Helper: retorna error si supabase no está configurado */
 import type { ClienteMovil } from '../tipos';
 
 /**
@@ -11,8 +13,8 @@ export async function listarClientes(): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -38,8 +40,8 @@ export async function buscarClientes(termino: string): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -70,8 +72,8 @@ export async function obtenerCliente(
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: null, error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: null, error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase

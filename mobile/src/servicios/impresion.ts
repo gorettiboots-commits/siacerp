@@ -1,28 +1,36 @@
 import { supabase, supabaseConfigurado } from '../lib/supabase';
+import { obtenerEmpresaId, obtenerUsuarioActual } from './auth';
 import type { SolicitudImpresion } from '../tipos';
 
 /**
- * Servicio de impresión de etiquetas desde el móvil.
+ * Servicio de impresion de etiquetas desde el movil.
  *
- * Por ahora solo construye el payload y, si Supabase está configurado,
- * lo inserta en la tabla `impresiones_etiqueta`. La comunicación con la
- * impresora local (escritorio) se define cuando se integre el flujo real.
+ * Inserta solicitudes en `impresiones_etiqueta` de Supabase.
+ * El escritorio (cola de impresion) las lee y procesa.
  */
 export async function enviarSolicitud(
   solicitud: SolicitudImpresion,
 ): Promise<{ ok: boolean; mensaje: string }> {
-  if (!supabaseConfigurado()) {
+  const empresaId = obtenerEmpresaId();
+  const usuario = obtenerUsuarioActual();
+
+  if (!empresaId || !supabase) {
     return {
       ok: false,
-      mensaje:
-        'Supabase no está configurado. Define EXPO_PUBLIC_SUPABASE_URL y ' +
-        'EXPO_PUBLIC_SUPABASE_ANON_KEY en .env para enviar a imprimir.',
+      mensaje: !supabase
+        ? 'Supabase no esta configurado.'
+        : 'No hay sesion activa.',
     };
   }
 
-  const { error } = await supabase!
+  const { error } = await supabase
     .from('impresiones_etiqueta')
-    .insert({ payload: solicitud, estatus: 'pendiente' });
+    .insert({
+      empresa_id: empresaId,
+      usuario_id: usuario?.id ?? null,
+      payload: solicitud,
+      estatus: 'pendiente',
+    });
 
   if (error) {
     return { ok: false, mensaje: `Error al enviar: ${error.message}` };

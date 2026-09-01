@@ -3,15 +3,16 @@
 > **Plataforma de gestión integral para fábricas de calzado**
 > Control completo de órdenes de compra, inventario de insumos, planificación de producción, producto terminado, clientes y permisos de usuario.
 
-![Versión](https://img.shields.io/badge/versión-1.0.0-0D9488)
+![Versión](https://img.shields.io/badge/versión-1.2.0-0D9488)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB)
 ![PySide6](https://img.shields.io/badge/PySide6-6.5+-41CD52)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791)
 ![Licencia](https://img.shields.io/badge/licencia-Propietaria-DC2626)
-![Commits](https://img.shields.io/badge/commits-90+-0D9488)
-![Componentes](https://img.shields.io/badge/componentes-11-41CD52)
-![Pruebas](https://img.shields.io/badge/pruebas-17-3776AB)
+![Commits](https://img.shields.io/badge/commits-115+-0D9488)
+![Componentes](https://img.shields.io/badge/componentes-12-41CD52)
+![Pruebas](https://img.shields.io/badge/pruebas-19-3776AB)
+![Mobile](https://img.shields.io/badge/mobile-React%20Native-61DAFB)
 
 ---
 
@@ -309,8 +310,11 @@ sequenceDiagram
 | Escritorio ↔ Escritorio (misma BD) | ✅ Funcional (SQLite o PostgreSQL) |
 | Escritorio ↔ Escritorio (multi-tenant) | ✅ Funcional (vía Supabase, sync cada 5 min) |
 | Móvil → Escritorio (cola de impresión) | ✅ Funcional (vía Supabase) |
-| Escritorio ↔ Móvil (datos completos) | ✅ Funcional (Supabase + empresa_id) |
+| Escritorio ↔ Móvil (datos completos) | ✅ Funcional (Supabase + sync automática) |
 | Multi-tenant (aislamiento por empresa) | ✅ Funcional (RLS por empresa_id) |
+| Captura de pedidos desde móvil | ✅ Funcional (selector cliente + tallas) |
+| Impresión de etiquetas desde móvil | ✅ Funcional (vía Supabase → escritorio) |
+| Programación de pedidos desde móvil | ✅ Funcional (selector semana + pares) |
 
 ---
 
@@ -738,14 +742,19 @@ Todos los reportes usan la plantilla compartida `src/utils/print_template.py` co
 
 ## Integración móvil y Supabase
 
-### App móvil (React Native)
+### App móvil (React Native + Expo)
 
 El sistema incluye una aplicación móvil complementaria desarrollada en **React Native** que permite:
-- Captura de pedidos de cliente desde el campo
-- Solicitud de impresión de etiquetas
-- Consulta de inventario
-- Visualización de órdenes de compra y producción
-- Cambio de estatus de producción (Kanban)
+
+| Módulo | Funcionalidad |
+|---|---|
+| **Inventario** | Consulta de insumos con alertas de stock bajo |
+| **Órdenes de Compra** | Vista de OCs con detalle, partidas y costos |
+| **Producción** | Vista de OPs con Kanban de estaciones |
+| **Pedidos** | Listado, detalle, **captura de pedidos nuevos** con selector de clientes y grilla de tallas |
+| **Programación** | Selector de semanas, líneas con tallas, **botón de impresión** por línea |
+| **Etiquetas** | Solicitud de impresión de etiquetas vía Supabase |
+| **Admin** | Gestión de empresas (solo super_admin) |
 
 La app móvil se conecta al sistema a través de **Supabase** (Backend as a Service).
 
@@ -761,6 +770,20 @@ App Móvil → Supabase (impresiones_etiqueta) → SIAC ERP (Cola de Impresión)
 2. El escritorio consulta las solicitudes pendientes desde **Archivo → Cola de Impresión**
 3. Se imprime la etiqueta y se marca como `impresa` en Supabase
 4. La solicitud queda en el histórico local para reimpresión
+
+### Sincronización automática
+
+El escritorio sincroniza datos con Supabase automáticamente:
+
+| Momento | Descripción |
+|---|---|
+| **Al iniciar** | Después del login, SyncService arranca con intervalo de 2 minutos |
+| **Periódicamente** | Cada 2 minutos verifica si hay datos en `sync_queue` |
+| **Después de cada cambio** | Los hooks en models encolan y lanzan sync inmediata |
+
+- Verifica conexión a internet antes de cada sync (socket timeout 3s)
+- Si no hay red, queda encolado para el siguiente ciclo
+- Tablas sincronizadas: clientes, pedidos, detalle pedidos, programación, tallas |
 
 ### Configuración de Supabase
 
@@ -1051,15 +1074,16 @@ Todos los derechos reservados — © 2026.
 
 | Métrica | Valor |
 |---|---|
-| **Commits** | 90+ |
+| **Commits** | 115+ |
 | **Contribuyentes** | 3 |
 | **Pull Requests** | 10+ mergeados |
-| **Componentes aprobados** | 11 |
-| **Pruebas pytest** | 17 |
-| **Archivos de código** | 60+ |
+| **Componentes aprobados** | 12 |
+| **Pruebas pytest** | 19 |
+| **Archivos de código** | 80+ |
 | **Primer commit** | 2026-08-04 |
-| **Último commit** | 2026-08-30 |
-| **Días de desarrollo** | 26 |
+| **Último commit** | 2026-08-31 |
+| **Días de desarrollo** | 27 |
+| **App móvil pantallas** | 15+ |
 
 ---
 

@@ -297,6 +297,62 @@ CREATE POLICY "Usuarios leen tallas de su empresa"
     );
 
 -- -----------------------------------------------------------
+-- 5b. IMPRESION DE ETIQUETAS (+ empresa_id)
+-- -----------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS impresiones_etiqueta (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    usuario_id UUID REFERENCES perfiles_usuario(id),
+    payload JSONB NOT NULL,
+    estatus TEXT NOT NULL DEFAULT 'pendiente',
+    creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+    procesado_en TIMESTAMPTZ
+);
+
+ALTER TABLE impresiones_etiqueta ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios crean impresiones de su empresa"
+    ON impresiones_etiqueta FOR INSERT
+    WITH CHECK (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Usuarios leen impresiones de su empresa"
+    ON impresiones_etiqueta FOR SELECT
+    USING (
+        empresa_id IN (
+            SELECT empresa_id FROM perfiles_usuario
+            WHERE id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Super admin lee todas las impresiones"
+    ON impresiones_etiqueta FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'super_admin'
+        )
+    );
+
+CREATE POLICY "Super admin actualiza impresiones"
+    ON impresiones_etiqueta FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'super_admin'
+        )
+    );
+
+CREATE INDEX IF NOT EXISTS idx_impresiones_empresa ON impresiones_etiqueta (empresa_id);
+CREATE INDEX IF NOT EXISTS idx_impresiones_estatus ON impresiones_etiqueta (estatus);
+CREATE INDEX IF NOT EXISTS idx_impresiones_creado ON impresiones_etiqueta (creado_en);
+
+-- -----------------------------------------------------------
 -- 6. LOGS (+ empresa_id)
 -- -----------------------------------------------------------
 

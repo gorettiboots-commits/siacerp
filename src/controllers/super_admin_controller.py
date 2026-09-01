@@ -1,7 +1,8 @@
 """Controller del dashboard de Super Admin.
 
 Orquesta las consultas del SuperAdminModel y expone los datos
-formateados para la vista.
+formateados para la vista. Opera sobre la BD local y Supabase
+cuando esta configurado.
 """
 from src.models.super_admin_model import SuperAdminModel
 
@@ -12,38 +13,32 @@ class SuperAdminController:
     def __init__(self) -> None:
         self.model = SuperAdminModel()
 
-    def obtener_empresas_con_estadisticas(self) -> list[dict]:
-        """Retorna la lista de empresas con sus estadisticas."""
-        empresas = self.model.listar_empresas()
-        resultado = []
-
-        for emp in empresas:
-            eid = emp['id']
-            resultado.append({
-                'id': eid,
-                'nombre': emp.get('nombre', ''),
-                'rfc': emp.get('rfc', ''),
-                'activo': emp.get('activo', True),
-                'usuarios': self.model.contar_usuarios_por_empresa(eid),
-                'insumos': self.model.contar_insumos_por_empresa(eid),
-                'ocs': self.model.contar_ocs_por_empresa(eid),
-                'ops': self.model.contar_ops_por_empresa(eid),
-            })
-
-        return resultado
+    def obtener_empresa(self) -> dict:
+        """Retorna la info de la empresa local."""
+        return self.model.obtener_empresa_local()
 
     def obtener_estadisticas_globales(self) -> dict:
         """Retorna estadisticas globales del sistema."""
         return self.model.estadisticas_globales()
 
-    def obtener_usuarios_empresa(self, empresa_id: str) -> list[dict]:
-        """Retorna los usuarios de una empresa."""
-        return self.model.listar_usuarios_empresa(empresa_id)
-
-    def cambiar_estado_empresa(self, empresa_id: str, activo: bool) -> dict:
-        """Activa o desactiva una empresa."""
-        return self.model.cambiar_estado_empresa(empresa_id, activo)
-
-    def obtener_todos_usuarios(self) -> list[dict]:
+    def listar_usuarios(self) -> list[dict]:
         """Retorna todos los usuarios del sistema."""
-        return self.model.obtener_todos_los_usuarios()
+        return self.model.listar_usuarios()
+
+    def cambiar_estado_usuario(self, usuario_id: int, activo: bool) -> dict:
+        """Activa o desactiva un usuario."""
+        return self.model.cambiar_estado_usuario(usuario_id, activo)
+
+    def cambiar_estado_empresa_local(self, activo: bool) -> dict:
+        """Activa o desactiva la empresa local."""
+        return self.model.cambiar_estado_empresa_local(activo)
+
+    def listar_empresas_supabase(self) -> list[dict]:
+        """Lista empresas desde Supabase (si configurado)."""
+        return self.model.listar_empresas_supabase()
+
+    def cambiar_estado_empresa(
+            self, empresa_id: str, activo: bool) -> dict:
+        """Activa o desactiva una empresa en Supabase."""
+        return self.model.cambiar_estado_empresa_supabase(
+            empresa_id, activo)

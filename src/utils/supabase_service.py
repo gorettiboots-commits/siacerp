@@ -138,10 +138,17 @@ class SupabaseService:
         if self._token:
             headers['Authorization'] = f'Bearer {self._token}'
 
+        # Para PATCH/POST, pedir que retorne los datos actualizados
+        if method in ('PATCH', 'POST'):
+            headers['Prefer'] = 'return=representation'
+
         body = json.dumps(data).encode() if data else None
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         resp = urllib.request.urlopen(req, timeout=15)
-        return json.loads(resp.read().decode())
+        respuesta = resp.read().decode()
+        if not respuesta.strip():
+            return []
+        return json.loads(respuesta)
 
     def service_call(self, endpoint: str, method: str = 'GET',
                      data: dict = None) -> Any:
@@ -161,10 +168,17 @@ class SupabaseService:
             'Authorization': f'Bearer {service_key}',
             'Content-Type': 'application/json'
         }
+        # Para PATCH/POST, pedir que retorne los datos actualizados
+        if method in ('PATCH', 'POST'):
+            headers['Prefer'] = 'return=representation'
+
         body = json.dumps(data).encode() if data else None
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         resp = urllib.request.urlopen(req, timeout=15)
-        return json.loads(resp.read().decode())
+        respuesta = resp.read().decode()
+        if not respuesta.strip():
+            return []
+        return json.loads(respuesta)
 
     def verificar_licencia(self) -> dict:
         """Verifica que la empresa tenga licencia activa en Supabase.
@@ -204,6 +218,9 @@ class SupabaseService:
     def sincronizar_tabla(self, tabla: str, datos: list[dict]) -> dict:
         """Sincroniza datos de una tabla local a Supabase.
 
+        Usa service_role_key (bypass RLS) si esta disponible,
+        o el token de sesion del usuario autenticado.
+
         Args:
             tabla: Nombre de la tabla en Supabase (con sufijo _movil si aplica)
             datos: Lista de registros a sincronizar
@@ -211,13 +228,26 @@ class SupabaseService:
         Returns:
             {'ok': True, 'registros': N} o {'ok': False, 'error': '...'}
         """
-        if not self.configurado or not self.autenticado:
-            return {'ok': False, 'error': 'No autenticado'}
+        if not self.configurado:
+            return {'ok': False, 'error': 'Supabase no configurado'}
 
         try:
             # Agregar empresa_id a cada registro
             for registro in datos:
                 registro['empresa_id'] = self.empresa_id
+
+            # Usar service_role si hay, si no token de sesion
+            config = configparser.ConfigParser()
+            ruta = Path(__file__).resolve().parent.parent.parent / 'config.ini'
+            config.read(str(ruta))
+            service_key = config.get('supabase', 'service_role_key', fallback='')
+
+            if service_key:
+                auth_token = service_key
+            elif self._token:
+                auth_token = self._token
+            else:
+                return {'ok': False, 'error': 'No autenticado (ni service_role ni sesion)'}
 
             # Upsert en Supabase
             req = urllib.request.Request(
@@ -225,7 +255,7 @@ class SupabaseService:
                 data=json.dumps(datos).encode(),
                 headers={
                     'apikey': self.anon_key,
-                    'Authorization': f'Bearer {self._token}',
+                    'Authorization': f'Bearer {auth_token}',
                     'Content-Type': 'application/json',
                     'Prefer': 'resolution=merge-duplicates'
                 },
@@ -234,6 +264,9 @@ class SupabaseService:
             urllib.request.urlopen(req, timeout=30)
             return {'ok': True, 'registros': len(datos)}
 
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            return {'ok': False, 'error': f'HTTP {e.code}: {body[:200]}'}
         except Exception as e:
             return {'ok': False, 'error': str(e)}
 

@@ -33,6 +33,8 @@ export type ClientesPedidosStackParamList = {
   ListaClientes: undefined;
   ListaPedidos: undefined;
   DetallePedido: { pedidoId: number; folio: string };
+  ProgramarPedido: { pedidoId: number; folio: string };
+  CapturarPedido: undefined;
 };
 
 export type ProgramacionStackParamList = {

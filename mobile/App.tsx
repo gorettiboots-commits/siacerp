@@ -35,6 +35,8 @@ import { PantallaSuperAdmin } from './src/pantallas/PantallaSuperAdmin';
 import { PantallaClientes } from './src/pantallas/PantallaClientes';
 import { PantallaPedidos } from './src/pantallas/PantallaPedidos';
 import { PantallaDetallePedido } from './src/pantallas/PantallaDetallePedido';
+import { PantallaProgramarPedido } from './src/pantallas/PantallaProgramarPedido';
+import { PantallaCapturarPedido } from './src/pantallas/PantallaCapturarPedido';
 import { PantallaProgramacion } from './src/pantallas/PantallaProgramacion';
 import { PantallaCambiarEmpresa } from './src/pantallas/PantallaCambiarEmpresa';
 
@@ -98,6 +100,8 @@ function ClientesPedidosNavigator() {
     <ClientesPedidosNav.Navigator screenOptions={{ headerShown: false }}>
       <ClientesPedidosNav.Screen name="ListaPedidos" component={PantallaPedidos} />
       <ClientesPedidosNav.Screen name="DetallePedido" component={PantallaDetallePedido} />
+      <ClientesPedidosNav.Screen name="ProgramarPedido" component={PantallaProgramarPedido} />
+      <ClientesPedidosNav.Screen name="CapturarPedido" component={PantallaCapturarPedido} />
       <ClientesPedidosNav.Screen name="ListaClientes" component={PantallaClientes} />
     </ClientesPedidosNav.Navigator>
   );
@@ -176,7 +180,7 @@ function MainTabs({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <View style={{ flex: 1 }} key={recargarKey}>
+    <View style={{ flex: 1, paddingTop: insets.top }} key={recargarKey}>
       {superAdmin && (
         <BarraEmpresaContexto
           onCambiar={() => setMostrarCambioEmpresa(true)}
@@ -231,7 +235,7 @@ function MainTabs({ onLogout }: { onLogout: () => void }) {
           name="ClientesPedidosTab"
           component={ClientesPedidosNavigator}
           options={{
-            tabBarLabel: 'Clientes',
+            tabBarLabel: 'Pedidos',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="people-outline" size={size} color={color} />
             ),
@@ -303,7 +307,7 @@ export default function Raiz() {
   }, []);
 
   const verificarSesion = async () => {
-    const u = await obtenerUsuarioActual();
+    const u = obtenerUsuarioActual();
     setSesionActiva(u);
     setCargando(false);
   };

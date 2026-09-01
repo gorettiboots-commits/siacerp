@@ -1,6 +1,7 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
 from src.utils.empresa_context import donde_empresa, parametros_empresa
+from src.utils.sync_hooks import sync_insert, sync_update, sync_delete
 
 
 class ModeloModel:
@@ -41,6 +42,9 @@ class ModeloModel:
             "INSERT INTO modelos (codigo, nombre, descripcion, imagen) VALUES (?, ?, ?, ?)",
             (codigo, nombre, descripcion, imagen),
         )
+        sync_insert('modelos', cursor.lastrowid, {
+            'codigo': codigo, 'nombre': nombre, 'descripcion': descripcion,
+        })
         return cursor.lastrowid
 
     def actualizar(self, modelo_id: int, codigo: str, nombre: str, descripcion: str,
@@ -49,9 +53,13 @@ class ModeloModel:
             "UPDATE modelos SET codigo=?, nombre=?, descripcion=?, imagen=?, updated_at=datetime('now') WHERE id=?",
             (codigo, nombre, descripcion, imagen, modelo_id),
         )
+        sync_update('modelos', modelo_id, {
+            'codigo': codigo, 'nombre': nombre, 'descripcion': descripcion,
+        })
 
     def desactivar(self, modelo_id: int) -> None:
-        self.db.execute("UPDATE modelos SET activo=0 WHERE id=?", (modelo_id,))
+        self.db.execute("UPDATE modelos SET activo=0, is_deleted=1 WHERE id=?", (modelo_id,))
+        sync_delete('modelos', modelo_id)
 
 
 class VarianteModel:
@@ -101,6 +109,10 @@ class VarianteModel:
             "INSERT INTO variantes (modelo_id, color, piel, talla, codigo_variante) VALUES (?, ?, ?, ?, ?)",
             (modelo_id, color, piel, talla, codigo_variante),
         )
+        sync_insert('variantes', cursor.lastrowid, {
+            'modelo_id': modelo_id, 'color': color, 'piel': piel,
+            'talla': talla, 'codigo_variante': codigo_variante,
+        })
         return cursor.lastrowid
 
     def actualizar(self, variante_id: int, modelo_id: int, color: str, piel: str,
@@ -109,9 +121,14 @@ class VarianteModel:
             "UPDATE variantes SET modelo_id=?, color=?, piel=?, talla=?, codigo_variante=? WHERE id=?",
             (modelo_id, color, piel, talla, codigo_variante, variante_id),
         )
+        sync_update('variantes', variante_id, {
+            'modelo_id': modelo_id, 'color': color, 'piel': piel,
+            'talla': talla, 'codigo_variante': codigo_variante,
+        })
 
     def desactivar(self, variante_id: int) -> None:
-        self.db.execute("UPDATE variantes SET activo=0 WHERE id=?", (variante_id,))
+        self.db.execute("UPDATE variantes SET activo=0, is_deleted=1 WHERE id=?", (variante_id,))
+        sync_delete('variantes', variante_id)
 
 
 class ListaMaterialesModel:
@@ -235,6 +252,11 @@ class OrdenProduccionModel:
             "INSERT INTO ordenes_produccion (folio, variante_id, total_pares, fecha_inicio, fecha_entrega, prioridad, observaciones) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (folio, variante_id, total_pares, fecha_inicio, fecha_entrega, prioridad, observaciones),
         )
+        sync_insert('ordenes_produccion', cursor.lastrowid, {
+            'folio': folio, 'variante_id': variante_id, 'total_pares': total_pares,
+            'fecha_inicio': fecha_inicio, 'fecha_entrega': fecha_entrega,
+            'estatus': 'planeada', 'prioridad': prioridad,
+        })
         op_id = cursor.lastrowid
         estaciones = self.db.fetch_all(
             "SELECT * FROM estaciones_produccion WHERE activo = 1 ORDER BY orden")
@@ -351,12 +373,14 @@ class OrdenProduccionModel:
                 "UPDATE ordenes_produccion SET estatus = 'terminada', updated_at = datetime('now') WHERE id = ?",
                 (op_id,),
             )
+            sync_update('ordenes_produccion', op_id, {'estatus': 'terminada'})
             self._ingresar_pt(op_id)
         else:
             self.db.execute(
                 "UPDATE ordenes_produccion SET estatus = 'en_produccion', updated_at = datetime('now') WHERE id = ?",
                 (op_id,),
             )
+            sync_update('ordenes_produccion', op_id, {'estatus': 'en_produccion'})
 
     def posicion_actual(self, op_id: int) -> dict:
         op = self.obtener(op_id)

@@ -10,6 +10,14 @@
 4. Copia y pega el contenido de `schema.sql`
 5. Ejecuta el script
 
+### 1.1 Ejecutar migraciones numeradas
+
+Si es la primera vez, ejecuta en orden:
+
+1. `001_impresiones_etiqueta.sql` - Tabla de impresion de etiquetas
+2. `002_actualizar_empresa_nombre.sql` - Actualiza nombre de empresa a "EskinBoots"
+3. `003_sincronizar_estatus_produccion.sql` - Vista de estatus de produccion
+
 ### 2. Desactivar confirmación de email (para desarrollo)
 
 1. Ve a **Authentication → Settings**

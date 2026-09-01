@@ -1,8 +1,11 @@
 import { supabase } from '../lib/supabase';
 import { obtenerEmpresaId } from './auth';
+import { enviarSolicitud } from './impresion';
 import type {
   ProgramacionSemanaMovil,
   ProgramacionLineaMovil,
+  SolicitudImpresion,
+  DatosEtiquetaPartida,
 } from '../tipos';
 
 /**
@@ -14,8 +17,8 @@ export async function listarSemanas(): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -43,8 +46,8 @@ export async function listarLineas(
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   let query = supabase
@@ -77,8 +80,8 @@ export async function lineasConTallas(
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   let query = supabase
@@ -154,4 +157,45 @@ export async function totalesSemana(
       clientes: clientesUnicos.size,
     },
   };
+}
+
+/**
+ * Genera etiquetas de impresion para una linea de programacion.
+ * Cada talla = una etiqueta con el codigo de barras.
+ */
+export async function imprimirLinea(
+  linea: ProgramacionLineaMovil,
+): Promise<{ ok: boolean; mensaje: string }> {
+  const tallas = linea.tallas || [];
+  if (tallas.length === 0) {
+    return { ok: false, mensaje: 'No hay tallas para imprimir' };
+  }
+
+  const partidas: DatosEtiquetaPartida[] = [];
+  let numEtiqueta = 1;
+
+  for (const t of tallas) {
+    if (t.pares <= 0) continue;
+    for (let i = 0; i < t.pares; i++) {
+      partidas.push({
+        numero_etiqueta: numEtiqueta++,
+        codigo_barras: `${linea.folio_prog || ''}-${t.talla}-${i + 1}`,
+        talla: t.talla,
+        modelo: linea.modelo || '',
+        color: linea.color || '',
+        cliente: linea.cliente || '',
+      });
+    }
+  }
+
+  const solicitud: SolicitudImpresion = {
+    id: `prog-${linea.folio_prog || linea.id}-${Date.now()}`,
+    tipo: 'partida',
+    partidas_fleje: [],
+    partidas,
+    solicitado_en: new Date().toISOString(),
+    origen: 'movil',
+  };
+
+  return enviarSolicitud(solicitud);
 }

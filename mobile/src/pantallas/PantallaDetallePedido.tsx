@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
 import { colores, fuentes } from '../theme';
 import { obtenerPedido, obtenerDetallePedido } from '../servicios/pedidos';
@@ -14,7 +16,7 @@ import type { PedidoClienteMovil, DetallePedidoMovil } from '../tipos';
 
 interface Props {
   route: { params: { pedidoId: number; folio: string } };
-  navigation: { goBack: () => void };
+  navigation: any;
 }
 
 const COLORES_ESTATUS: Record<string, string> = {
@@ -122,10 +124,28 @@ export function PantallaDetallePedido({ route }: Props) {
         )}
       </View>
 
+      {/* Boton programar */}
+      {pedido && pedido.estatus === 'pendiente' && (
+        <View style={styles.programarContainer}>
+          <Pressable
+            style={styles.botonProgramar}
+            onPress={() =>
+              navigation.navigate('ProgramarPedido', {
+                pedidoId: pedido.id,
+                folio: pedido.folio,
+              })
+            }
+          >
+            <Ionicons name="calendar-outline" size={20} color="#ffffff" />
+            <Text style={styles.textoProgramar}>Programar este pedido</Text>
+          </Pressable>
+        </View>
+      )}
+
       {/* Detalle */}
       <View style={styles.seccion}>
         <Text style={styles.seccionTitulo}>
-          Detalle ({detalles.length} líneas)
+          Detalle ({detalles.length} lineas)
         </Text>
       </View>
 
@@ -158,6 +178,17 @@ const styles = StyleSheet.create({
   headerFecha: { fontSize: fuentes.etiqueta, color: '#e0e7ff' },
   headerInfo: { fontSize: fuentes.pequena, color: '#c7d2fe', marginTop: 4 },
   headerObs: { fontSize: fuentes.pequena, color: '#c7d2fe', marginTop: 4, fontStyle: 'italic' },
+  programarContainer: { paddingHorizontal: 16, paddingTop: 12 },
+  botonProgramar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  textoProgramar: { fontSize: fuentes.subtitulo, color: '#ffffff', fontWeight: 'bold' },
   seccion: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   seccionTitulo: { fontSize: fuentes.subtitulo, fontWeight: 'bold', color: colores.texto },
   lista: { paddingHorizontal: 16, paddingBottom: 16 },

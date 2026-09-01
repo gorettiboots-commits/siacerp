@@ -32,14 +32,19 @@ export function PantallaProduccion() {
   const [cargando, setCargando] = useState(true);
 
   const cargarOPs = async (estatus?: string) => {
-    setCargando(true);
-    const resultado = termino.trim()
-      ? await buscarOPs(termino)
-      : await listarOPs(estatus || undefined);
-    if (resultado.ok) {
-      setOps(resultado.datos);
+    try {
+      setCargando(true);
+      const resultado = termino.trim()
+        ? await buscarOPs(termino)
+        : await listarOPs(estatus || undefined);
+      if (resultado.ok) {
+        setOps(resultado.datos);
+      }
+      setCargando(false);
+    } catch (e: any) {
+      console.error('[Produccion] Error:', e.message);
+      setCargando(false);
     }
-    setCargando(false);
   };
 
   useEffect(() => {

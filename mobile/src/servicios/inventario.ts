@@ -2,6 +2,12 @@ import { supabase } from '../lib/supabase';
 import { obtenerEmpresaId } from './auth';
 import type { InsumoMovil } from '../tipos';
 
+/** Helper: retorna error si supabase no está configurado */
+function siNoSupabase<T>(resultado: T): T | { ok: false; datos: never[]; error: string } {
+  if (!supabase) return { ok: false, datos: [], error: 'Supabase no configurado' };
+  return resultado;
+}
+
 /**
  * Busca insumos por código, nombre o categoría.
  * Filtra automáticamente por empresa del usuario.
@@ -10,8 +16,8 @@ export async function buscarInsumos(
   termino: string,
 ): Promise<{ ok: boolean; datos: InsumoMovil[]; error?: string }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -40,8 +46,8 @@ export async function listarInsumos(): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -67,8 +73,8 @@ export async function obtenerStockBajo(): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -76,7 +82,6 @@ export async function obtenerStockBajo(): Promise<{
     .select('*')
     .eq('empresa_id', empresaId)
     .eq('activo', true)
-    .lte('stock_actual', supabase.rpc ? 'stock_minimo' : 0)
     .order('stock_actual');
 
   // Fallback: filtrar en cliente si rpc no disponible
@@ -103,8 +108,8 @@ export async function obtenerInsumo(
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: null, error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: null, error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase

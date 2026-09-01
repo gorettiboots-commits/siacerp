@@ -203,6 +203,61 @@ CREATE POLICY "Usuarios autenticados leen tallas"
     USING (auth.role() = 'authenticated');
 
 -- -----------------------------------------------------------
+-- 5b. IMPRESION DE ETIQUETAS
+-- -----------------------------------------------------------
+-- El movil inserta solicitudes; el escritorio las procesa.
+
+CREATE TABLE IF NOT EXISTS impresiones_etiqueta (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    empresa_id UUID NOT NULL,
+    usuario_id UUID REFERENCES perfiles_usuario(id),
+    payload JSONB NOT NULL,
+    estatus TEXT NOT NULL DEFAULT 'pendiente',
+    creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
+    procesado_en TIMESTAMPTZ
+);
+
+ALTER TABLE impresiones_etiqueta ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios crean impresiones de su empresa"
+    ON impresiones_etiqueta FOR INSERT
+    WITH CHECK (
+        auth.role() = 'authenticated'
+        AND empresa_id = (
+            SELECT p.empresa_id FROM perfiles_usuario p
+            WHERE p.id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Usuarios leen impresiones de su empresa"
+    ON impresiones_etiqueta FOR SELECT
+    USING (
+        auth.role() = 'authenticated'
+        AND empresa_id = (
+            SELECT p.empresa_id FROM perfiles_usuario p
+            WHERE p.id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Super admin lee todas las impresiones"
+    ON impresiones_etiqueta FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'super_admin'
+        )
+    );
+
+CREATE POLICY "Super admin actualiza impresiones"
+    ON impresiones_etiqueta FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'super_admin'
+        )
+    );
+
+-- -----------------------------------------------------------
 -- 6. LOGS DE ACTIVIDAD MÓVIL
 -- -----------------------------------------------------------
 -- Registra acciones del móvil para trazabilidad.
@@ -383,3 +438,40 @@ CREATE TRIGGER tr_op_actualizar
 CREATE TRIGGER tr_seguimiento_actualizar
     BEFORE UPDATE ON seguimiento_produccion_movil
     FOR EACH ROW EXECUTE FUNCTION trigger_actualizar_timestamp();
+
+-- -----------------------------------------------------------
+-- 10. ÍNDICES DE RENDIMIENTO
+-- -----------------------------------------------------------
+-- Aceleran las consultas del móvil y la sincronización del escritorio.
+
+-- Insumos: búsqueda por código/nombre, filtro por activo
+CREATE INDEX IF NOT EXISTS idx_insumos_movil_activo ON insumos_movil (activo);
+CREATE INDEX IF NOT EXISTS idx_insumos_movil_codigo ON insumos_movil (codigo);
+CREATE INDEX IF NOT EXISTS idx_insumos_movil_empresa ON insumos_movil (empresa_id);
+
+-- Órdenes de compra: filtro por estatus, empresa
+CREATE INDEX IF NOT EXISTS idx_oc_movil_estatus ON ordenes_compra_movil (estatus);
+CREATE INDEX IF NOT EXISTS idx_oc_movil_empresa ON ordenes_compra_movil (empresa_id);
+CREATE INDEX IF NOT EXISTS idx_oc_movil_folio ON ordenes_compra_movil (folio);
+
+-- Detalle OC: JOIN por orden_compra_id
+CREATE INDEX IF NOT EXISTS idx_detalle_oc_movil_orden ON detalle_orden_compra_movil (orden_compra_id);
+
+-- Puntos OC: JOIN por detalle_id
+CREATE INDEX IF NOT EXISTS idx_puntos_oc_movil_detalle ON detalle_oc_puntos_movil (detalle_id);
+
+-- Órdenes de producción: filtro por estatus, empresa
+CREATE INDEX IF NOT EXISTS idx_op_movil_estatus ON ordenes_produccion_movil (estatus);
+CREATE INDEX IF NOT EXISTS idx_op_movil_empresa ON ordenes_produccion_movil (empresa_id);
+CREATE INDEX IF NOT EXISTS idx_op_movil_folio ON ordenes_produccion_movil (folio);
+
+-- Seguimiento producción: JOIN por orden_produccion_id
+CREATE INDEX IF NOT EXISTS idx_seguimiento_movil_op ON seguimiento_produccion_movil (orden_produccion_id);
+
+-- Perfiles usuario: filtro por empresa, username
+CREATE INDEX IF NOT EXISTS idx_perfil_empresa ON perfiles_usuario (empresa_id);
+CREATE INDEX IF NOT EXISTS idx_perfil_username ON perfiles_usuario (username);
+
+-- Logs móvil: filtro por usuario, entidad
+CREATE INDEX IF NOT EXISTS idx_logs_movil_usuario ON logs_movil (usuario_id);
+CREATE INDEX IF NOT EXISTS idx_logs_movil_entidad ON logs_movil (entidad, entidad_id);

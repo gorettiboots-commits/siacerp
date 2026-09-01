@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { obtenerEmpresaId } from './auth';
+
+/** Helper: retorna error si supabase no está configurado */
 import type {
   OrdenCompraMovil,
   DetalleOCMovil,
@@ -14,8 +16,8 @@ export async function listarOCs(filtro?: string): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   let query = supabase
@@ -46,8 +48,8 @@ export async function buscarOCs(termino: string): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -77,8 +79,8 @@ export async function obtenerDetalleOC(
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase

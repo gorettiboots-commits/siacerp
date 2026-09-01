@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { obtenerEmpresaId } from './auth';
+
+/** Helper: retorna error si supabase no está configurado */
 import type {
   OrdenProduccionMovil,
   SeguimientoMovil,
@@ -14,8 +16,8 @@ export async function listarOPs(filtro?: string): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   let query = supabase
@@ -46,8 +48,8 @@ export async function buscarOPs(termino: string): Promise<{
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -77,8 +79,8 @@ export async function obtenerSeguimiento(
   error?: string;
 }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, datos: [], error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, datos: [], error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { data, error } = await supabase
@@ -105,8 +107,8 @@ export async function actualizarAvance(
   observaciones?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { error } = await supabase
@@ -135,8 +137,8 @@ export async function cambiarEstatusLinea(
   nuevoEstatus: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { error } = await supabase
@@ -163,8 +165,8 @@ export async function avanzarEstacion(
   estacionActualId: number,
 ): Promise<{ ok: boolean; error?: string }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   // Obtener todas las estaciones de la OP
@@ -216,8 +218,8 @@ export async function reportarIncidencia(
   paresAfectados: number,
 ): Promise<{ ok: boolean; error?: string }> {
   const empresaId = obtenerEmpresaId();
-  if (!empresaId) {
-    return { ok: false, error: 'No hay sesión activa' };
+  if (!empresaId || !supabase) {
+    return { ok: false, error: supabase ? 'No hay sesión activa' : 'Supabase no configurado' };
   }
 
   const { error } = await supabase.from('incidencias_produccion_movil').insert({

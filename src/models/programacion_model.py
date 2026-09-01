@@ -3,6 +3,7 @@ from typing import Optional
 
 from src.database.db_manager import DatabaseManager
 from src.utils.empresa_context import donde_empresa, parametros_empresa
+from src.utils.sync_hooks import sync_insert, sync_update, sync_delete
 
 
 _MESES = {
@@ -51,10 +52,14 @@ class ProgramacionModel:
                 nombre = (f"{inicio.day:02d} {_MESES[inicio.month]} "
                           f"{inicio.year} - {fin.day:02d} "
                           f"{_MESES[fin.month]} {fin.year}")
-            self.db.execute(
+            cursor = self.db.execute(
                 "INSERT INTO programacion_semana (nombre, fecha_inicio, orden) "
                 "VALUES (?, ?, ?)",
                 (nombre, inicio.isoformat(), orden_max + k + 1))
+            sync_insert('programacion_semana', cursor.lastrowid, {
+                'nombre': nombre, 'fecha_inicio': inicio.isoformat(),
+                'orden': orden_max + k + 1,
+            })
             inicio += timedelta(days=7)
             k += 1
 
@@ -142,6 +147,7 @@ class ProgramacionModel:
             "updated_at = datetime('now') WHERE id = ?",
             (estatus, linea_id),
         )
+        sync_update('programacion_lineas', linea_id, {'estatus': estatus})
 
     def asignar_folio_prog(self, linea_id: int, folio_prog: str) -> None:
         self.db.execute(
@@ -149,6 +155,7 @@ class ProgramacionModel:
             "updated_at = datetime('now') WHERE id = ?",
             (folio_prog.strip(), linea_id),
         )
+        sync_update('programacion_lineas', linea_id, {'folio_prog': folio_prog.strip()})
 
     def asignar_folio_pedido(self, linea_id: int, folio_pedido: str) -> None:
         self.db.execute(
@@ -156,8 +163,10 @@ class ProgramacionModel:
             "updated_at = datetime('now') WHERE id = ?",
             (folio_pedido.strip(), linea_id),
         )
+        sync_update('programacion_lineas', linea_id, {'folio_pedido': folio_pedido.strip()})
 
     def eliminar_linea(self, linea_id: int) -> None:
+        sync_delete('programacion_lineas', linea_id)
         self.db.execute(
             "DELETE FROM programacion_linea_tallas WHERE linea_id = ?",
             (linea_id,))
@@ -217,11 +226,22 @@ class ProgramacionModel:
             (semana_id, orden, folio_prog, folio_pedido, cliente, modelo,
              piel, color, fecha_prog, total_pares, pedido_id, detalle_pedido_id))
         linea_id = cur.lastrowid
+        sync_insert('programacion_lineas', linea_id, {
+            'semana_id': semana_id, 'folio_prog': folio_prog,
+            'folio_pedido': folio_pedido, 'cliente': cliente,
+            'modelo': modelo, 'piel': piel, 'color': color,
+            'fecha_prog': fecha_prog, 'total_pares': total_pares,
+            'estatus': 'programacion_incompleta',
+        })
         for t in tallas:
             self.db.execute(
                 """INSERT INTO programacion_linea_tallas (linea_id, talla, orden, pares)
                    VALUES (?, ?, ?, ?)""",
                 (linea_id, t["talla"], float(t["talla"]), t["pares"]))
+            sync_insert('programacion_linea_tallas', linea_id, {
+                'linea_id': linea_id, 'talla': t["talla"],
+                'orden': float(t["talla"]), 'pares': t["pares"],
+            })
         return linea_id
 
     def sincronizar_estatus_pedido(self, pedido_id: int,

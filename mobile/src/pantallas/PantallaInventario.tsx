@@ -27,20 +27,25 @@ export function PantallaInventario() {
   const [mostrarBajo, setMostrarBajo] = useState(false);
 
   const cargarDatos = useCallback(async () => {
-    setCargando(true);
-    const resultado = termino.trim()
-      ? await buscarInsumos(termino)
-      : await buscarInsumos('');
+    try {
+      setCargando(true);
+      const resultado = termino.trim()
+        ? await buscarInsumos(termino)
+        : await buscarInsumos('');
 
-    if (resultado.ok) {
-      setInsumos(resultado.datos);
-    }
+      if (resultado.ok) {
+        setInsumos(resultado.datos);
+      }
 
-    const bajo = await obtenerStockBajo();
-    if (bajo.ok) {
-      setStockBajo(bajo.datos);
+      const bajo = await obtenerStockBajo();
+      if (bajo.ok) {
+        setStockBajo(bajo.datos);
+      }
+      setCargando(false);
+    } catch (e: any) {
+      console.error('[Inventario] Error:', e.message);
+      setCargando(false);
     }
-    setCargando(false);
   }, [termino]);
 
   useEffect(() => {

@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -18,6 +20,7 @@ import {
   listarSemanas,
   lineasConTallas,
   totalesSemana,
+  imprimirLinea,
 } from '../servicios/programacion';
 
 const COLORES_ESTATUS: Record<string, string> = {
@@ -27,6 +30,8 @@ const COLORES_ESTATUS: Record<string, string> = {
   producido: '#8B5CF6',
 };
 
+const PRODUCCION_INICIADA = ['en_proceso', 'producido'];
+
 export function PantallaProgramacion() {
   const [semanas, setSemanas] = useState<ProgramacionSemanaMovil[]>([]);
   const [semanaSeleccionada, setSemanaSeleccionada] = useState<number | null>(null);
@@ -34,6 +39,8 @@ export function PantallaProgramacion() {
   const [totales, setTotales] = useState({ lineas: 0, pares: 0, clientes: 0 });
   const [cargando, setCargando] = useState(true);
   const [cargandoLineas, setCargandoLineas] = useState(false);
+  const [refrescando, setRefrescando] = useState(false);
+  const [imprimiendo, setImprimiendo] = useState<number | null>(null);
 
   useEffect(() => {
     cargarSemanas();
@@ -44,7 +51,6 @@ export function PantallaProgramacion() {
     const resultado = await listarSemanas();
     if (resultado.ok) {
       setSemanas(resultado.datos);
-      // Seleccionar la primera semana por defecto
       if (resultado.datos.length > 0 && semanaSeleccionada === null) {
         setSemanaSeleccionada(resultado.datos[0].id);
         await cargarLineas(resultado.datos[0].id);
@@ -59,14 +65,19 @@ export function PantallaProgramacion() {
       lineasConTallas(semanaId),
       totalesSemana(semanaId),
     ]);
-    if (resLineas.ok) {
-      setLineas(resLineas.datos);
-    }
-    if (resTotales.ok) {
-      setTotales(resTotales.datos);
-    }
+    if (resLineas.ok) setLineas(resLineas.datos);
+    if (resTotales.ok) setTotales(resTotales.datos);
     setCargandoLineas(false);
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefrescando(true);
+    await cargarSemanas();
+    if (semanaSeleccionada) {
+      await cargarLineas(semanaSeleccionada);
+    }
+    setRefrescando(false);
+  }, [semanaSeleccionada]);
 
   const onSemanaPress = async (semanaId: number) => {
     const nuevaSeleccion = semanaSeleccionada === semanaId ? null : semanaId;
@@ -79,14 +90,36 @@ export function PantallaProgramacion() {
     return Number.isInteger(v) ? String(v) : String(v);
   };
 
+  const puedeEliminar = (estatus: string): boolean => {
+    return !PRODUCCION_INICIADA.includes(estatus);
+  };
+
+  const onImprimir = async (linea: ProgramacionLineaMovil) => {
+    setImprimiendo(linea.id);
+    try {
+      const res = await imprimirLinea(linea);
+      if (res.ok) {
+        Alert.alert('Impresion', res.mensaje);
+      } else {
+        Alert.alert('Error', res.mensaje);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Error al enviar a imprimir');
+    } finally {
+      setImprimiendo(null);
+    }
+  };
+
   const renderLinea = ({ item }: { item: ProgramacionLineaMovil }) => {
     const colorEstatus = COLORES_ESTATUS[item.estatus] || colores.textoSuave;
     const tallas = item.tallas || [];
+    const enProduccion = !puedeEliminar(item.estatus);
+
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, enProduccion && styles.cardEnProduccion]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
-            <Text style={styles.cardFolio}>{item.folio_prog || '—'}</Text>
+            <Text style={styles.cardFolio}>{item.folio_prog || '--'}</Text>
             {item.folio_pedido && (
               <Text style={styles.cardFolioPedido}>Pedido: {item.folio_pedido}</Text>
             )}
@@ -98,10 +131,9 @@ export function PantallaProgramacion() {
 
         <Text style={styles.cardCliente}>{item.cliente || ''}</Text>
         <Text style={styles.cardModelo}>
-          {item.modelo || ''} {item.piel ? `/ ${item.piel}` : ''} {item.color ? `/ ${item.color}` : ''}
+          {item.modelo || ''} {item.piel ? '/ ' + item.piel : ''} {item.color ? '/ ' + item.color : ''}
         </Text>
 
-        {/* Tallas como chips */}
         {tallas.length > 0 && (
           <View style={styles.tallasRow}>
             {tallas.map((t, idx) => (
@@ -118,10 +150,33 @@ export function PantallaProgramacion() {
             <Ionicons name="shirt-outline" size={14} color={colores.textoSuave} />
             <Text style={styles.cardParesTexto}>{item.total_pares} pares</Text>
           </View>
-          {item.fecha_prog && (
-            <Text style={styles.cardFecha}>{item.fecha_prog}</Text>
-          )}
+          <View style={styles.cardAcciones}>
+            {item.fecha_prog && (
+              <Text style={styles.cardFecha}>{item.fecha_prog}</Text>
+            )}
+            <Pressable
+              style={styles.botonImprimir}
+              onPress={() => onImprimir(item)}
+              disabled={imprimiendo === item.id}
+            >
+              {imprimiendo === item.id ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Ionicons name="print-outline" size={14} color="#ffffff" />
+              )}
+              <Text style={styles.textoImprimir}>Imprimir</Text>
+            </Pressable>
+          </View>
         </View>
+
+        {enProduccion && (
+          <View style={styles.proteccionRow}>
+            <Ionicons name="lock-closed" size={12} color={colores.textoSuave} />
+            <Text style={styles.proteccionTexto}>
+              Produccion iniciada - no se puede eliminar
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -136,45 +191,54 @@ export function PantallaProgramacion() {
 
   return (
     <View style={styles.contenedor}>
-      {/* Encabezado */}
       <View style={styles.header}>
-        <Text style={styles.titulo}>Programación Semanal</Text>
+        <Text style={styles.titulo}>Programacion Semanal</Text>
         <Text style={styles.subtitulo}>
-          {totales.lineas} líneas · {totales.pares} pares · {totales.clientes} clientes
+          {totales.lineas} lineas - {totales.pares} pares - {totales.clientes} clientes
         </Text>
       </View>
 
-      {/* Selector de semana */}
-      <FlatList
-        horizontal
-        data={semanas}
-        keyExtractor={(item) => item.id.toString()}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.semanasRow}
-        renderItem={({ item: s }) => (
-          <Pressable
-            style={[
-              styles.semanaChip,
-              semanaSeleccionada === s.id && styles.semanaChipActivo,
-            ]}
-            onPress={() => onSemanaPress(s.id)}
-          >
-            <Text
+      {semanas.length > 0 ? (
+        <FlatList
+          horizontal
+          data={semanas}
+          keyExtractor={(item) => item.id.toString()}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.semanasRow}
+          renderItem={({ item: s }) => (
+            <Pressable
               style={[
-                styles.semanaTexto,
-                semanaSeleccionada === s.id && styles.semanaTextoActivo,
+                styles.semanaChip,
+                semanaSeleccionada === s.id && styles.semanaChipActivo,
               ]}
-              numberOfLines={1}
+              onPress={() => onSemanaPress(s.id)}
             >
-              {s.nombre}
-            </Text>
-          </Pressable>
-        )}
-      />
+              <Text
+                style={[
+                  styles.semanaTexto,
+                  semanaSeleccionada === s.id && styles.semanaTextoActivo,
+                ]}
+                numberOfLines={1}
+              >
+                {s.nombre}
+              </Text>
+            </Pressable>
+          )}
+        />
+      ) : (
+        <View style={styles.sinSemanas}>
+          <Ionicons name="calendar-outline" size={20} color={colores.textoSuave} />
+          <Text style={styles.sinSemanasTexto}>
+            No hay semanas de programacion sincronizadas
+          </Text>
+          <Text style={styles.sinSemanasDetalle}>
+            Crea una programacion en el escritorio para que aparezca aqui
+          </Text>
+        </View>
+      )}
 
-      {/* Líneas de programación */}
       {cargandoLineas ? (
-        <View style={styles.cargando}>
+        <View style={styles.cargandoLineas}>
           <ActivityIndicator size="large" color={colores.primario} />
         </View>
       ) : (
@@ -183,12 +247,20 @@ export function PantallaProgramacion() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderLinea}
           contentContainerStyle={styles.lista}
+          refreshControl={
+            <RefreshControl refreshing={refrescando} onRefresh={onRefresh} />
+          }
           ListEmptyComponent={
             <View style={styles.vacio}>
+              <Ionicons
+                name={semanaSeleccionada ? 'document-text-outline' : 'finger-print-outline'}
+                size={40}
+                color={colores.textoSuave}
+              />
               <Text style={styles.textoVacio}>
                 {semanaSeleccionada
-                  ? 'No hay líneas esta semana'
-                  : 'Selecciona una semana'}
+                  ? 'No hay lineas esta semana'
+                  : 'Selecciona una semana para ver las lineas'}
               </Text>
             </View>
           }
@@ -216,6 +288,18 @@ const styles = StyleSheet.create({
   semanaChipActivo: { backgroundColor: colores.primario, borderColor: colores.primario },
   semanaTexto: { fontSize: fuentes.pequena, color: colores.textoSuave },
   semanaTextoActivo: { color: '#ffffff', fontWeight: 'bold' },
+  sinSemanas: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    backgroundColor: colores.tarjeta,
+    marginHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colores.borde,
+  },
+  sinSemanasTexto: { fontSize: fuentes.etiqueta, color: colores.textoSuave, marginTop: 8, fontWeight: '500' },
+  sinSemanasDetalle: { fontSize: fuentes.pequena, color: colores.textoSuave, marginTop: 4 },
   lista: { paddingHorizontal: 16, paddingBottom: 16 },
   card: {
     backgroundColor: colores.tarjeta,
@@ -224,6 +308,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: colores.borde,
+  },
+  cardEnProduccion: {
+    borderColor: '#F59E0B40',
+    backgroundColor: '#FFFBEB',
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
   cardHeaderLeft: { flex: 1 },
@@ -253,8 +341,30 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
   cardPares: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cardParesTexto: { fontSize: fuentes.etiqueta, color: colores.textoSuave, fontWeight: '500' },
+  cardAcciones: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardFecha: { fontSize: fuentes.pequena, color: colores.textoSuave },
+  botonImprimir: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#6366F1',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+  },
+  textoImprimir: { fontSize: 10, color: '#ffffff', fontWeight: 'bold' },
+  proteccionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colores.borde,
+  },
+  proteccionTexto: { fontSize: fuentes.pequena, color: '#F59E0B', fontWeight: '500' },
   cargando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  cargandoLineas: { paddingVertical: 40, alignItems: 'center' },
   vacio: { paddingVertical: 40, alignItems: 'center' },
-  textoVacio: { color: colores.textoSuave, fontSize: fuentes.cuerpo },
+  textoVacio: { color: colores.textoSuave, fontSize: fuentes.cuerpo, marginTop: 12, textAlign: 'center' },
 });

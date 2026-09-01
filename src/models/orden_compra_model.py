@@ -1,6 +1,7 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
 from src.utils.empresa_context import donde_empresa, parametros_empresa
+from src.utils.sync_hooks import sync_insert, sync_update, sync_delete
 
 
 def _subtotal_detalle_oc(d: dict) -> float:
@@ -254,6 +255,10 @@ class OrdenCompraModel:
             "INSERT INTO ordenes_compra (folio, observaciones, proveedor_id, metodo_pago, solo_remision, tipo) VALUES (?, ?, ?, ?, ?, ?)",
             (folio, observaciones, proveedor_id, metodo_pago, 1 if solo_remision else 0, tipo),
         )
+        sync_insert('ordenes_compra', cursor.lastrowid, {
+            'folio': folio, 'observaciones': observaciones,
+            'proveedor_id': proveedor_id, 'estatus': 'pendiente', 'tipo': tipo,
+        })
         return cursor.lastrowid
 
     def agregar_detalle(self, oc_id: int, insumo_id: int, cantidad: float,
@@ -278,6 +283,7 @@ class OrdenCompraModel:
             "UPDATE ordenes_compra SET estatus='cancelada' WHERE id=? AND estatus='pendiente'",
             (oc_id,),
         )
+        sync_update('ordenes_compra', oc_id, {'estatus': 'cancelada'})
 
     def recibir(self, oc_id: int) -> None:
         detalle = self.obtener_detalle(oc_id)
@@ -295,3 +301,4 @@ class OrdenCompraModel:
             "UPDATE ordenes_compra SET estatus='recibida', fecha_recibido=datetime('now'), total=? WHERE id=?",
             (total, oc_id),
         )
+        sync_update('ordenes_compra', oc_id, {'estatus': 'recibida', 'total': total})

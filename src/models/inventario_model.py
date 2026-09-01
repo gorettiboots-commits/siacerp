@@ -1,6 +1,7 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
 from src.utils.empresa_context import donde_empresa, parametros_empresa
+from src.utils.sync_hooks import sync_insert, sync_update, sync_delete
 
 
 class InsumoModel:
@@ -72,6 +73,10 @@ class InsumoModel:
             "INSERT INTO insumos (codigo, nombre, categoria, unidad_medida, stock_minimo, imagen) VALUES (?, ?, ?, ?, ?, ?)",
             (codigo, nombre, categoria, unidad, stock_minimo, imagen),
         )
+        sync_insert('insumos', cursor.lastrowid, {
+            'codigo': codigo, 'nombre': nombre, 'categoria': categoria,
+            'unidad_medida': unidad, 'stock_minimo': stock_minimo,
+        })
         return cursor.lastrowid
 
     def actualizar(self, insumo_id: int, codigo: str, nombre: str, categoria: str,
@@ -80,9 +85,14 @@ class InsumoModel:
             "UPDATE insumos SET codigo=?, nombre=?, categoria=?, unidad_medida=?, stock_minimo=?, imagen=?, updated_at=datetime('now') WHERE id=?",
             (codigo, nombre, categoria, unidad, stock_minimo, imagen, insumo_id),
         )
+        sync_update('insumos', insumo_id, {
+            'codigo': codigo, 'nombre': nombre, 'categoria': categoria,
+            'unidad_medida': unidad, 'stock_minimo': stock_minimo,
+        })
 
     def desactivar(self, insumo_id: int) -> None:
-        self.db.execute("UPDATE insumos SET activo=0, updated_at=datetime('now') WHERE id=?", (insumo_id,))
+        self.db.execute("UPDATE insumos SET activo=0, is_deleted=1, updated_at=datetime('now') WHERE id=?", (insumo_id,))
+        sync_delete('insumos', insumo_id)
 
     def actualizar_stock(self, insumo_id: int, cantidad: float) -> None:
         self.db.execute(

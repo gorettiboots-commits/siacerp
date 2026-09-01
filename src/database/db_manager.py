@@ -351,6 +351,8 @@ class DatabaseManager:
         self._migrar_fichas_tecnicas()
         self._migrar_movimientos_inventario()
         self._migrar_empresa_id()
+        self._migrar_indices()
+        self._migrar_sync()
 
     def _migrar_empresa_id(self) -> None:
         """Multi-tenant: agrega empresa_id a las tablas principales.
@@ -417,6 +419,182 @@ class DatabaseManager:
             print(f"Migracion empresa_id completada: {empresa_id[:8]}...")
         except Exception as e:
             print(f"Migracion empresa_id omitida: {e}")
+
+    def _migrar_indices(self) -> None:
+        """Agrega índices de rendimiento faltantes.
+
+        Idempotente: CREATE INDEX IF NOT EXISTS es seguro ejecutar múltiples
+        veces. Cubre foreign keys, columnas de filtrado y composite indexes.
+        """
+        indices = [
+            # Variantes
+            ("idx_variantes_modelo", "variantes", "modelo_id"),
+            ("idx_variantes_activo", "variantes", "activo"),
+            # Lista de materiales
+            ("idx_lista_materiales_modelo", "lista_materiales", "modelo_id"),
+            ("idx_lista_materiales_insumo", "lista_materiales", "insumo_id"),
+            # Proveedor-insumos
+            ("idx_proveedor_insumos_proveedor", "proveedor_insumos", "proveedor_id"),
+            ("idx_proveedor_insumos_insumo", "proveedor_insumos", "insumo_id"),
+            # Detalle OC
+            ("idx_detalle_oc_orden", "detalle_orden_compra", "orden_compra_id"),
+            ("idx_detalle_oc_insumo", "detalle_orden_compra", "insumo_id"),
+            ("idx_detalle_oc_proveedor", "detalle_orden_compra", "proveedor_id"),
+            # Detalle OC puntos
+            ("idx_detalle_oc_puntos_detalle", "detalle_orden_compra_puntos", "detalle_id"),
+            # Órdenes de compra
+            ("idx_oc_estatus", "ordenes_compra", "estatus"),
+            ("idx_oc_fecha_emision", "ordenes_compra", "fecha_emision"),
+            ("idx_oc_proveedor", "ordenes_compra", "proveedor_id"),
+            ("idx_oc_estatus_fecha", "ordenes_compra", "estatus, fecha_emision"),
+            # Insumos
+            ("idx_insumos_activo", "insumos", "activo"),
+            ("idx_insumos_categoria", "insumos", "categoria"),
+            ("idx_insumos_stock_bajo", "insumos", "activo, stock_actual, stock_minimo"),
+            # Modelos
+            ("idx_modelos_activo", "modelos", "activo"),
+            # Movimientos de inventario
+            ("idx_mov_inv_insumo", "movimiento_inventario", "insumo_id"),
+            ("idx_mov_inv_created", "movimiento_inventario", "created_at"),
+            ("idx_mov_inv_referencia", "movimiento_inventario", "referencia_tipo, referencia_id"),
+            # Detalle movimiento inventario
+            ("idx_detalle_mov_inv_movimiento", "detalle_movimiento_inventario", "movimiento_id"),
+            ("idx_detalle_mov_inv_insumo", "detalle_movimiento_inventario", "insumo_id"),
+            # Pedidos cliente
+            ("idx_pedidos_cliente_id", "pedidos_cliente", "cliente_id"),
+            ("idx_pedidos_estatus", "pedidos_cliente", "estatus"),
+            # Detalle pedido cliente
+            ("idx_detalle_pedido_cliente", "detalle_pedido_cliente", "pedido_id"),
+            ("idx_detalle_pedido_puntos_detalle", "detalle_pedido_cliente_puntos", "detalle_id"),
+            # Programación
+            ("idx_prog_lineas_semana", "programacion_lineas", "semana_id"),
+            ("idx_prog_lineas_pedido", "programacion_lineas", "pedido_id"),
+            ("idx_prog_lineas_detalle", "programacion_lineas", "detalle_pedido_id"),
+            ("idx_prog_lineas_estatus", "programacion_lineas", "estatus"),
+            ("idx_prog_lineas_semana_estatus", "programacion_lineas", "semana_id, estatus"),
+            ("idx_prog_lineas_folio_prog", "programacion_lineas", "folio_prog"),
+            ("idx_prog_lineas_folio_pedido", "programacion_lineas", "folio_pedido"),
+            ("idx_prog_linea_tallas_linea", "programacion_linea_tallas", "linea_id"),
+            ("idx_prog_semana_fecha", "programacion_semana", "fecha_inicio"),
+            # Órdenes de producción
+            ("idx_op_variante", "ordenes_produccion", "variante_id"),
+            ("idx_op_estatus", "ordenes_produccion", "estatus"),
+            ("idx_op_fecha_entrega", "ordenes_produccion", "fecha_entrega"),
+            # Matriz tallas OP
+            ("idx_matriz_tallas_op", "matriz_tallas_op", "orden_produccion_id"),
+            # Seguimiento producción
+            ("idx_seguimiento_op", "seguimiento_produccion", "orden_produccion_id"),
+            ("idx_seguimiento_estacion", "seguimiento_produccion", "estacion_id"),
+            # Incidencias producción
+            ("idx_incidencias_seguimiento", "incidencias_produccion", "seguimiento_id"),
+            # Inventario PT
+            ("idx_inventario_pt_variante", "inventario_pt", "variante_id"),
+            ("idx_inventario_pt_talla", "inventario_pt", "talla_id"),
+            ("idx_inventario_pt_variante_talla", "inventario_pt", "variante_id, talla_id"),
+            # Usuario permisos
+            ("idx_usuario_permisos_usuario", "usuario_permisos", "usuario_id"),
+            ("idx_usuario_permisos_permiso", "usuario_permisos", "permiso_id"),
+            # Logs sistema
+            ("idx_logs_usuario", "logs_sistema", "usuario_id"),
+            # Impresiones
+            ("idx_impresiones_supabase", "impresiones_historico", "supabase_id"),
+        ]
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+            for nombre, tabla, columnas in indices:
+                try:
+                    cursor.execute(
+                        f"CREATE INDEX IF NOT EXISTS {nombre} ON {tabla} ({columnas})")
+                except Exception:
+                    pass  # Tabla o columna no existe aún (BD antigua)
+            conn.commit()
+        except Exception as e:
+            print(f"Migración índices omitida: {e}")
+
+    def _migrar_sync(self) -> None:
+        """Cola de sincronización (outbox) y soft delete.
+
+        Crea la tabla sync_queue si no existe, agrega la columna
+        is_deleted a las tablas principales y crea los índices de
+        la cola. Todo idempotente.
+        """
+        try:
+            conn = self.connect()
+            cursor = conn.cursor()
+
+            # --- sync_queue ---
+            if self.engine == 'sqlite':
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_queue (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tabla TEXT NOT NULL,
+                        registro_id INTEGER NOT NULL,
+                        operacion TEXT NOT NULL CHECK(operacion IN ('INSERT','UPDATE','DELETE')),
+                        datos TEXT,
+                        estatus TEXT NOT NULL DEFAULT 'pendiente'
+                            CHECK(estatus IN ('pendiente','enviado','error')),
+                        intentos INTEGER NOT NULL DEFAULT 0,
+                        ultimo_error TEXT,
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        enviado_en TEXT
+                    )
+                """)
+            else:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sync_queue (
+                        id SERIAL PRIMARY KEY,
+                        tabla TEXT NOT NULL,
+                        registro_id BIGINT NOT NULL,
+                        operacion TEXT NOT NULL CHECK(operacion IN ('INSERT','UPDATE','DELETE')),
+                        datos JSONB,
+                        estatus TEXT NOT NULL DEFAULT 'pendiente'
+                            CHECK(estatus IN ('pendiente','enviado','error')),
+                        intentos INTEGER NOT NULL DEFAULT 0,
+                        ultimo_error TEXT,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        enviado_en TIMESTAMPTZ
+                    )
+                """)
+            # Índices de la cola
+            for idx, col in (
+                ("idx_sync_queue_estatus", "estatus"),
+                ("idx_sync_queue_tabla", "tabla, registro_id"),
+                ("idx_sync_queue_pendientes", "estatus, created_at"),
+            ):
+                try:
+                    cursor.execute(
+                        f"CREATE INDEX IF NOT EXISTS {idx} ON sync_queue ({col})")
+                except Exception:
+                    pass
+            conn.commit()
+
+            # --- is_deleted en tablas principales ---
+            tablas_soft_delete = [
+                'insumos', 'modelos', 'variantes', 'proveedores',
+                'clientes', 'ordenes_compra', 'ordenes_produccion',
+                'usuarios', 'pedidos_cliente', 'programacion_semana',
+                'programacion_lineas',
+            ]
+            for tabla in tablas_soft_delete:
+                try:
+                    if self.engine == 'sqlite':
+                        cols = [r[1] for r in cursor.execute(
+                            f"PRAGMA table_info({tabla})").fetchall()]
+                        if 'is_deleted' not in cols:
+                            cursor.execute(
+                                f"ALTER TABLE {tabla} ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+                            print(f"  {tabla}: is_deleted agregado")
+                    else:
+                        cursor.execute(
+                            f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS "
+                            f"is_deleted BOOLEAN NOT NULL DEFAULT FALSE")
+                except Exception:
+                    pass  # Tabla no existe aún
+            conn.commit()
+            print("Migración sync_queue + is_deleted completada.")
+        except Exception as e:
+            print(f"Migración sync omitida: {e}")
 
     def _migrar_impresiones_historico(self) -> None:
         """Garantiza la tabla del histórico de la cola de impresión.
@@ -1158,7 +1336,7 @@ class DatabaseManager:
         except Exception as e:
                 print("Migración configuracion_empresa omitida: {e}")
 
-        # Ampliar claves de empresa si faltan (RFC, domicilio, etc.)
+        # Ampliar claves de empresa si faltan (RFC, domicilio, activo, etc.)
         try:
             conn = self.connect()
             cursor = conn.cursor()
@@ -1179,6 +1357,7 @@ class DatabaseManager:
                 ('domicilio', '', 'texto'),
                 ('telefono', '', 'texto'),
                 ('email', '', 'texto'),
+                ('activo', '1', 'booleano'),
             ):
                 if clave not in claves_existentes:
                     cursor.execute(

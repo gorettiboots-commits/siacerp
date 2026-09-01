@@ -46,6 +46,12 @@ def _pre_configurar() -> bool:
     parser.add_argument("--domicilio", default="")
     parser.add_argument("--telefono", default="")
     parser.add_argument("--email", default="")
+    parser.add_argument("--admin-user", default="admin",
+                        help="Nombre de usuario admin")
+    parser.add_argument("--admin-password", default="admin123",
+                        help="Contrasena del usuario admin")
+    parser.add_argument("--admin-nombre", default="Administrador del Sistema",
+                        help="Nombre completo del admin")
     pa = parser.parse_args()
 
     print("=" * 50)
@@ -66,6 +72,25 @@ def _pre_configurar() -> bool:
         "email": pa.email,
     })
     print(f"Datos de empresa guardados: {pa.nombre}")
+
+    # Crear usuario admin con credenciales personalizadas
+    from src.models.accesos_model import UsuarioModel, PermisosModel
+    user_model = UsuarioModel()
+    perm_model = PermisosModel()
+    existing = user_model.obtener_por_username(pa.admin_user)
+    if not existing:
+        admin_id = user_model.crear(
+            pa.admin_user, pa.admin_password, pa.admin_nombre, "admin")
+        # Asignar todos los permisos al admin
+        perm_model.guardar(admin_id, perm_model.claves_totales())
+        print(f"Usuario admin creado: {pa.admin_user}")
+    else:
+        # Actualizar password del admin existente
+        user_model.cambiar_password(existing["id"], pa.admin_password)
+        user_model.actualizar(
+            existing["id"], pa.admin_user, pa.admin_nombre, "admin")
+        print(f"Usuario admin actualizado: {pa.admin_user}")
+
     print("Pre-configuración completada.")
     return True
 
@@ -112,7 +137,15 @@ def main() -> None:
 
     InstaladorHistorico.instalar()
 
+    # Icono de la ventana principal
+    from pathlib import Path as _Path
+    _icono_ruta = _Path(__file__).resolve().parent / "src" / "views" / "assets" / "icono_siac.png"
+    if _icono_ruta.exists():
+        from PySide6.QtGui import QIcon
+        app.setWindowIcon(QIcon(str(_icono_ruta)))
+
     window = MainWindow()
+    window.setWindowIcon(QIcon(str(_icono_ruta))) if _icono_ruta.exists() else None
     window.show()
 
     sys.exit(app.exec())

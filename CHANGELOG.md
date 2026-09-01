@@ -6,6 +6,51 @@
 
 ---
 
+## [Unreleased] — 2026-08-31
+
+### Added
+- **Captura de pedidos desde app móvil:**
+  - Selector de clientes con búsqueda por nombre/RFC
+  - Captura de líneas con modelo, piel, color
+  - Grilla de tallas por línea (pares por talla)
+  - Creación de pedido con folio automático en Supabase
+  - FAB botón flotante en pantalla de pedidos
+- **Impresión de etiquetas desde programación móvil:**
+  - Botón «Imprimir» en cada línea de programación
+  - Genera etiquetas por cada talla/pares de la línea
+  - Envía solicitud a `impresiones_etiqueta` en Supabase
+- **Sincronización automática escritorio → Supabase:**
+  - Sync automática al iniciar (después del login)
+  - Sync periódica cada 2 minutos
+  - Sync inmediata después de cada cambio en models
+  - Verificación de red antes de cada sync
+  - Tablas de detalle de pedido sincronizadas
+- **Migraciones Supabase numeradas (001-004):**
+  - 001: Tabla `impresiones_etiqueta` con RLS
+  - 002: Actualización de nombre de empresa
+  - 003: Vista de estatus de producción
+  - 004: Columna `updated_at` en `programacion_linea_tallas_movil`
+- **Script de sincronización inicial** (`sincronizar_datos_movil.py`):
+  - Sincroniza clientes, pedidos, detalles, programación y tallas
+  - Usa `service_role_key` para bypass RLS
+- **Bug fix auth.ts:** Corregido `.catch()` en Supabase `insert()` (PostgrestFilterBuilder no es Promise)
+- **Safe area en app móvil:** Respeto de insets.top para evitar overlap con barra de estado
+- **Tab «Pedidos» renombrado:** De «Clientes» a «Pedidos» en el tab bar
+- **Protección de eliminación en programación:** Líneas en producción no se pueden eliminar (móvil + escritorio)
+
+### Changed
+- **App móvil recompilada** con todas las mejoras de UI y funcionalidad
+- **Documentación README actualizada** con nuevas funcionalidades y métricas
+- **Versión del instalador** actualizada a 1.2.0
+
+### Fixed
+- **Login móvil crasheaba:** TypeError por `.catch()` en `PostgrestFilterBuilder`
+- **Empresas mostraba «SIAC ERP»:** Nombre actualizado a «EskinBoots» en Supabase
+- **Pedidos sin líneas:** Tablas de detalle no sincronizadas a Supabase
+- **Programación sin datos:** Tablas de programación no incluidas en sync automática
+
+---
+
 ## [Unreleased] — 2026-08-30
 
 ### Added

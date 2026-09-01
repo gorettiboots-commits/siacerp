@@ -13,6 +13,7 @@ datas = [
     (str(ROOT / 'src' / 'database' / 'schema.sql'), 'src/database'),
     (str(ROOT / 'src' / 'utils' / 'styles.qss'), 'src/utils'),
     (str(ROOT / 'src' / 'views' / 'assets'), 'src/views/assets'),
+    (str(ROOT / 'icon.png'), '.'),
     (str(ROOT / 'config.example.ini'), '.'),
     (str(ROOT / 'scripts' / 'pre_configurar.py'), 'scripts'),
 ]

@@ -634,8 +634,29 @@ class MainWindow(QMainWindow):
             return
 
         if user:
-            # Verificar que la empresa esté activa en Supabase
             rol = user.get("rol", "")
+
+            # Verificar que la empresa local este activa
+            if rol != "super_admin":
+                try:
+                    from src.database.db_manager import DatabaseManager
+                    db = DatabaseManager()
+                    emp_activo = db.fetch_one(
+                        "SELECT valor FROM configuracion_empresa "
+                        "WHERE clave = 'activo'")
+                    if emp_activo and emp_activo['valor'] not in ('1', 'True', 'true'):
+                        from src.views.login_view import LoginView
+                        for w in self._stack.findChildren(LoginView):
+                            w.lbl_error.setText(
+                                'Empresa desactivada. Contacte al administrador.')
+                            w.lbl_error.setVisible(True)
+                            w.btn_login.setEnabled(True)
+                            w.btn_login.setText("Iniciar Sesion")
+                        return
+                except Exception:
+                    pass
+
+            # Verificar que la empresa este activa en Supabase
             if rol != "super_admin":
                 try:
                     from src.utils.supabase_service import SupabaseService
@@ -652,7 +673,7 @@ class MainWindow(QMainWindow):
                                 w.btn_login.setText("Iniciar Sesion")
                             return
                 except Exception:
-                    pass  # Si Supabase no está disponible, continuar con login local
+                    pass  # Si Supabase no esta disponible, continuar con login local
 
             self._current_user = user
             set_usuario_actual(user)
@@ -675,6 +696,15 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(
                 f"Conectado como: {user['nombre_completo']} ({user['rol']})")
             self.setWindowTitle(f"SIAC ERP - {user['nombre_completo']}")
+
+            # Iniciar sincronizacion automatica con Supabase
+            try:
+                from src.utils.sync_service import SyncService
+                sync = SyncService()
+                if sync.conectado:
+                    sync.iniciar(intervalo_segundos=120)
+            except Exception:
+                pass  # Sync es opcional, no bloquear el login
         else:
             from src.views.login_view import LoginView
             for w in self._stack.findChildren(LoginView):

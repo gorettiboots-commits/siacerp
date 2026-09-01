@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 
 import { colores, fuentes } from '../theme';
 import type { ClientesPedidosStackParamList } from '../navegacion';
@@ -161,6 +162,14 @@ export function PantallaPedidos() {
           }
         />
       )}
+
+      {/* FAB: Capturar pedido */}
+      <Pressable
+        style={styles.fab}
+        onPress={() => navigation.navigate('CapturarPedido')}
+      >
+        <Ionicons name="add" size={28} color="#ffffff" />
+      </Pressable>
     </View>
   );
 }
@@ -222,4 +231,20 @@ const styles = StyleSheet.create({
   cargando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   vacio: { paddingVertical: 40, alignItems: 'center' },
   textoVacio: { color: colores.textoSuave, fontSize: fuentes.cuerpo },
+  fab: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colores.primario,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
 });

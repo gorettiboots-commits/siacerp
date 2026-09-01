@@ -91,13 +91,17 @@ export async function iniciarSesion(
 
   // Registrar actividad (super_admin puede no tener empresa_id)
   if (empresaActual) {
-    await supabase.from('logs_movil').insert({
-      empresa_id: empresaActual,
-      usuario_id: usuarioActual.id,
-      accion: 'login',
-      entidad: 'sesion',
-      detalle: { email },
-    }).catch(() => {});
+    try {
+      await supabase.from('logs_movil').insert({
+        empresa_id: empresaActual,
+        usuario_id: usuarioActual.id,
+        accion: 'login',
+        entidad: 'sesion',
+        detalle: { email },
+      });
+    } catch (_) {
+      // Ignorar errores de logging
+    }
   }
 
   return { ok: true, usuario: usuarioActual };
@@ -106,12 +110,14 @@ export async function iniciarSesion(
 /** Cierra sesión */
 export async function cerrarSesion(): Promise<void> {
   if (usuarioActual && empresaActual) {
-    await supabase.from('logs_movil').insert({
-      empresa_id: empresaActual,
-      usuario_id: usuarioActual.id,
-      accion: 'logout',
-      entidad: 'sesion',
-    }).catch(() => {});
+    try {
+      await supabase.from('logs_movil').insert({
+        empresa_id: empresaActual,
+        usuario_id: usuarioActual.id,
+        accion: 'logout',
+        entidad: 'sesion',
+      });
+    } catch (_) {}
   }
 
   await supabase.auth.signOut();

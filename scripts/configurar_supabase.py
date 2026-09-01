@@ -256,4 +256,209 @@ CREATE TABLE IF NOT EXISTS detalle_oc_puntos_movil (
 ALTER TABLE detalle_oc_puntos_movil ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Usuarios autenticados leen puntos OC"
-    ON detalle_oc_puntos_movil F
+    ON detalle_oc_puntos_movil FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+-- 6. ORDENES DE PRODUCCION
+CREATE TABLE IF NOT EXISTS ordenes_produccion_movil (
+    id BIGINT PRIMARY KEY,
+    folio TEXT NOT NULL,
+    modelo_nombre TEXT,
+    codigo_variante TEXT,
+    total_pares INTEGER NOT NULL DEFAULT 0,
+    fecha_inicio TEXT,
+    fecha_entrega TEXT,
+    prioridad TEXT NOT NULL DEFAULT 'normal',
+    estatus TEXT NOT NULL DEFAULT 'planeada',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE ordenes_produccion_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios autenticados leen OP"
+    ON ordenes_produccion_movil FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+-- 7. SEGUIMIENTO PRODUCCION
+CREATE TABLE IF NOT EXISTS seguimiento_produccion_movil (
+    id BIGINT PRIMARY KEY,
+    orden_produccion_id BIGINT NOT NULL REFERENCES ordenes_produccion_movil(id),
+    estacion_nombre TEXT NOT NULL,
+    estatus TEXT NOT NULL DEFAULT 'pendiente',
+    pares_procesados INTEGER NOT NULL DEFAULT 0,
+    pares_defectuosos INTEGER NOT NULL DEFAULT 0,
+    observaciones TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE seguimiento_produccion_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios autenticados leen seguimiento"
+    ON seguimiento_produccion_movil FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Usuarios autenticados actualizan seguimiento"
+    ON seguimiento_produccion_movil FOR UPDATE
+    USING (auth.role() = 'authenticated');
+
+-- 8. INCIDENCIAS
+CREATE TABLE IF NOT EXISTS incidencias_produccion_movil (
+    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    seguimiento_id BIGINT NOT NULL REFERENCES seguimiento_produccion_movil(id),
+    tipo TEXT NOT NULL,
+    descripcion TEXT NOT NULL,
+    pares_afectados INTEGER NOT NULL DEFAULT 0,
+    reportado_por UUID REFERENCES perfiles_usuario(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE incidencias_produccion_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios autenticados leen incidencias"
+    ON incidencias_produccion_movil FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Usuarios autenticados crean incidencias"
+    ON incidencias_produccion_movil FOR INSERT
+    WITH CHECK (auth.role() = 'authenticated');
+
+-- 9. TALLAS
+CREATE TABLE IF NOT EXISTS tallas_catalogo_movil (
+    id BIGINT PRIMARY KEY,
+    talla TEXT NOT NULL,
+    activo BOOLEAN NOT NULL DEFAULT true
+);
+
+ALTER TABLE tallas_catalogo_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios autenticados leen tallas"
+    ON tallas_catalogo_movil FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+-- 10. LOGS
+CREATE TABLE IF NOT EXISTS logs_movil (
+    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    usuario_id UUID REFERENCES perfiles_usuario(id),
+    accion TEXT NOT NULL,
+    entidad TEXT NOT NULL,
+    entidad_id BIGINT,
+    detalle JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE logs_movil ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuarios autenticados crean logs"
+    ON logs_movil FOR INSERT
+    WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Admin ve todos los logs"
+    ON logs_movil FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM perfiles_usuario
+            WHERE id = auth.uid() AND rol = 'admin'
+        )
+    );
+"""
+    return sql
+
+
+def ejecutar_sql(sql_texto, url_supabase, service_role_key):
+    """Ejecuta SQL via la API de Supabase (PostgREST)."""
+    # Dividir en sentencias individuales
+    sentencias = [s.strip() for s in sql_texto.split(';') if s.strip() and not s.strip().startswith('--')]
+    exito = 0
+    fallos = 0
+
+    for sentencia in sentencias:
+        if not sentencia:
+            continue
+        try:
+            datos = json.dumps({"query": sentencia}).encode('utf-8')
+            req = urllib.request.Request(
+                f"{url_supabase}/rest/v1/rpc/executar_sql",
+                data=datos,
+                headers={
+                    "Content-Type": "application/json",
+                    "apikey": service_role_key,
+                    "Authorization": f"Bearer {service_role_key}",
+                },
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(req)
+                exito += 1
+            except urllib.error.HTTPError:
+                # Si rpc no existe, intentar con SQL Editor manual
+                fallos += 1
+        except Exception:
+            fallos += 1
+
+    return exito, fallos
+
+
+def main():
+    """Punto de entrada principal."""
+    parser = argparse.ArgumentParser(
+        description="Configuracion automatica de Supabase para SIAC ERP movil"
+    )
+    parser.add_argument("--admin-email", default="admin@siac.com", help="Email del admin")
+    parser.add_argument("--admin-password", default="admin123", help="Password del admin")
+    args = parser.parse_args()
+
+    print_paso("Configuracion de Supabase para SIAC ERP")
+    print()
+
+    config = obtener_config()
+    if not config:
+        print_error("No se pudo leer config.ini. Verifica la seccion [supabase].")
+        sys.exit(1)
+
+    url = config["url"]
+    anon_key = config["anon_key"]
+    service_role_key = config.get("service_role_key", "")
+
+    print_ok(f"URL: {url}")
+    print_ok(f"Anon Key: {anon_key[:20]}...")
+    print_ok(f"Service Role: {'Configurada' if service_role_key else 'NO configurada'}")
+    print()
+
+    # Paso 1: Verificar conexion
+    print_paso("Paso 1/4: Verificando conexion...")
+    if verificar_conexion((url, anon_key)):
+        print_ok("Conexion exitosa")
+    else:
+        print_error("No se pudo conectar con Supabase")
+        sys.exit(1)
+
+    # Paso 2: Generar esquema
+    print_paso("Paso 2/4: Generando esquema SQL...")
+    sql = crear_esquema_sql()
+    print_ok(f"SQL generado ({len(sql)} caracteres)")
+
+    # Paso 3: Ejecutar esquema
+    print_paso("Paso 3/4: Ejecutando esquema en Supabase...")
+    key = service_role_key or anon_key
+    exito, fallos = ejecutar_sql(sql, url, key)
+    print_ok(f"Sentencias ejecutadas: {exito}, Fallos: {fallos}")
+
+    # Paso 4: Verificar tablas
+    print_paso("Paso 4/4: Verificando tablas...")
+    resultados = verificar_tablas((url, key))
+    for tabla, existe in resultados.items():
+        if existe:
+            print_ok(tabla)
+        else:
+            print_error(f"{tabla} (no creada)")
+
+    print()
+    print_paso("Configuracion completada")
+    print()
+    print_info("Copia este SQL en el SQL Editor de Supabase si hubo fallos:")
+    print_info(f"  (SQL de {len(sql)} caracteres en memoria)")
+
+
+if __name__ == "__main__":
+    main()
+

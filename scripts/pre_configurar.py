@@ -151,6 +151,14 @@ def main() -> None:
     parser.add_argument("--email", default="",
                         help="Email")
 
+    # Usuario admin
+    parser.add_argument("--admin-user", default="admin",
+                        help="Nombre de usuario admin")
+    parser.add_argument("--admin-password", default="admin123",
+                        help="Contrasena del usuario admin")
+    parser.add_argument("--admin-nombre", default="Administrador del Sistema",
+                        help="Nombre completo del admin")
+
     # Configuración de BD
     parser.add_argument("--db-engine", default="sqlite",
                         choices=["sqlite", "postgresql"],
@@ -180,8 +188,40 @@ def main() -> None:
     _guardar_empresa(args)
 
     print()
+    # 4. Crear usuario admin
+    _crear_admin(args)
+
+    print()
     print("Pre-configuración completada exitosamente.")
     print(f"Datos en: {_directorio_datos()}")
+
+
+def _crear_admin(args: argparse.Namespace) -> None:
+    """Crea o actualiza el usuario admin con permisos completos."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    try:
+        from src.models.accesos_model import UsuarioModel, PermisosModel
+    except ImportError:
+        print("ADVERTENCIA: No se pudo importar UsuarioModel.")
+        print("El usuario admin se creará al abrir la app.")
+        return
+
+    user_model = UsuarioModel()
+    perm_model = PermisosModel()
+
+    # --- Usuario admin (general) ---
+    existing = user_model.obtener_por_username(args.admin_user)
+    if not existing:
+        admin_id = user_model.crear(
+            args.admin_user, args.admin_password,
+            args.admin_nombre, "admin")
+        perm_model.guardar(admin_id, perm_model.claves_totales())
+        print(f"Usuario admin creado: {args.admin_user}")
+    else:
+        user_model.cambiar_password(existing["id"], args.admin_password)
+        user_model.actualizar(
+            existing["id"], args.admin_user, args.admin_nombre, "admin")
+        print(f"Usuario admin actualizado: {args.admin_user}")
 
 
 if __name__ == "__main__":

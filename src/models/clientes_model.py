@@ -2,6 +2,7 @@ from typing import Optional
 
 from src.database.db_manager import DatabaseManager
 from src.utils.empresa_context import donde_empresa, parametros_empresa
+from src.utils.sync_hooks import sync_insert, sync_update, sync_delete
 
 
 class ClienteModel:
@@ -39,6 +40,9 @@ class ClienteModel:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (nombre, rfc, nombre_comercial, telefono, email, direccion),
         )
+        sync_insert('clientes', cursor.lastrowid, {
+            'nombre': nombre, 'rfc': rfc, 'nombre_comercial': nombre_comercial,
+        })
         return cursor.lastrowid
 
     def actualizar(self, cliente_id: int, nombre: str, rfc: str = "",
@@ -49,9 +53,13 @@ class ClienteModel:
             "email=?, direccion=? WHERE id=?",
             (nombre, rfc, nombre_comercial, telefono, email, direccion, cliente_id),
         )
+        sync_update('clientes', cliente_id, {
+            'nombre': nombre, 'rfc': rfc, 'nombre_comercial': nombre_comercial,
+        })
 
     def desactivar(self, cliente_id: int) -> None:
-        self.db.execute("UPDATE clientes SET activo=0 WHERE id=?", (cliente_id,))
+        self.db.execute("UPDATE clientes SET activo=0, is_deleted=1 WHERE id=?", (cliente_id,))
+        sync_delete('clientes', cliente_id)
 
     def reactivar(self, cliente_id: int) -> None:
         self.db.execute("UPDATE clientes SET activo=1 WHERE id=?", (cliente_id,))
@@ -155,6 +163,12 @@ class PedidoClienteModel:
             (folio, folio_pedido, cliente_id, fecha_pedido, fecha_programado,
              estatus, suela, horma, observaciones),
         )
+        sync_insert('pedidos_cliente', cursor.lastrowid, {
+            'folio': folio, 'folio_pedido': folio_pedido, 'cliente_id': cliente_id,
+            'fecha_pedido': fecha_pedido, 'fecha_programado': fecha_programado,
+            'estatus': estatus, 'suela': suela, 'horma': horma,
+            'observaciones': observaciones,
+        })
         return cursor.lastrowid
 
     def agregar_detalle(self, pedido_id: int, modelo: str, piel: str = "",
@@ -182,14 +196,21 @@ class PedidoClienteModel:
             (cliente_id, fecha_pedido, fecha_programado, estatus, observaciones,
              folio_pedido, suela, horma, pedido_id),
         )
+        sync_update('pedidos_cliente', pedido_id, {
+            'cliente_id': cliente_id, 'fecha_pedido': fecha_pedido,
+            'fecha_programado': fecha_programado, 'estatus': estatus,
+            'folio_pedido': folio_pedido, 'suela': suela, 'horma': horma,
+        })
 
     def cambiar_estatus(self, pedido_id: int, estatus: str) -> None:
         self.db.execute(
             "UPDATE pedidos_cliente SET estatus=? WHERE id=?", (estatus, pedido_id)
         )
+        sync_update('pedidos_cliente', pedido_id, {'estatus': estatus})
 
     def cancelar(self, pedido_id: int) -> None:
         self.db.execute(
             "UPDATE pedidos_cliente SET estatus='cancelado' WHERE id=? AND estatus != 'surtido'",
             (pedido_id,),
         )
+        sync_update('pedidos_cliente', pedido_id, {'estatus': 'cancelado'})

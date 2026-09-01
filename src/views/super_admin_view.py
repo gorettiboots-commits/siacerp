@@ -1,15 +1,16 @@
 """Vista del Dashboard de Super Admin.
 
-Muestra estadisticas globales, lista de empresas con metricas
-y usuarios por empresa. Solo accesible con rol super_admin.
+Muestra estadisticas locales, info de la empresa, lista de empresas
+en Supabase (si esta configurado) y permite gestionar usuarios.
+Solo accesible con rol super_admin.
 """
 from datetime import datetime
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox,
-    QPushButton, QScrollArea, QSplitter, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from src.controllers.super_admin_controller import SuperAdminController
@@ -29,7 +30,8 @@ class TarjetaKPI(QFrame):
 
         self.lbl_titulo = QLabel(titulo.upper())
         self.lbl_titulo.setStyleSheet(
-            f"color: {color}; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+            f"color: {color}; font-size: 10px; font-weight: bold; "
+            "letter-spacing: 1px;")
         lay.addWidget(self.lbl_titulo)
 
         self.lbl_valor = QLabel("—")
@@ -55,28 +57,14 @@ def _tabla(columnas: list[str], anchos: list[int]) -> QTableWidget:
     return tabla
 
 
-def _fila(tabla: QTableWidget, valores: list[str],
-          alineaciones: dict[int, Qt.AlignmentFlag] | None = None) -> None:
-    """Agrega una fila a la tabla."""
-    r = tabla.rowCount()
-    tabla.insertRow(r)
-    alineaciones = alineaciones or {}
-    for c, texto in enumerate(valores):
-        item = QTableWidgetItem(texto)
-        if c in alineaciones:
-            item.setTextAlignment(alineaciones[c])
-        tabla.setItem(r, c, item)
-
-
 class SuperAdminView(QWidget):
-    """Dashboard de super_admin con estadisticas multi-empresa."""
+    """Dashboard de super_admin con estadisticas y gestion."""
 
     navegar_modulo = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.controller = SuperAdminController()
-        self._empresa_seleccionada: str | None = None
         self._setup_ui()
         self.recargar()
 
@@ -92,7 +80,7 @@ class SuperAdminView(QWidget):
         cl.setContentsMargins(16, 12, 16, 16)
         cl.setSpacing(12)
 
-        # Encabezado
+        # --- Encabezado ---
         fila_header = QHBoxLayout()
         titulo = QLabel("Panel de Administracion")
         titulo.setStyleSheet(
@@ -109,92 +97,123 @@ class SuperAdminView(QWidget):
         fila_header.addWidget(btn_actualizar)
         cl.addLayout(fila_header)
 
-        # Tarjetas KPI globales
+        # --- Info de empresa local ---
+        grp_empresa = QFrame()
+        grp_empresa.setObjectName("card")
+        el = QVBoxLayout(grp_empresa)
+        el.setContentsMargins(12, 10, 12, 10)
+        lbl_emp = QLabel("Empresa (Local)")
+        lbl_emp.setStyleSheet(
+            "font-weight: bold; color: #334155; font-size: 14px;")
+        el.addWidget(lbl_emp)
+
+        self.lbl_empresa_nombre = QLabel("—")
+        self.lbl_empresa_nombre.setStyleSheet(
+            "font-size: 16px; font-weight: bold; color: #0f172a;")
+        el.addWidget(self.lbl_empresa_nombre)
+
+        self.lbl_empresa_info = QLabel("")
+        self.lbl_empresa_info.setStyleSheet(
+            "color: #64748b; font-size: 12px;")
+        self.lbl_empresa_info.setWordWrap(True)
+        el.addWidget(self.lbl_empresa_info)
+
+        # Boton activar/desactivar empresa local
+        fila_empresa_btn = QHBoxLayout()
+        self.lbl_empresa_estado = QLabel("")
+        self.lbl_empresa_estado.setStyleSheet(
+            "font-size: 13px; font-weight: bold;")
+        self.btn_empresa_toggle = QPushButton("Desactivar")
+        self.btn_empresa_toggle.setObjectName("btnSecondary")
+        self.btn_empresa_toggle.setFixedHeight(30)
+        self.btn_empresa_toggle.setCursor(Qt.PointingHandCursor)
+        self.btn_empresa_toggle.clicked.connect(self._toggle_empresa_local)
+        fila_empresa_btn.addWidget(self.lbl_empresa_estado)
+        fila_empresa_btn.addStretch()
+        fila_empresa_btn.addWidget(self.btn_empresa_toggle)
+        el.addLayout(fila_empresa_btn)
+
+        self.lbl_supabase = QLabel("")
+        self.lbl_supabase.setStyleSheet(
+            "color: #7C3AED; font-size: 11px; font-weight: bold;")
+        el.addWidget(self.lbl_supabase)
+
+        cl.addWidget(grp_empresa)
+
+        # --- Tarjetas KPI ---
         grid_kpi = QGridLayout()
         grid_kpi.setSpacing(10)
-        self.card_empresas = TarjetaKPI("Empresas", "#7C3AED")
-        self.card_usuarios = TarjetaKPI("Usuarios total", "#2563EB")
-        self.card_insumos = TarjetaKPI("Insumos total", "#16A34A")
-        self.card_ocs = TarjetaKPI("OCs total", "#EA580C")
-        self.card_ops = TarjetaKPI("OPs total", "#DC2626")
+        self.card_usuarios = TarjetaKPI("Usuarios", "#7C3AED")
+        self.card_insumos = TarjetaKPI("Insumos activos", "#16A34A")
+        self.card_ocs = TarjetaKPI("Ordenes de Compra", "#EA580C")
+        self.card_ops = TarjetaKPI("Ordenes de Produccion", "#DC2626")
+        self.card_modelos = TarjetaKPI("Modelos", "#2563EB")
         for c, card in enumerate([
-            self.card_empresas, self.card_usuarios,
-            self.card_insumos, self.card_ocs, self.card_ops
+            self.card_usuarios, self.card_insumos,
+            self.card_ocs, self.card_ops, self.card_modelos
         ]):
             grid_kpi.addWidget(card, 0, c)
         cl.addLayout(grid_kpi)
 
-        # Tabla de empresas
-        grp_empresas = QFrame()
-        grp_empresas.setObjectName("card")
-        el = QVBoxLayout(grp_empresas)
-        el.setContentsMargins(8, 8, 8, 8)
+        # --- Tabla de empresas Supabase (si configurado) ---
+        self.grp_empresas_sb = QFrame()
+        self.grp_empresas_sb.setObjectName("card")
+        ebl = QVBoxLayout(self.grp_empresas_sb)
+        ebl.setContentsMargins(8, 8, 8, 8)
 
-        lbl_emp = QLabel("Empresas Registradas")
-        lbl_emp.setStyleSheet("font-weight: bold; color: #334155; font-size: 14px;")
-        el.addWidget(lbl_emp)
+        lbl_emp_sb = QLabel("Empresas en Supabase")
+        lbl_emp_sb.setStyleSheet(
+            "font-weight: bold; color: #334155; font-size: 14px;")
+        ebl.addWidget(lbl_emp_sb)
 
         self.tabla_empresas = _tabla(
-            ["Nombre", "RFC", "Estado", "Usuarios", "Insumos", "OCs", "OPs", "Acciones"],
-            [180, 120, 80, 80, 80, 80, 80, 120])
+            ["Nombre", "RFC", "Estado", "ID"],
+            [200, 120, 100, 300])
         self.tabla_empresas.cellClicked.connect(self._on_empresa_clic)
-        el.addWidget(self.tabla_empresas)
-        cl.addWidget(grp_empresas, 3)
+        ebl.addWidget(self.tabla_empresas)
+        cl.addWidget(self.grp_empresas_sb)
 
-        # Tabla de usuarios
+        # --- Tabla de usuarios ---
         grp_usuarios = QFrame()
         grp_usuarios.setObjectName("card")
         ul = QVBoxLayout(grp_usuarios)
         ul.setContentsMargins(8, 8, 8, 8)
 
-        lbl_usu = QLabel("Usuarios del Sistema")
-        lbl_usu.setStyleSheet("font-weight: bold; color: #334155; font-size: 14px;")
-        self.lbl_detalle_empresa = QLabel("")
-        self.lbl_detalle_empresa.setStyleSheet("color: #64748b; font-size: 11px;")
+        lbl_usu = QLabel("Usuarios del Sistema (Local)")
+        lbl_usu.setStyleSheet(
+            "font-weight: bold; color: #334155; font-size: 14px;")
+        self.lbl_detalle = QLabel("")
+        self.lbl_detalle.setStyleSheet(
+            "color: #64748b; font-size: 11px;")
         ul.addWidget(lbl_usu)
-        ul.addWidget(self.lbl_detalle_empresa)
+        ul.addWidget(self.lbl_detalle)
 
         self.tabla_usuarios = _tabla(
-            ["Username", "Nombre", "Rol", "Estado", "Empresa ID"],
-            [120, 200, 100, 80, 280])
+            ["ID", "Username", "Nombre", "Rol", "Estado", "Acciones"],
+            [50, 130, 200, 120, 80, 120])
         ul.addWidget(self.tabla_usuarios)
-        cl.addWidget(grp_usuarios, 2)
+        cl.addWidget(grp_usuarios, 3)
 
         area.setWidget(contenido)
         raiz.addWidget(area)
 
-    def _on_empresa_clic(self, fila: int, _columna: int) -> None:
-        """Muestra los usuarios de la empresa seleccionada."""
-        nombre_item = self.tabla_empresas.item(fila, 0)
-        if not nombre_item:
+    # ----------------------------------------------------------------
+    # Empresa local
+    # ----------------------------------------------------------------
+
+    def _toggle_empresa_local(self) -> None:
+        """Activa o desactiva la empresa local."""
+        if not hasattr(self, '_empresa_activo'):
             return
-        nombre = nombre_item.text()
-
-        # Buscar empresa_id de la tabla de usuarios
-        for col in range(self.tabla_usuarios.columnCount()):
-            item = self.tabla_usuarios.item(0, col)
-            if item and item.text() == "Empresa ID":
-                break
-
-        # Obtener empresa_id de la tabla de empresas (ynamo hidden)
-        # Usamos el dato guardado
-        if hasattr(self, '_empresas_datos') and fila < len(self._empresas_datos):
-            eid = self._empresas_datos[fila]['id']
-            self._empresa_seleccionada = eid
-            usuarios = self.controller.obtener_usuarios_empresa(eid)
-            self.lbl_detalle_empresa.setText(
-                f"Empresa: {nombre} ({len(usuarios)} usuarios)")
-            self._cargar_tabla_usuarios(usuarios)
-
-    def _toggle_empresa(self, empresa_id: str, activo_actual: bool, nombre: str) -> None:
-        """Activa o desactiva una empresa."""
-        nuevo_estado = not activo_actual
+        nuevo_estado = not self._empresa_activo
         accion = "activar" if nuevo_estado else "desactivar"
 
         respuesta = QMessageBox.question(
             self,
             f"{accion.title()} empresa",
-            f"¿Desea {accion} la empresa '{nombre}'?",
+            f"¿Desea {accion} la empresa local?\n\n"
+            f"Si la desactiva, el login sera bloqueado para todos "
+            f"los usuarios.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -202,82 +221,212 @@ class SuperAdminView(QWidget):
         if respuesta != QMessageBox.Yes:
             return
 
-        resultado = self.controller.cambiar_estado_empresa(empresa_id, nuevo_estado)
-
+        resultado = self.controller.cambiar_estado_empresa_local(nuevo_estado)
         if resultado.get('ok'):
             QMessageBox.information(
                 self, "Exito",
-                f"Empresa '{nombre}' {accion}da correctamente.")
+                f"Empresa {accion}da correctamente.")
             self.recargar()
         else:
             QMessageBox.warning(
                 self, "Error",
-                f"No se pudo {accion} la empresa: {resultado.get('error', 'Error desconocido')}")
+                f"No se pudo {accion} la empresa: "
+                f"{resultado.get('error', 'Error desconocido')}")
+
+    # ----------------------------------------------------------------
+    # Empresas Supabase
+    # ----------------------------------------------------------------
+
+    def _on_empresa_clic(self, fila: int, _columna: int) -> None:
+        """Muestra info de la empresa seleccionada de Supabase."""
+        if not hasattr(self, '_empresas_sb') or fila >= len(self._empresas_sb):
+            return
+        emp = self._empresas_sb[fila]
+        nombre = emp.get('nombre', '')
+        activo = emp.get('activo', True)
+        eid = emp.get('id', '')
+
+        respuesta = QMessageBox.question(
+            self,
+            "Cambiar estado de empresa",
+            f"Empresa: {nombre}\nEstado actual: "
+            f"{'Activa' if activo else 'Inactiva'}\n\n"
+            f"¿Desea {'desactivar' if activo else 'activar'} esta empresa "
+            f"en Supabase?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if respuesta != QMessageBox.Yes:
+            return
+
+        resultado = self.controller.cambiar_estado_empresa(
+            eid, not activo)
+        if resultado.get('ok'):
+            QMessageBox.information(
+                self, "Exito",
+                f"Empresa '{nombre}' "
+                f"{'activada' if not activo else 'desactivada'} "
+                f"en Supabase.")
+            self.recargar()
+        else:
+            QMessageBox.warning(
+                self, "Error",
+                f"No se pudo cambiar estado: "
+                f"{resultado.get('error', 'Error desconocido')}")
+
+    # ----------------------------------------------------------------
+    # Usuarios locales
+    # ----------------------------------------------------------------
+
+    def _toggle_usuario(self, usuario_id: int, activo_actual: bool,
+                        username: str) -> None:
+        """Activa o desactiva un usuario."""
+        nuevo_estado = not activo_actual
+        accion = "activar" if nuevo_estado else "desactivar"
+
+        respuesta = QMessageBox.question(
+            self,
+            f"{accion.title()} usuario",
+            f"¿Desea {accion} el usuario '{username}'?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+
+        if respuesta != QMessageBox.Yes:
+            return
+
+        resultado = self.controller.cambiar_estado_usuario(
+            usuario_id, nuevo_estado)
+
+        if resultado.get('ok'):
+            QMessageBox.information(
+                self, "Exito",
+                f"Usuario '{username}' {accion}do correctamente.")
+            self.recargar()
+        else:
+            QMessageBox.warning(
+                self, "Error",
+                f"No se pudo {accion} el usuario: "
+                f"{resultado.get('error', 'Error desconocido')}")
 
     def _cargar_tabla_usuarios(self, usuarios: list[dict]) -> None:
         """Carga la tabla de usuarios."""
         self.tabla_usuarios.setRowCount(0)
         for u in usuarios:
-            estado = "Activo" if u.get('activo', True) else "Inactivo"
-            _fila(self.tabla_usuarios, [
-                u.get('username', ''),
-                u.get('nombre_completo', ''),
-                u.get('rol', ''),
-                estado,
-                u.get('empresa_id', '')[:8] + '...' if u.get('empresa_id') else 'NULL',
-            ])
+            activo = u.get('activo', 1) in (1, True)
+            estado = "Activo" if activo else "Inactivo"
+            uid = u.get('id', 0)
+            username = u.get('username', '')
+            r = self.tabla_usuarios.rowCount()
+            self.tabla_usuarios.insertRow(r)
+            self.tabla_usuarios.setItem(r, 0, QTableWidgetItem(str(uid)))
+            self.tabla_usuarios.setItem(r, 1, QTableWidgetItem(username))
+            self.tabla_usuarios.setItem(
+                r, 2, QTableWidgetItem(u.get('nombre_completo', '')))
+            self.tabla_usuarios.setItem(r, 3, QTableWidgetItem(u.get('rol', '')))
+            self.tabla_usuarios.setItem(r, 4, QTableWidgetItem(estado))
+
+            btn = QPushButton("Desactivar" if activo else "Activar")
+            btn.setObjectName("btnSecondary")
+            btn.setFixedHeight(28)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(
+                lambda checked=False, _id=uid, _a=activo, _u=username:
+                self._toggle_usuario(_id, _a, _u))
+            self.tabla_usuarios.setCellWidget(r, 5, btn)
+
+    # ----------------------------------------------------------------
+    # Recargar todo
+    # ----------------------------------------------------------------
 
     def recargar(self) -> None:
-        """Recarga todos los datos."""
+        """Recarga todos los datos (local + Supabase)."""
         self.lbl_fecha.setText(
             datetime.now().strftime("Actualizado: %d/%m/%Y %H:%M"))
 
         try:
-            # Estadisticas globales
+            # Info de empresa local
+            empresa = self.controller.obtener_empresa()
+            nombre_emp = empresa.get('nombre_empresa', '') or 'Sin configurar'
+            self.lbl_empresa_nombre.setText(nombre_emp)
+            info_parts = []
+            if empresa.get('rfc'):
+                info_parts.append(f"RFC: {empresa['rfc']}")
+            if empresa.get('domicilio'):
+                info_parts.append(f"Domicilio: {empresa['domicilio']}")
+            if empresa.get('telefono'):
+                info_parts.append(f"Tel: {empresa['telefono']}")
+            if empresa.get('email'):
+                info_parts.append(f"Email: {empresa['email']}")
+            self.lbl_empresa_info.setText(
+                " | ".join(info_parts) if info_parts
+                else "Configure la empresa en Ajustes")
+
+            # Estado de la empresa
+            self._empresa_activo = empresa.get('activo', True)
+            if self._empresa_activo:
+                self.lbl_empresa_estado.setText("🟢 Empresa ACTIVA")
+                self.lbl_empresa_estado.setStyleSheet(
+                    "font-size: 13px; font-weight: bold; color: #16A34A;")
+                self.btn_empresa_toggle.setText("Desactivar")
+            else:
+                self.lbl_empresa_estado.setText("🔴 Empresa INACTIVA")
+                self.lbl_empresa_estado.setStyleSheet(
+                    "font-size: 13px; font-weight: bold; color: #DC2626;")
+                self.btn_empresa_toggle.setText("Activar")
+
+            # Estadisticas
             stats = self.controller.obtener_estadisticas_globales()
-            self.card_empresas.establecer(str(stats['total_empresas']))
-            self.card_usuarios.establecer(str(stats['total_usuarios']))
+            self.card_usuarios.establecer(
+                f"{stats['usuarios_activos']}/{stats['total_usuarios']}")
             self.card_insumos.establecer(str(stats['total_insumos']))
             self.card_ocs.establecer(str(stats['total_ocs']))
             self.card_ops.establecer(str(stats['total_ops']))
+            self.card_modelos.establecer(str(stats['total_modelos']))
 
-            # Tabla de empresas
-            empresas = self.controller.obtener_empresas_con_estadisticas()
-            self._empresas_datos = empresas
-            self.tabla_empresas.setRowCount(0)
-            for idx, emp in enumerate(empresas):
-                estado = "Activa" if emp.get('activo', True) else "Inactiva"
-                _fila(self.tabla_empresas, [
-                    emp.get('nombre', ''),
-                    emp.get('rfc', '') or '—',
-                    estado,
-                    str(emp.get('usuarios', 0)),
-                    str(emp.get('insumos', 0)),
-                    str(emp.get('ocs', 0)),
-                    str(emp.get('ops', 0)),
-                    '',  # Columna de acciones
-                ], {3: Qt.AlignCenter, 4: Qt.AlignCenter,
-                    5: Qt.AlignCenter, 6: Qt.AlignCenter})
-                # Boton de activar/desactivar
-                btn = QPushButton("Desactivar" if emp.get('activo', True) else "Activar")
-                btn.setObjectName("btnSecondary")
-                btn.setFixedHeight(28)
-                btn.setCursor(Qt.PointingHandCursor)
-                eid = emp['id']
-                activo = emp.get('activo', True)
-                nombre = emp.get('nombre', '')
-                btn.clicked.connect(
-                    lambda checked=False, _eid=eid, _activo=activo, _n=nombre:
-                    self._toggle_empresa(_eid, _activo, _n))
-                self.tabla_empresas.setCellWidget(idx, 7, btn)
+            # Supabase status
+            sb_ok = stats.get('supabase_configurado', False)
+            if sb_ok:
+                self.lbl_supabase.setText(
+                    f"✅ Supabase conectado | "
+                    f"{stats['total_empresas']} empresa(s) | "
+                    f"{stats['empresas_activas']} activa(s)")
+            else:
+                self.lbl_supabase.setText(
+                    "⚠️ Supabase no configurado (solo datos locales)")
 
-            # Todos los usuarios
-            usuarios = self.controller.obtener_todos_usuarios()
-            self.tabla_usuarios.setRowCount(0)
-            self.lbl_detalle_empresa.setText(
-                f"Mostrando todos los usuarios ({len(usuarios)} total)")
+            # Empresas de Supabase
+            empresas_sb = self.controller.listar_empresas_supabase()
+            self._empresas_sb = empresas_sb
+            if empresas_sb:
+                self.grp_empresas_sb.setVisible(True)
+                self.tabla_empresas.setRowCount(0)
+                for emp in empresas_sb:
+                    activo = emp.get('activo', True)
+                    r = self.tabla_empresas.rowCount()
+                    self.tabla_empresas.insertRow(r)
+                    self.tabla_empresas.setItem(
+                        r, 0, QTableWidgetItem(emp.get('nombre', '')))
+                    self.tabla_empresas.setItem(
+                        r, 1, QTableWidgetItem(emp.get('rfc') or '—'))
+                    self.tabla_empresas.setItem(
+                        r, 2, QTableWidgetItem(
+                            "Activa" if activo else "Inactiva"))
+                    self.tabla_empresas.setItem(
+                        r, 3, QTableWidgetItem(emp.get('id', '')))
+            else:
+                self.grp_empresas_sb.setVisible(False)
+
+            # Usuarios locales
+            usuarios = self.controller.listar_usuarios()
+            activos = sum(
+                1 for u in usuarios
+                if u.get('activo', 1) in (1, True))
+            self.lbl_detalle.setText(
+                f"{activos} activos de {len(usuarios)} total")
             self._cargar_tabla_usuarios(usuarios)
 
         except Exception as e:
-            self.card_empresas.establecer("Error")
+            self.card_usuarios.establecer("Error")
             print(f"Error en dashboard super_admin: {e}")
