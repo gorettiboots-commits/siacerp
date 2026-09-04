@@ -12,14 +12,18 @@ Configuración (desde código):
     set_agrupacion(clave_columna | None)
     set_plantilla_excel(ruta, inicio="A3")
     set_reporte_config({...})
+
+Las acciones por fila se muestran como botones de icono tile
+(objectName `btnFilaIconoTile`): el glifo blanco sobre el color de la
+acción, sin fondo circular, y el `texto` se muestra como tooltip.
 """
 
 from functools import partial
 from pathlib import Path
 
 from openpyxl import load_workbook
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont, QTextDocument
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPageSize, QTextDocument
 from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
     QButtonGroup, QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QHeaderView,
@@ -29,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.icons import mono_icon
+from src.utils.icons import mono_icon, tile_icon_color
 from src.utils.odoo_list import _ItemOrdenable, _Tarjeta
 from src.utils.table_utils import configurar_tabla_excel
 
@@ -76,6 +80,10 @@ class ComplexGrid(QWidget):
         self._claves_fn = None
         self._tarjeta_fn = None
         self._lista_fn = None
+        self._estilo_fn = None
+        self._grupo_fn = None
+        self._matriz_fn = None
+        self._totales_fn = None
         self._acciones: list[dict] = []
         self._filtros: list = []
         self._buscar = ""
@@ -89,6 +97,7 @@ class ComplexGrid(QWidget):
         self._idx_lista = 0
         self._idx_tabla = 1
         self._idx_iconos = 2
+        self._botones_extra: list[QPushButton] = []
         self._setup_ui()
 
     # ------------------------------------------------------------------ UI
@@ -106,6 +115,10 @@ class ComplexGrid(QWidget):
         self._txt_buscar.setMinimumWidth(220)
         self._txt_buscar.textChanged.connect(self._on_buscar)
         bar.addWidget(self._txt_buscar)
+
+        self._lay_izquierda = QHBoxLayout()
+        self._lay_izquierda.setSpacing(8)
+        bar.addLayout(self._lay_izquierda)
 
         self._lbl_estado = QLabel("")
         self._lbl_estado.setObjectName("sectionSubtitle")
@@ -126,6 +139,10 @@ class ComplexGrid(QWidget):
                                                self.imprimir)
         for b in (self._btn_excel, self._btn_pdf, self._btn_imprimir):
             bar.addWidget(b)
+
+        self._lay_botones_extra = QHBoxLayout()
+        self._lay_botones_extra.setSpacing(8)
+        bar.addLayout(self._lay_botones_extra)
 
         self._btn_lista = self._crear_boton_vista("lista", "Lista")
         self._btn_tabla = self._crear_boton_vista("tabla", "Tabla")
@@ -197,13 +214,59 @@ class ComplexGrid(QWidget):
         self._registros = list(registros or [])
         self._aplicar_filtro()
 
-    def set_renderers(self, fila=None, claves=None, tarjeta=None, lista=None) -> None:
+    def set_renderers(self, fila=None, claves=None, tarjeta=None, lista=None,
+                      estilo=None) -> None:
         self._fila_fn = fila
         self._claves_fn = claves
         self._tarjeta_fn = tarjeta
         self._lista_fn = lista
+        self._estilo_fn = estilo
+
+    def set_exportar_visible(self, visible: bool) -> None:
+        for b in (self._btn_excel, self._btn_pdf, self._btn_imprimir):
+            b.setVisible(visible)
+
+    def set_botones_extra(self, botones: list[dict]) -> None:
+        """Botones QPushButton de color adicionales en la barra del grid.
+
+        Cada dict: {"texto", "object_name", "callback", "icono"?, "color"?}.
+        `object_name` usa los estilos de color del sistema (btnPrimary,
+        btnSuccess, btnDanger, btnWarning). Se limpian los anteriores antes de
+        agregar los nuevos."""
+        while self._lay_botones_extra.count():
+            item = self._lay_botones_extra.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+        self._botones_extra = []
+        for cfg in botones or []:
+            btn = QPushButton(cfg.get("texto", ""))
+            btn.setObjectName(cfg.get("object_name", "btnSecondary"))
+            btn.setCursor(Qt.PointingHandCursor)
+            icono = cfg.get("icono")
+            if icono:
+                btn.setIcon(mono_icon(icono, 16, cfg.get("color", "#ffffff")))
+            cb = cfg.get("callback")
+            if cb:
+                btn.clicked.connect(cb)
+            self._lay_botones_extra.addWidget(btn)
+            self._botones_extra.append(btn)
+
+    def set_boton_extra_habilitado(self, texto: str, habilitado: bool) -> None:
+        """Habilita/deshabilita un botón extra por su texto (permisos)."""
+        for b in self._botones_extra:
+            if b.text() == texto:
+                b.setEnabled(habilitado)
+
+    def set_widget_izquierda(self, widget: QWidget) -> None:
+        """Agrega un widget en la parte izquierda de la barra (junto al buscador)."""
+        self._lay_izquierda.addWidget(widget)
 
     def set_acciones(self, acciones: list[dict]) -> None:
+        """Acciones por registro. Cada dict: texto, icono, color, callback,
+        habilitado y opcional ancho_columna. texto y habilitado aceptan un
+        callable que recibe el registro. El botón se dibuja circular compacto
+        con el icono en el color de la acción y el texto como tooltip."""
         self._acciones = list(acciones or [])
 
     def set_filtros(self, filtros: list) -> None:
@@ -228,6 +291,17 @@ class ComplexGrid(QWidget):
     def set_buscador_visible(self, visible: bool) -> None:
         self._txt_buscar.setVisible(visible)
 
+    def set_agrupar_visible(self, visible: bool) -> None:
+        self._cmb_agrupar.setVisible(visible)
+
+    def set_grupo_fn(self, fn) -> None:
+        """fn(valor, recs) -> str: etiqueta para las filas de agrupación."""
+        self._grupo_fn = fn
+
+    def set_matriz_handler(self, fn) -> None:
+        """fn(registro) -> dict: extrae datos de matriz de tallas para hover."""
+        self._matriz_fn = fn
+
     def buscar(self, texto: str) -> None:
         self._txt_buscar.setText(texto)
 
@@ -247,6 +321,13 @@ class ComplexGrid(QWidget):
 
     def datos_visibles(self) -> list:
         return list(self._visibles)
+
+    def registros_seleccionados(self) -> list:
+        """Devuelve los registros seleccionados en la vista de tabla."""
+        if self._stack.currentIndex() != self._idx_tabla:
+            return []
+        filas = sorted({i.row() for i in self._pag_tabla.selectedIndexes()})
+        return [self._mapa_rec[f] for f in filas if 0 <= f < len(self._mapa_rec)]
 
     def set_vista(self, vista: str) -> None:
         mapa = {
@@ -331,21 +412,28 @@ class ComplexGrid(QWidget):
         for i, c in enumerate(self._col_config):
             t.setColumnWidth(i, c.get("ancho", 110))
         if self._acciones:
-            t.setColumnWidth(n_cols - 1, max(48, 44 * len(self._acciones) + 8))
+            ancho = 36 * len(self._acciones) + 10
+            for acc in self._acciones:
+                ancho = max(ancho, int(acc.get("ancho_columna", 0)))
+            t.setColumnWidth(n_cols - 1, max(48, ancho))
             t.horizontalHeader().setSectionResizeMode(
                 n_cols - 1, QHeaderView.Fixed)
 
         grupos = self._agrupar()
         for valor, recs in grupos or [(None, self._visibles)]:
             if valor is not None:
-                self._insertar_fila_grupo(t, valor, n_cols)
+                self._insertar_fila_grupo(t, valor, recs, n_cols)
             for rec in recs:
                 self._insertar_fila(t, rec)
 
-    def _insertar_fila_grupo(self, t: QTableWidget, valor, n_cols: int) -> None:
+    def _insertar_fila_grupo(self, t: QTableWidget, valor, recs, n_cols: int) -> None:
         r = t.rowCount()
         t.insertRow(r)
-        item = _ItemOrdenable(f"{self._agrupar_por or ''}: {valor}")
+        if self._grupo_fn:
+            label = self._grupo_fn(valor, recs)
+        else:
+            label = f"{self._agrupar_por or ''}: {valor}"
+        item = _ItemOrdenable(label)
         item.setData(Qt.UserRole, str(valor).lower())
         item.setFlags(Qt.ItemIsEnabled)
         item.setBackground(QColor("#eef2ff"))
@@ -360,8 +448,6 @@ class ComplexGrid(QWidget):
     def _insertar_fila(self, t: QTableWidget, rec) -> None:
         r = t.rowCount()
         t.insertRow(r)
-        if self._acciones:
-            t.setRowHeight(r, t.verticalHeader().defaultSectionSize() * 2)
         fila = self._fila_fn(rec) if self._fila_fn else self._fila_por_defecto(rec)
         claves = self._claves_fn(rec) if self._claves_fn else None
         for c, cfg in enumerate(self._col_config):
@@ -376,6 +462,8 @@ class ComplexGrid(QWidget):
             item.setData(Qt.UserRole, clave)
             if cfg.get("tipo") == "numero":
                 item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            if self._estilo_fn:
+                self._estilo_fn(rec, item, c)
             t.setItem(r, c, item)
         if self._acciones:
             t.setCellWidget(r, len(self._col_config),
@@ -389,11 +477,20 @@ class ComplexGrid(QWidget):
         lay.setSpacing(4)
         for acc in self._acciones:
             btn = QToolButton()
-            btn.setText(acc.get("texto", ""))
-            btn.setIcon(mono_icon(acc.get("icono", "mas"), 14,
-                                  acc.get("color", "#4f46e5")))
-            btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            texto = acc.get("texto", "")
+            if callable(texto):
+                texto = texto(rec)
+            btn.setObjectName("btnFilaIconoTile")
+            btn.setIcon(tile_icon_color(acc.get("icono", "mas") or "mas", 30,
+                                         acc.get("color", "#4f46e5")))
+            btn.setIconSize(QSize(30, 30))
+            btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+            btn.setToolTip(str(texto) if texto else acc.get("tooltip", ""))
             btn.setCursor(Qt.PointingHandCursor)
+            habilitado = acc.get("habilitado", True)
+            if callable(habilitado):
+                habilitado = habilitado(rec)
+            btn.setEnabled(bool(habilitado))
             btn.clicked.connect(partial(self._ejecutar_accion, acc, rec))
             lay.addWidget(btn)
         return cont
@@ -562,8 +659,30 @@ class ComplexGrid(QWidget):
         printer.setOrientation(QPrinter.Landscape)
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(ruta)
+        # Usar WebEngine si disponible (WYSIWYG, CSS completo)
+        try:
+            from PySide6.QtWebEngineWidgets import QWebEngineView
+            from PySide6.QtCore import QEventLoop, QTimer
+            web = QWebEngineView()
+            web.setHtml(self._reporte_html())
+            loop = QEventLoop()
+            def on_load(ok):
+                web.print(printer)
+                loop.quit()
+            web.loadFinished.connect(on_load)
+            QTimer.singleShot(10000, loop.quit)
+            loop.exec()
+            return
+        except ImportError:
+            pass
+        # Fallback: QTextDocument
+        from PySide6.QtCore import QSizeF
         doc = QTextDocument()
         doc.setHtml(self._reporte_html())
+        page_mm = printer.pageLayout().pageSize().size(QPageSize.Millimeter)
+        css_w = page_mm.width() * 96.0 / 25.4
+        css_h = page_mm.height() * 96.0 / 25.4
+        doc.setPageSize(QSizeF(css_w, css_h))
         doc.print_(printer)
 
     def _reporte_html(self) -> str:

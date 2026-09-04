@@ -24,13 +24,16 @@ sistema lo generan en `src/utils/export_utils.py` (`_oc_receipt_html`,
 (QTextDocument), así que lo que se ve es lo que sale.
 """
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QMarginsF, QSizeF, QTimer, Qt
 from PySide6.QtGui import QDesktopServices, QPageLayout, QPageSize
-from PySide6.QtPrintSupport import QPrintDialog, QPrinter
+from PySide6.QtPrintSupport import QPrinter
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QComboBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QTextBrowser, QToolButton, QVBoxLayout, QWidget,
 )
+
+from src.components.notificacion_flotante import notificar_flotante
+from src.utils.impresion_virtual import dialogo_impresion
 
 # WebEngine se crea de forma perezosa dentro del diálogo (es pesado y solo
 # debe cargarse cuando el usuario abre el preview). Si no está disponible o
@@ -43,10 +46,46 @@ except ImportError:  # pragma: no cover
 
 
 PAGINAS = {
-    "Carta (Letter)": QPageSize.Letter,
-    "Oficio (Legal)": QPageSize.Legal,
-    "A4": QPageSize.A4,
+    "Carta (Letter)": QPageSize(QPageSize.Letter),
+    "Oficio (Legal)": QPageSize(QPageSize.Legal),
+    "A4": QPageSize(QPageSize.A4),
 }
+
+# Hoja pre-impresa de la Orden de Pedido (Programación Semanal):
+# se imprime solo el contenido posicionado, sin márgenes.
+PAGINA_PEDIDO = "Pedido 13.5x21.5"
+PAGINAS[PAGINA_PEDIDO] = QPageSize(
+    QSizeF(135.0, 215.0), QPageSize.Millimeter, "Pedido 13.5x21.5",
+    QPageSize.ExactMatch)
+
+
+# QWebEngineView.setHtml falla SILENCIOSAMENTE con HTML mayor a ~2 MB
+# (límite del IPC de Chromium): la página queda en blanco. Para documentos
+# grandes se carga desde un archivo temporal vía load(), que no tiene límite.
+_LIMITE_SETHTML = 1_500_000
+
+
+def _cargar_en_web(view, html: str) -> None:
+    """Carga *html* en la vista WebEngine evitando el límite de setHtml."""
+    if len(html.encode("utf-8")) <= _LIMITE_SETHTML:
+        view.setHtml(html)
+        return
+    import os
+    import tempfile
+    from PySide6.QtCore import QUrl
+
+    fd, ruta = tempfile.mkstemp(suffix=".html")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    def _limpiar(_ok: bool, ruta=ruta) -> None:
+        try:
+            os.remove(ruta)
+        except OSError:
+            pass
+
+    view.loadFinished.connect(_limpiar)
+    view.load(QUrl.fromLocalFile(ruta))
 
 
 def _crear_motor(html: str, parent: QWidget):
@@ -54,7 +93,7 @@ def _crear_motor(html: str, parent: QWidget):
     if _HAS_WEBENGINE:
         try:
             view = QWebEngineView(parent)
-            view.setHtml(html)
+            _cargar_en_web(view, html)
             view.setZoomFactor(1.0)
             return view, True
         except Exception:  # pragma: no cover — fallback defensivo
@@ -94,9 +133,11 @@ class PreviewImpresion(QDialog):
     """
 
     def __init__(self, html: str, titulo: str = "Vista previa de impresión",
-                 parent: QWidget | None = None) -> None:
+                 parent: QWidget | None = None,
+                 html_impresion: str | None = None) -> None:
         super().__init__(parent)
         self._html = html
+        self._html_impresion = html_impresion or html
         self.setWindowTitle(titulo)
         self.resize(1000, 700)
         self.setModal(True)
@@ -206,11 +247,17 @@ class PreviewImpresion(QDialog):
         if disponible < 100:
             return
 
-        # Proporción de una hoja real (carta/A4): ancho fijo a escala y alto
-        # según la proporción, aplicando el zoom elegido por el usuario.
-        ancho_base = 1000 if self.cmb_orientacion.currentText() == "Horizontal" else 760
+        # Proporción de la hoja real según el tamaño de página elegido,
+        # aplicando el zoom del usuario.
+        pagina_mm = PAGINAS[self.cmb_pagina.currentText()].size(
+            QPageSize.Millimeter)
+        horizontal = self.cmb_orientacion.currentText() == "Horizontal"
+        ancho_base = 1000 if horizontal else 760
         ancho = min(int(ancho_base * self._zoom), max(240, disponible))
-        alto = int(ancho * 1.414)  # proporción carta/A4
+        if horizontal:
+            alto = int(ancho * pagina_mm.width() / pagina_mm.height())
+        else:
+            alto = int(ancho * pagina_mm.height() / pagina_mm.width())
 
         self._hoja._contenido.setFixedSize(ancho, alto)
         if self._web is not None:
@@ -239,15 +286,20 @@ class PreviewImpresion(QDialog):
                        if self.cmb_orientacion.currentText() == "Horizontal"
                        else QPageLayout.Portrait)
         printer.setPageOrientation(orientacion)
+        if self.cmb_pagina.currentText() == PAGINA_PEDIDO:
+            # Hoja pre-impresa: sin márgenes para respetar las posiciones
+            printer.setPageMargins(QMarginsF(0, 0, 0, 0),
+                                   QPageLayout.Millimeter)
         if para_pdf:
             printer.setOutputFormat(QPrinter.PdfFormat)
         return printer
 
     def _imprimir(self) -> None:
         printer = self._printer()
-        dlg = QPrintDialog(printer, self)
-        if dlg.exec() == QDialog.Accepted:
-            self._renderizar(printer)
+        estado = dialogo_impresion(printer, self, self._renderizar)
+        if estado == "impreso":
+            notificar_flotante("El documento se envió a la impresora.",
+                               tipo="success", titulo="Impresión", host=self)
 
     def _exportar_pdf(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -257,15 +309,125 @@ class PreviewImpresion(QDialog):
         printer = self._printer(para_pdf=True)
         printer.setOutputFileName(path)
         self._renderizar(printer)
-        QMessageBox.information(self, "PDF generado",
-                                f"El documento se exportó a:\n{path}")
+        notificar_flotante(f"El documento se exportó a:\n{path}",
+                           tipo="success", titulo="PDF generado", host=self)
         QDesktopServices.openUrl(path)
 
     def _renderizar(self, printer: QPrinter) -> None:
+        # WebEngine: render WYSIWYG (CSS completo). Desde Qt 6.8 ya no
+        # existe QWebEnginePage.print(QPrinter): se genera un PDF con
+        # printToPdf y se dibuja sobre la impresora con QtPdf.
+        if self._web is not None:
+            self._renderizar_webengine(printer)
+            return
+        # Fallback: QTextDocument (sin CSS moderno)
         from PySide6.QtGui import QTextDocument
+        from PySide6.QtCore import QSizeF
         doc = QTextDocument()
-        doc.setHtml(self._html)
+        doc.setHtml(self._html_impresion)
+        page_mm = printer.pageLayout().pageSize().size(QPageSize.Millimeter)
+        css_w = page_mm.width() * 96.0 / 25.4
+        css_h = page_mm.height() * 96.0 / 25.4
+        doc.setPageSize(QSizeF(css_w, css_h))
         doc.print_(printer)
+
+    def _renderizar_webengine(self, printer: QPrinter) -> None:
+        """Renderiza el HTML de impresión con Chromium sobre *printer*."""
+        from PySide6.QtCore import QRectF, QSize
+        from PySide6.QtGui import QPainter
+        # Sin márgenes de impresora: el contenido ya trae sus márgenes CSS
+        # y en hojas pre-impresas la posición debe ser exacta.
+        layout = printer.pageLayout()
+        layout.setMargins(QMarginsF(0, 0, 0, 0))
+        if printer.outputFormat() == QPrinter.PdfFormat:
+            # Destino PDF: salida vectorial directa
+            self._pdf_desde_html(printer.outputFileName(), layout)
+            return
+        # Destino físico: PDF temporal → rasterizar → pintar
+        import os
+        import tempfile
+        from PySide6.QtPdf import QPdfDocument
+        fd, ruta_pdf = tempfile.mkstemp(suffix=".pdf")
+        os.close(fd)
+        try:
+            self._pdf_desde_html(ruta_pdf, layout)
+            doc = QPdfDocument()
+            if doc.load(ruta_pdf) != QPdfDocument.Error.None_:
+                raise RuntimeError("No se pudo generar el PDF temporal")
+            printer.setFullPage(True)
+            papel = printer.paperRect()
+            painter = QPainter()
+            if not painter.begin(printer):
+                raise RuntimeError("No se pudo iniciar la impresión")
+            try:
+                for i in range(doc.pageCount()):
+                    if i > 0:
+                        printer.newPage()
+                    punto = doc.pagePointSize(i)
+                    escala = min(papel.width() / punto.width(),
+                                 papel.height() / punto.height())
+                    ancho = punto.width() * escala
+                    alto = punto.height() * escala
+                    imagen = doc.render(i, QSize(int(round(ancho)),
+                                                 int(round(alto))))
+                    destino = QRectF((papel.width() - ancho) / 2,
+                                     (papel.height() - alto) / 2,
+                                     ancho, alto)
+                    painter.drawImage(destino, imagen)
+            finally:
+                painter.end()
+        finally:
+            try:
+                os.remove(ruta_pdf)
+            except OSError:
+                pass
+
+    def _pdf_desde_html(self, ruta: str, layout: QPageLayout) -> None:
+        """Genera un PDF del HTML de impresión con Chromium (printToPdf).
+
+        Reutiliza la vista del visor: una sola instancia de WebEngine
+        (una página sin vista imprime con escala incorrecta y una segunda
+        vista es inestable). Al terminar restaura la vista previa.
+        """
+        from PySide6.QtCore import QEventLoop, QTimer
+        if self._web is None:
+            raise RuntimeError("Sin motor de render disponible")
+        loop = QEventLoop()
+        estado = {"ok": False}
+
+        def _terminado(_ruta: str, exito: bool) -> None:
+            estado["ok"] = exito
+            loop.quit()
+
+        # Guardia: si la carga previa del visor aún estaba en curso al
+        # imprimir, su loadFinished "tardío" no debe disparar el PDF;
+        # solo cuenta una carga iniciada DESPUÉS de conectar las señales.
+        nuestra_carga = {"iniciada": False}
+
+        def _iniciada() -> None:
+            nuestra_carga["iniciada"] = True
+
+        def _cargado(_ok: bool) -> None:
+            if nuestra_carga["iniciada"]:
+                self._web.page().printToPdf(ruta, layout)
+
+        self._web.pdfPrintingFinished.connect(_terminado)
+        self._web.loadStarted.connect(_iniciada)
+        self._web.loadFinished.connect(_cargado)
+        QTimer.singleShot(20000, loop.quit)
+        try:
+            _cargar_en_web(self._web, self._html_impresion)
+            loop.exec()
+        finally:
+            self._web.pdfPrintingFinished.disconnect(_terminado)
+            self._web.loadStarted.disconnect(_iniciada)
+            self._web.loadFinished.disconnect(_cargado)
+            try:
+                _cargar_en_web(self._web, self._html)
+            except RuntimeError:
+                pass
+        if not estado["ok"]:
+            raise RuntimeError("No se pudo generar el PDF del documento")
 
 
 def previsualizar_html(html: str, titulo: str = "Vista previa de impresión",

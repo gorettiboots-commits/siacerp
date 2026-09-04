@@ -1,17 +1,55 @@
 from PySide6.QtCore import QBuffer, Qt
-from PySide6.QtGui import QGuiApplication, QImage, QPixmap
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPixmap
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDateEdit, QDialog, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView,
-    QLabel, QLineEdit, QListWidget, QMessageBox, QPushButton, QScrollArea,
-    QSpinBox, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+    QAbstractItemView, QAbstractSpinBox, QApplication, QCheckBox, QComboBox,
+    QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame,
+    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QListWidget, QMessageBox, QPushButton, QScrollArea, QSpinBox, QSplitter,
+    QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from src.components.date_picker import DatePicker
 from src.components.tallas_matrix import MatrizTallasDialog
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
 from src.utils.table_utils import configurar_tabla_excel
+from src.utils.ui_helpers import SearchableComboBox
+from src.views.table_widget import GorettiTable
+
+
+def _etiqueta_proveedor(p: dict) -> str:
+    """Etiqueta para selectores de proveedor: razón social + nombre comercial."""
+    nombre = (p.get("nombre") or "").strip()
+    comercial = (p.get("nombre_comercial") or "").strip()
+    if comercial and comercial.lower() != nombre.lower():
+        return f"{nombre} ({comercial})"
+    return nombre
+
+
+def _subtotal_detalle(d: dict) -> float:
+    """Subtotal del renglón: Σ(pares × precio) por talla si hay precios por talla;
+    si no, cantidad × precio_unitario."""
+    tallas = d.get("tallas", []) or []
+    con_precio = [t for t in tallas if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        return sum(float(t.get("pares", 0) or 0) * float(t.get("precio", 0) or 0)
+                   for t in con_precio)
+    return float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
+
+
+def _subtotal_recibido(d: dict, recibido: float) -> float:
+    """Subtotal del renglón al recibir: prorratea el importe por talla según la
+    proporción recibida; si no hay precios por talla, recibido × precio_unitario."""
+    tallas = d.get("tallas", []) or []
+    con_precio = [t for t in tallas if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        solicitado = float(d.get("cantidad", 0) or 0)
+        total_tallas = _subtotal_detalle(d)
+        if solicitado > 0:
+            return total_tallas * (recibido / solicitado)
+        return 0.0
+    return float(recibido) * float(d.get("precio_unitario", 0) or 0)
 
 
 class WidgetImagen(QFrame):
@@ -124,8 +162,17 @@ class DialogInsumo(QDialog):
         self.txt_codigo.setReadOnly(True)
         self.txt_nombre = QLineEdit()
         self.txt_nombre.setPlaceholderText("Nombre del insumo")
-        self.txt_categoria = QLineEdit()
-        self.txt_categoria.setPlaceholderText("Ej: Piel, Suela, Forro, etc.")
+        self.txt_nombre.editingFinished.connect(self._verificar_nombre)
+
+        self.lbl_nombre_aviso = QLabel("")
+        self.lbl_nombre_aviso.setStyleSheet("color: #b45309; font-size: 12px;")
+        self.lbl_nombre_aviso.setWordWrap(True)
+        self.lbl_nombre_aviso.setVisible(False)
+
+        self.cmb_categoria = SearchableComboBox(
+            placeholder="Seleccione o escriba una categoría…")
+        self._cargar_categorias()
+
         self.cmb_unidad = QComboBox()
         self._cargar_unidades()
         self.spn_minimo = QDoubleSpinBox()
@@ -136,11 +183,12 @@ class DialogInsumo(QDialog):
         for w, lbl in [
             (self.txt_codigo, "Código:"),
             (self.txt_nombre, "Nombre:"),
-            (self.txt_categoria, "Categoría:"),
+            (self.cmb_categoria, "Categoría:"),
             (self.cmb_unidad, "Unidad de medida:"),
             (self.spn_minimo, "Stock mínimo:"),
         ]:
             form.addRow(QLabel(lbl), w)
+        form.addRow(self.lbl_nombre_aviso)
 
         self.img_widget = WidgetImagen()
         form.addRow(QLabel("Imagen:"), self.img_widget)
@@ -201,9 +249,22 @@ class DialogInsumo(QDialog):
         for i, c in enumerate(colores):
             chk = QCheckBox(f"{c['nombre']} ({c['codigo']})")
             chk.setChecked(True)
+            chk.toggled.connect(self._regenerar_variantes)
             self._color_checks.append((chk, c["codigo"]))
             grid.addWidget(chk, i // 3, i % 3)
         fc.addLayout(grid)
+
+        sel_col = QHBoxLayout()
+        btn_gen_col = QPushButton("Generar")
+        btn_gen_col.setObjectName("btnPrimary")
+        btn_gen_col.clicked.connect(self._regenerar_variantes)
+        sel_col.addWidget(btn_gen_col)
+        btn_limpiar_col = QPushButton("Limpiar")
+        btn_limpiar_col.setObjectName("btnSecondary")
+        btn_limpiar_col.clicked.connect(self._limpiar_variantes)
+        sel_col.addWidget(btn_limpiar_col)
+        sel_col.addStretch()
+        fc.addLayout(sel_col)
 
         layout.addWidget(self.frame_colores)
         self.frame_colores.setVisible(False)
@@ -273,7 +334,7 @@ class DialogInsumo(QDialog):
             self._update_count()
             return
         tallas = self._tallas_seleccionadas()
-        colores = self._colores_seleccionadas()
+        colores = self._colores_seleccionados()
         if tallas and colores:
             codigos = [f"{base}-{t}-{c}" for t in tallas for c in colores]
         elif tallas:
@@ -300,12 +361,46 @@ class DialogInsumo(QDialog):
         for u in self.controller.listar_unidades():
             self.cmb_unidad.addItem(u["abreviatura"], u["nombre"])
 
+    def _cargar_categorias(self) -> None:
+        self.cmb_categoria.clear()
+        for cat in self.controller.listar_categorias():
+            self.cmb_categoria.addItem(cat, cat)
+
+    def _verificar_nombre(self) -> None:
+        nombre = self.txt_nombre.text().strip()
+        if not nombre:
+            self.lbl_nombre_aviso.setVisible(False)
+            return
+        coincidencias = self.controller.buscar_insumos_por_nombre(
+            nombre, excluir_id=self.insumo_id)
+        if not coincidencias:
+            self.lbl_nombre_aviso.setVisible(False)
+            return
+        exactos = [c for c in coincidencias
+                   if c.get("nombre", "").strip().lower() == nombre.lower()]
+        if exactos:
+            msg = ("Ya existe un insumo con el nombre "
+                   f"\"{exactos[0]['nombre']}\" (código {exactos[0]['codigo']}).")
+        else:
+            nombres = ", ".join(f"\"{c['nombre']}\" (código {c['codigo']})"
+                                for c in coincidencias[:3])
+            msg = f"Posible insumo duplicado. Ya existen nombres similares: {nombres}."
+        self.lbl_nombre_aviso.setText(msg)
+        self.lbl_nombre_aviso.setVisible(True)
+
     def _load_data(self) -> None:
         ins = self.controller.obtener_insumo(self.insumo_id)
         if ins:
             self.txt_codigo.setText(ins.get("codigo", ""))
             self.txt_nombre.setText(ins.get("nombre", ""))
-            self.txt_categoria.setText(ins.get("categoria", ""))
+            self.cmb_categoria.clear()
+            for cat in self.controller.listar_categorias(excluir_id=self.insumo_id):
+                self.cmb_categoria.addItem(cat, cat)
+            idx = self.cmb_categoria.findText(ins.get("categoria", ""))
+            if idx >= 0:
+                self.cmb_categoria.setCurrentIndex(idx)
+            else:
+                self.cmb_categoria.setEditText(ins.get("categoria", ""))
             idx = self.cmb_unidad.findText(ins.get("unidad_medida", "pieza"))
             if idx >= 0:
                 self.cmb_unidad.setCurrentIndex(idx)
@@ -316,7 +411,7 @@ class DialogInsumo(QDialog):
     def _save(self) -> None:
         codigo = self.txt_codigo.text().strip()
         nombre = self.txt_nombre.text().strip()
-        categoria = self.txt_categoria.text().strip()
+        categoria = self.cmb_categoria.currentText().strip()
         if not codigo or not nombre or not categoria:
             QMessageBox.warning(self, "Campos requeridos", "Código, nombre y categoría son obligatorios.")
             return
@@ -362,7 +457,7 @@ class DialogMovimientoStock(QDialog):
         form = QFormLayout()
         form.setSpacing(12)
 
-        self.cmb_insumo = QComboBox()
+        self.cmb_insumo = SearchableComboBox(placeholder="Buscar insumo…")
         insumos = self.controller.listar_insumos()
         for ins in insumos:
             self.cmb_insumo.addItem(f"{ins['codigo']} - {ins['nombre']}", ins["id"])
@@ -417,6 +512,291 @@ class DialogMovimientoStock(QDialog):
         self.accept()
 
 
+class DialogBuscarInsumo(QDialog):
+    """Diálogo de búsqueda para seleccionar un insumo del catálogo."""
+
+    def __init__(self, controller: InventarioController,
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.setWindowTitle("Buscar Insumo")
+        self.setMinimumSize(600, 450)
+        self.setModal(True)
+        self._seleccionado = None
+        self._setup_ui()
+        self._cargar_insumos("")
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        # Barra de búsqueda
+        search_row = QHBoxLayout()
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText(
+            "Buscar por código o nombre del insumo...")
+        self.txt_buscar.setClearButtonEnabled(True)
+        self.txt_buscar.textChanged.connect(self._cargar_insumos)
+        search_row.addWidget(self.txt_buscar)
+        layout.addLayout(search_row)
+
+        # Tabla de resultados
+        self.tabla = QTableWidget(0, 4)
+        self.tabla.setHorizontalHeaderLabels(
+            ["Código", "Nombre", "Stock", "Unidad"])
+        configurar_tabla_excel(self.tabla)
+        self.tabla.setSelectionBehavior(
+            QAbstractItemView.SelectRows)
+        self.tabla.setSelectionMode(
+            QAbstractItemView.SingleSelection)
+        self.tabla.doubleClicked.connect(self._seleccionar)
+        self.tabla.setColumnWidth(0, 100)
+        self.tabla.setColumnWidth(2, 80)
+        layout.addWidget(self.tabla)
+
+        # Botones
+        btns = QHBoxLayout()
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_select = QPushButton("Seleccionar")
+        btn_select.setObjectName("btnPrimary")
+        btn_select.clicked.connect(self._seleccionar)
+        btns.addStretch()
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_select)
+        layout.addLayout(btns)
+
+    def _cargar_insumos(self, termino: str) -> None:
+        try:
+            if termino.strip():
+                insumos = self.controller.buscar_insumos(termino.strip())
+            else:
+                insumos = self.controller.listar_insumos()
+        except Exception:
+            insumos = []
+        self.tabla.setRowCount(len(insumos))
+        for i, ins in enumerate(insumos):
+            self.tabla.setItem(i, 0, QTableWidgetItem(ins.get("codigo", "")))
+            self.tabla.setItem(i, 1, QTableWidgetItem(ins.get("nombre", "")))
+            stock_item = QTableWidgetItem(str(ins.get("stock_actual", 0)))
+            stock_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.tabla.setItem(i, 2, stock_item)
+            self.tabla.setItem(
+                i, 3, QTableWidgetItem(ins.get("unidad_medida", "")))
+            # Guardar el dict completo en el item
+            self.tabla.item(i, 0).setData(Qt.UserRole, ins)
+
+    def _seleccionar(self) -> None:
+        fila = self.tabla.currentRow()
+        if fila < 0:
+            QMessageBox.information(
+                self, "Seleccionar", "Seleccione un insumo de la lista.")
+            return
+        item = self.tabla.item(fila, 0)
+        self._seleccionado = item.data(Qt.UserRole) if item else None
+        self.accept()
+
+    def obtener_seleccionado(self) -> dict | None:
+        return self._seleccionado
+
+
+class DialogMovimientoMultiPartida(QDialog):
+    """Dialogo para crear movimientos de inventario multi-partida.
+
+    Permite agregar 1 a N insumos en un solo movimiento (salida o
+    cambio de ubicacion). Genera un folio MVI-XXXX y el documento
+    de movimiento asociado.
+    """
+
+    def __init__(self, controller: InventarioController,
+                 insumo_id: int | None = None) -> None:
+        super().__init__()
+        self.controller = controller
+        self.setWindowTitle("Movimiento de Inventario")
+        self.setMinimumSize(750, 500)
+        self.setModal(True)
+        self._insumo_inicial = insumo_id
+        self._setup_ui()
+        if insumo_id:
+            self._agregar_fila(insumo_id)
+
+    def _setup_ui(self) -> None:
+        from src.utils.folios import siguiente_folio
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        top = QHBoxLayout()
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        # Folio auto-generado (solo lectura)
+        self._folio = siguiente_folio(
+            'movimientos_inventario', 'folio', 'MVI')
+        self.txt_folio = QLineEdit(self._folio)
+        self.txt_folio.setReadOnly(True)
+        self.txt_folio.setStyleSheet(
+            "background-color: #f0f0f0; font-weight: bold;")
+        form.addRow(QLabel("Folio:"), self.txt_folio)
+
+        self.cmb_tipo = QComboBox()
+        self.cmb_tipo.addItems(["salida", "cambio_ubicacion"])
+        form.addRow(QLabel("Tipo:"), self.cmb_tipo)
+
+        self.txt_obs = QTextEdit()
+        self.txt_obs.setPlaceholderText(
+            "Observaciones generales del movimiento (opcional)")
+        self.txt_obs.setMaximumHeight(60)
+        form.addRow(QLabel("Observaciones:"), self.txt_obs)
+        top.addLayout(form)
+        top.addStretch()
+        layout.addLayout(top)
+
+        self.tabla = QTableWidget(0, 4)
+        self.tabla.setHorizontalHeaderLabels(
+            ["Insumo", "Cantidad", "Observaciones", ""])
+        self.tabla.horizontalHeader().setStretchLastSection(True)
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Stretch)
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeToContents)
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.Stretch)
+        self.tabla.setColumnWidth(1, 100)
+        self.tabla.setSelectionBehavior(
+            QAbstractItemView.SelectRows)
+        self.tabla.setSelectionMode(QAbstractItemView.SingleSelection)
+        layout.addWidget(self.tabla)
+
+        btns_row = QHBoxLayout()
+        btn_agregar = QPushButton("+ Agregar insumo")
+        btn_agregar.setObjectName("btnPrimary")
+        btn_agregar.clicked.connect(self._agregar_fila_vacia)
+        btn_quitar = QPushButton("Quitar seleccionado")
+        btn_quitar.setObjectName("btnDanger")
+        btn_quitar.clicked.connect(self._quitar_fila)
+        btns_row.addWidget(btn_agregar)
+        btns_row.addWidget(btn_quitar)
+        btns_row.addStretch()
+        layout.addLayout(btns_row)
+
+        botones = QHBoxLayout()
+        botones.addStretch()
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_save = QPushButton("Registrar Movimiento")
+        btn_save.setObjectName("btnPrimary")
+        btn_save.clicked.connect(self._save)
+        botones.addWidget(btn_cancel)
+        botones.addWidget(btn_save)
+        layout.addLayout(botones)
+
+    def _buscar_insumo(self, fila: int) -> None:
+        """Abre diálogo de búsqueda para seleccionar un insumo."""
+        dlg = DialogBuscarInsumo(self.controller, self)
+        if dlg.exec():
+            ins = dlg.obtener_seleccionado()
+            if ins:
+                self._asignar_insumo_a_fila(fila, ins)
+
+    def _asignar_insumo_a_fila(self, fila: int, ins: dict) -> None:
+        """Asigna un insumo seleccionado a una fila de la tabla."""
+        # Limpiar texto placeholder del item
+        item = self.tabla.item(fila, 0)
+        if item:
+            item.setText("")
+        lbl = QLabel(f"{ins['codigo']} - {ins['nombre']}")
+        lbl.setToolTip(
+            f"Stock: {ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')}")
+        lbl.setMargin(4)
+        self.tabla.setCellWidget(fila, 0, lbl)
+        if item:
+            item.setData(Qt.UserRole, ins['id'])
+            item.setData(Qt.UserRole + 1, ins)
+
+    def _agregar_fila(self, insumo_id: int | None = None) -> None:
+        fila = self.tabla.rowCount()
+        self.tabla.insertRow(fila)
+
+        # Celda de insumo con botón de búsqueda
+        item = QTableWidgetItem("(Click para buscar)")
+        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+        self.tabla.setItem(fila, 0, item)
+
+        if insumo_id:
+            ins = self.controller.obtener_insumo(insumo_id)
+            if ins:
+                self._asignar_insumo_a_fila(fila, ins)
+        else:
+            # Auto-abrir búsqueda si no hay insumo preseleccionado
+            self._buscar_insumo(fila)
+
+        spn = QDoubleSpinBox()
+        spn.setRange(0.01, 999999)
+        spn.setDecimals(2)
+        spn.setValue(1)
+        spn.setAlignment(Qt.AlignRight)
+        self.tabla.setCellWidget(fila, 1, spn)
+
+        txt = QLineEdit()
+        txt.setPlaceholderText("Observacion de la partida")
+        self.tabla.setCellWidget(fila, 2, txt)
+
+    def _agregar_fila_vacia(self) -> None:
+        self._agregar_fila(None)
+
+    def _quitar_fila(self) -> None:
+        fila = self.tabla.currentRow()
+        if fila >= 0:
+            self.tabla.removeRow(fila)
+
+    def _save(self) -> None:
+        tipo = self.cmb_tipo.currentText()
+        obs = self.txt_obs.toPlainText().strip()
+        partidas = []
+        for fila in range(self.tabla.rowCount()):
+            item = self.tabla.item(fila, 0)
+            spn = self.tabla.cellWidget(fila, 1)
+            txt = self.tabla.cellWidget(fila, 2)
+            insumo_id = item.data(Qt.UserRole) if item else None
+            cantidad = spn.value() if spn else 0
+            obs_item = txt.text().strip() if txt else ""
+            if insumo_id is None:
+                QMessageBox.warning(
+                    self, "Error",
+                    f"Fila {fila + 1}: seleccione un insumo.")
+                return
+            if cantidad <= 0:
+                QMessageBox.warning(
+                    self, "Error",
+                    f"Fila {fila + 1}: la cantidad debe ser mayor a 0.")
+                return
+            partidas.append({
+                "insumo_id": insumo_id,
+                "cantidad": cantidad,
+                "observaciones": obs_item,
+            })
+        if not partidas:
+            QMessageBox.warning(
+                self, "Error", "Debe agregar al menos una partida.")
+            return
+        try:
+            self._mov_id = self.controller.registrar_movimiento_grupo(
+                tipo, obs, partidas)
+        except ValueError as e:
+            QMessageBox.warning(self, "Error", str(e))
+            return
+        self.accept()
+
+    def obtener_movimiento_id(self) -> int | None:
+        return getattr(self, '_mov_id', None)
+
+    def obtener_folio(self) -> str:
+        return self._folio
+
+
 class DialogProveedor(QDialog):
     def __init__(self, controller: OrdenesCompraController, proveedor_id: int | None = None) -> None:
         super().__init__()
@@ -462,16 +842,17 @@ class DialogProveedor(QDialog):
         prov_label.setStyleSheet("font-weight: bold; font-size: 13px; margin-top: 6px;")
         layout.addWidget(prov_label)
 
-        self.table_prov = QTableWidget()
-        self.table_prov.setColumnCount(6)
-        self.table_prov.setHorizontalHeaderLabels(
-            ["Material", "Color", "Unidad", "Precio", "Comentario", "InsumoID"]
+        self.table_prov = GorettiTable(
+            columns=[
+                {"key": "material", "label": "Material", "stretch": True},
+                {"key": "color", "label": "Color"},
+                {"key": "unidad", "label": "Unidad", "widget": self._factory_unidad},
+                {"key": "precio", "label": "Precio", "widget": self._factory_precio},
+                {"key": "comentario", "label": "Comentario", "stretch": True},
+                {"key": "id", "label": "InsumoID", "hidden": True},
+            ],
+            sortable=False,
         )
-        self.table_prov.setColumnHidden(5, True)
-        self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_prov.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table_prov)
         self.table_prov.setMinimumHeight(220)
 
         btn_add_prov = QPushButton("+ Agregar Producto")
@@ -504,51 +885,51 @@ class DialogProveedor(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _cargar_insumos_proveedor(self) -> None:
-        items = self.controller.listar_insumos_proveedor(self.proveedor_id)
-        self.table_prov.setRowCount(len(items))
-        for i, it in enumerate(items):
-            self._set_fila(i, it["insumo_nombre"], it.get("color", ""),
-                           it.get("unidad_medida", "pieza"), it.get("precio", 0),
-                           it.get("comentario", ""), it["insumo_id"])
-
-    def _set_fila(self, row: int, material: str, color: str, unidad: str,
-                  precio: float, comentario: str, insumo_id: int) -> None:
-        self.table_prov.setItem(row, 0, QTableWidgetItem(material))
-        self.table_prov.setItem(row, 1, QTableWidgetItem(color))
+    def _factory_unidad(self, record: dict, row: int) -> QComboBox:
         cmb = QComboBox()
         for u in self.controller.listar_unidades():
             cmb.addItem(u["abreviatura"], u["nombre"])
-        idx = cmb.findText(unidad)
+        idx = cmb.findText(record.get("unidad", "pieza"))
         if idx >= 0:
             cmb.setCurrentIndex(idx)
-        self.table_prov.setCellWidget(row, 2, cmb)
+        return cmb
+
+    def _factory_precio(self, record: dict, row: int) -> QDoubleSpinBox:
         spn = QDoubleSpinBox()
         spn.setRange(0, 99999999)
         spn.setDecimals(2)
-        spn.setValue(precio)
-        self.table_prov.setCellWidget(row, 3, spn)
-        self.table_prov.setItem(row, 4, QTableWidgetItem(comentario))
-        self.table_prov.setItem(row, 5, QTableWidgetItem(str(insumo_id)))
+        spn.setValue(float(record.get("precio", 0) or 0))
+        return spn
+
+    def _cargar_insumos_proveedor(self) -> None:
+        items = self.controller.listar_insumos_proveedor(self.proveedor_id)
+        self.table_prov.set_records([
+            {"material": it.get("insumo_nombre", ""), "color": it.get("color", ""),
+             "unidad": it.get("unidad_medida", "") or "pieza",
+             "precio": it.get("precio", 0), "comentario": it.get("comentario", ""),
+             "id": it["insumo_id"]}
+            for it in items
+        ])
 
     def _agregar_producto(self) -> None:
         dlg = DialogSeleccionarInsumo(self)
         if dlg.exec() == QDialog.Accepted:
             ins = dlg.get_seleccion()
             if ins:
-                for row in range(self.table_prov.rowCount()):
-                    if self.table_prov.item(row, 5) and self.table_prov.item(row, 5).text() == str(ins["id"]):
+                for row in range(self.table_prov.row_count()):
+                    if self.table_prov.cell_text(row, "id") == str(ins["id"]):
                         QMessageBox.information(self, "Ya agregado",
                             f"'{ins['nombre']}' ya está en la lista.")
                         return
-                row = self.table_prov.rowCount()
-                self.table_prov.insertRow(row)
-                self._set_fila(row, ins["nombre"], "", "pieza", 0, "", ins["id"])
+                self.table_prov.add_row({
+                    "material": ins["nombre"], "color": "", "unidad": "pieza",
+                    "precio": 0, "comentario": "", "id": ins["id"],
+                })
 
     def _quitar_producto(self) -> None:
-        row = self.table_prov.currentRow()
+        row = self.table_prov.current_row()
         if row >= 0:
-            self.table_prov.removeRow(row)
+            self.table_prov.remove_row(row)
 
     def _load_data(self) -> None:
         prov = self.controller.obtener_proveedor(self.proveedor_id)
@@ -583,41 +964,189 @@ class DialogProveedor(QDialog):
             )
 
         items = []
-        for row in range(self.table_prov.rowCount()):
-            cmb = self.table_prov.cellWidget(row, 2)
-            spn = self.table_prov.cellWidget(row, 3)
+        for row in range(self.table_prov.row_count()):
+            cmb = self.table_prov.cell_widget(row, "unidad")
+            spn = self.table_prov.cell_widget(row, "precio")
             items.append({
-                "insumo_id": int(self.table_prov.item(row, 5).text()),
-                "color": self.table_prov.item(row, 1).text().strip(),
+                "insumo_id": int(self.table_prov.cell_text(row, "id")),
+                "color": self.table_prov.cell_text(row, "color").strip(),
                 "unidad": cmb.currentText() if cmb else "pieza",
                 "precio": spn.value() if spn else 0,
-                "comentario": self.table_prov.item(row, 4).text().strip(),
+                "comentario": self.table_prov.cell_text(row, "comentario").strip(),
             })
         self.controller.guardar_insumos_proveedor(proveedor_id, items)
         self.accept()
 
 
-class DialogMatrizTallas(MatrizTallasDialog):
-    """Matriz de tallas de Órdenes de Compra.
+class DialogMatrizTallas(QDialog):
+    """Matriz de tallas de Órdenes de Compra con pares y precio por talla.
 
-    Hereda del componente aprobado del sistema (MatrizTallasDialog) para
-    tener una sola apariencia de captura de tallas en toda la aplicación.
-    Mantiene la API previa (inicial / get_matriz) para no romper la orden.
+    Adaptación de la matriz de Goretti_prep (pares + precio por talla) al
+    catálogo unificado tallas_catalogo (RD-1). Es un diálogo independiente:
+    no extiende el componente aprobado MatrizTallasDialog (que no maneja
+    precios) para no alterarlo; el componente sigue usándose en Producción.
     """
 
     def __init__(self, controller: OrdenesCompraController,
-                 inicial: dict[int, int] | None = None) -> None:
-        tallas = controller.listar_tallas()
-        super().__init__(tallas=tallas, titulo="MATRIZ DE TALLAS")
+                 inicial: dict[int, int] | None = None,
+                 precios_iniciales: dict[int, float] | None = None) -> None:
+        super().__init__()
+        self.controller = controller
         self.setWindowTitle("Matriz de Tallas")
+        self.setMinimumSize(720, 620)
+        self.setModal(True)
         self._matriz = dict(inicial or {})
-        self.establecer_valores(
-            {str(tid): pr for tid, pr in self._matriz.items()})
+        self._precios = dict(precios_iniciales or {})
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        self._tallas = self.controller.listar_tallas()
+        self.spn_pares: dict[int, QSpinBox] = {}
+        self.spn_precios: dict[int, QDoubleSpinBox] = {}
+
+        filas: list[QWidget] = []
+        fila = QWidget()
+        fila_layout = QHBoxLayout(fila)
+        fila_layout.setContentsMargins(0, 0, 0, 0)
+        cols = 0
+        for t in self._tallas:
+            gb = QGroupBox(f"Talla {t['talla']}")
+            gb.setStyleSheet("QGroupBox { font-weight: bold; font-size: 11px; }")
+            vb = QHBoxLayout(gb)
+            spn = QSpinBox()
+            spn.setRange(0, 9999)
+            spn.setValue(int(self._matriz.get(t["id"], 0)))
+            spn.setMinimumHeight(30)
+            spn.setStyleSheet("font-size: 14px; font-weight: bold;")
+            spn.valueChanged.connect(self._actualizar_total)
+            self.spn_pares[t["id"]] = spn
+            vb.addWidget(spn)
+            spn_p = QDoubleSpinBox()
+            spn_p.setRange(0, 99999999)
+            spn_p.setDecimals(2)
+            spn_p.setPrefix("$")
+            spn_p.setValue(float(self._precios.get(t["id"], 0) or 0))
+            spn_p.setMinimumHeight(30)
+            spn_p.setButtonSymbols(QAbstractSpinBox.NoButtons)
+            spn_p.setStyleSheet("font-size: 13px;")
+            spn_p.valueChanged.connect(self._actualizar_total)
+            self.spn_precios[t["id"]] = spn_p
+            vb.addWidget(spn_p)
+            fila_layout.addWidget(gb)
+            cols += 1
+            if cols % 2 == 0:
+                filas.append(fila)
+                fila = QWidget()
+                fila_layout = QHBoxLayout(fila)
+                fila_layout.setContentsMargins(0, 0, 0, 0)
+        if cols % 2 != 0:
+            filas.append(fila)
+        contenedor_filas = QWidget()
+        contenedor_filas_layout = QVBoxLayout(contenedor_filas)
+        contenedor_filas_layout.setContentsMargins(0, 0, 0, 0)
+        contenedor_filas_layout.setSpacing(8)
+        for f in filas:
+            contenedor_filas_layout.addWidget(f)
+        scroll_filas = QScrollArea()
+        scroll_filas.setWidgetResizable(True)
+        scroll_filas.setWidget(contenedor_filas)
+        scroll_filas.setMinimumHeight(340)
+        scroll_filas.setMaximumHeight(500)
+        layout.addWidget(scroll_filas, 1)
+
+        corrida_box = QGroupBox("Corrida rápida de tallas")
+        corrida_box.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12px; }")
+        corrida_layout = QHBoxLayout(corrida_box)
+        corrida_layout.setSpacing(8)
+
+        corrida_layout.addWidget(QLabel("De talla:"))
+        self.cmb_talla_desde = QComboBox()
+        self.cmb_talla_hasta = QComboBox()
+        for t in self._tallas:
+            self.cmb_talla_desde.addItem(t["talla"], t["id"])
+            self.cmb_talla_hasta.addItem(t["talla"], t["id"])
+        if self.cmb_talla_hasta.count() > 0:
+            self.cmb_talla_hasta.setCurrentIndex(self.cmb_talla_hasta.count() - 1)
+
+        corrida_layout.addWidget(self.cmb_talla_desde)
+        corrida_layout.addWidget(QLabel("a talla:"))
+        corrida_layout.addWidget(self.cmb_talla_hasta)
+        corrida_layout.addWidget(QLabel("con"))
+        self.spn_corrida = QSpinBox()
+        self.spn_corrida.setRange(0, 9999)
+        self.spn_corrida.setValue(10)
+        self.spn_corrida.setMinimumWidth(80)
+        corrida_layout.addWidget(self.spn_corrida)
+        corrida_layout.addWidget(QLabel("pares por talla"))
+
+        btn_corrida = QPushButton("Aplicar Corrida")
+        btn_corrida.setObjectName("btnPrimary")
+        btn_corrida.clicked.connect(self._aplicar_corrida)
+        corrida_layout.addWidget(btn_corrida)
+
+        btn_limpiar = QPushButton("Limpiar")
+        btn_limpiar.setObjectName("btnSecondary")
+        btn_limpiar.clicked.connect(self._limpiar_tallas)
+        corrida_layout.addWidget(btn_limpiar)
+
+        layout.addWidget(corrida_box)
+
+        self.lbl_total = QLabel("Total de pares: 0")
+        self.lbl_total.setStyleSheet("font-weight: bold; font-size: 14px; color: #4f46e5;")
+        layout.addWidget(self.lbl_total)
+
         self._actualizar_total()
 
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_aceptar = QPushButton("Aceptar")
+        btn_aceptar.setObjectName("btnSuccess")
+        btn_aceptar.clicked.connect(self.accept)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_aceptar)
+        layout.addLayout(btns)
+
+    def _aplicar_corrida(self) -> None:
+        idx_desde = self.cmb_talla_desde.currentIndex()
+        idx_hasta = self.cmb_talla_hasta.currentIndex()
+        if idx_desde > idx_hasta:
+            idx_desde, idx_hasta = idx_hasta, idx_desde
+        pares = self.spn_corrida.value()
+        for i, t in enumerate(self._puntos):
+            if idx_desde <= i <= idx_hasta:
+                self.spn_pares[t["id"]].setValue(pares)
+
+    def _limpiar_tallas(self) -> None:
+        for spn in self.spn_pares.values():
+            spn.setValue(0)
+
+    def _actualizar_total(self) -> None:
+        total = sum(spn.value() for spn in self.spn_pares.values())
+        importe = sum(self.spn_pares[pid].value() * self.spn_precios[pid].value()
+                      for pid in self.spn_pares)
+        self.lbl_total.setText(f"Total de pares: {total}    |    Importe: ${importe:,.2f}")
+
     def get_matriz(self) -> dict[int, int]:
-        valores = self.obtener_valores()  # dict[str, int] por talla_id
-        return {int(tid): pr for tid, pr in valores.items() if pr > 0}
+        return {talla_id: spn.value() for talla_id, spn in self.spn_pares.items()
+                if spn.value() > 0}
+
+    def get_precios(self) -> dict[int, float]:
+        return {talla_id: spn.value() for talla_id, spn in self.spn_precios.items()
+                if spn.value() > 0}
+
+
+def _tipo_documento(tipo: str) -> str:
+    if tipo == "factura":
+        return "Factura"
+    if tipo == "remision":
+        return "Remisión"
+    return "Orden de Compra"
 
 
 class DialogOrdenCompra(QDialog):
@@ -625,11 +1154,12 @@ class DialogOrdenCompra(QDialog):
         super().__init__()
         self.controller = controller
         self.tipo = tipo
-        es_factura = tipo == "factura"
-        self.setWindowTitle("Ingresar Factura" if es_factura else "Nueva Orden de Compra")
+        titulos = {"factura": "Ingresar Factura", "remision": "Ingresar Remisión"}
+        self.setWindowTitle(titulos.get(tipo, "Nueva Orden de Compra"))
         self.setMinimumSize(820, 620)
         self.setModal(True)
-        self._tallas_fila: dict[int, dict[int, int]] = {}
+        # Por fila: talla_id -> {"pares": int, "precio": float}
+        self._tallas_fila: dict[int, dict[int, dict]] = {}
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -641,15 +1171,15 @@ class DialogOrdenCompra(QDialog):
         form = QFormLayout()
         form.setSpacing(10)
 
-        self.cmb_proveedor = QComboBox()
+        self.cmb_proveedor = SearchableComboBox(placeholder="Buscar proveedor…")
         self.cmb_proveedor.addItem("Compra a inventario", None)
         for p in self.controller.listar_proveedores():
-            self.cmb_proveedor.addItem(p["nombre"], p["id"])
+            self.cmb_proveedor.addItem(_etiqueta_proveedor(p), p["id"])
 
         self.txt_folio = QLineEdit()
-        prefijo = "FAC" if self.tipo == "factura" else "OC"
+        prefijo = {"factura": "FAC", "remision": "REM"}.get(self.tipo, "OC")
         self.txt_folio.setPlaceholderText(f"Ej: {prefijo}-0001")
-        if self.tipo == "factura":
+        if self.tipo in ("factura", "remision"):
             self.txt_folio.setReadOnly(False)
         else:
             self.txt_folio.setText(siguiente_folio("ordenes_compra", "folio", prefijo))
@@ -665,6 +1195,8 @@ class DialogOrdenCompra(QDialog):
         ])
 
         self.chk_remision = QCheckBox("Solo remisión (sin impuestos)")
+        if self.tipo == "remision":
+            self.chk_remision.setChecked(True)
 
         form.addRow(QLabel("Proveedor:"), self.cmb_proveedor)
         form.addRow(QLabel("Folio:"), self.txt_folio)
@@ -675,8 +1207,8 @@ class DialogOrdenCompra(QDialog):
         layout.addWidget(self.chk_remision)
 
         hint = QLabel(
-            "Seleccione un proveedor para comprar solo los insumos de su catálogo, "
-            "o use 'Compra a inventario' para registrar insumos que no tienen proveedor asignado."
+            "Puede agregar cualquier insumo del catálogo; el precio sugerido se toma "
+            "del proveedor seleccionado cuando lo tenga registrado."
         )
         hint.setStyleSheet("color: #64748b; font-size: 12px;")
         hint.setWordWrap(True)
@@ -686,17 +1218,18 @@ class DialogOrdenCompra(QDialog):
         det_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(det_label)
 
-        self.table_detalle = QTableWidget()
-        self.table_detalle.setColumnCount(6)
-        self.table_detalle.setHorizontalHeaderLabels(
-            ["Insumo", "Tallas", "Cantidad", "Precio Unit.", "Subtotal", "InsumoID"]
+        self.table_detalle = GorettiTable(
+            columns=[
+                {"key": "nombre", "label": "Insumo", "stretch": True},
+                {"key": "tallas", "label": "Tallas", "widget": self._factory_tallas},
+                {"key": "cantidad", "label": "Cantidad", "widget": self._factory_cantidad},
+                {"key": "precio", "label": "Precio Unit.", "widget": self._factory_precio_oc},
+                {"key": "subtotal", "label": "Subtotal", "align": "right"},
+                {"key": "id", "label": "InsumoID", "hidden": True},
+            ],
+            sortable=False,
+            row_height=50,
         )
-        self.table_detalle.setColumnHidden(5, True)
-        self.table_detalle.horizontalHeader().setStretchLastSection(True)
-        self.table_detalle.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_detalle.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_detalle.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table_detalle)
         self.table_detalle.setMinimumHeight(200)
 
         btn_add = QPushButton("+ Agregar Insumo")
@@ -724,94 +1257,107 @@ class DialogOrdenCompra(QDialog):
         btn_cancel = QPushButton("Cancelar")
         btn_cancel.setObjectName("btnSecondary")
         btn_cancel.clicked.connect(self.reject)
-        btn_save = QPushButton("Guardar Factura" if self.tipo == "factura" else "Crear Orden")
+        btn_save = QPushButton(
+            {"factura": "Guardar Factura", "remision": "Guardar Remisión"}.get(self.tipo, "Crear Orden"))
         btn_save.setObjectName("btnSuccess")
         btn_save.clicked.connect(self._save)
         btns.addWidget(btn_cancel)
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
+    def _factory_tallas(self, record: dict, row: int) -> QPushButton:
+        btn = QPushButton("Configurar Tallas")
+        btn.setObjectName("btnSecondary")
+        btn.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
+        return btn
+
+    def _factory_cantidad(self, record: dict, row: int) -> QDoubleSpinBox:
+        spn = QDoubleSpinBox()
+        spn.setRange(0, 999999)
+        spn.setDecimals(2)
+        spn.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        spn.setValue(float(record.get("cantidad", 1) or 0))
+        spn.valueChanged.connect(self._recalcular)
+        return spn
+
+    def _factory_precio_oc(self, record: dict, row: int) -> QDoubleSpinBox:
+        spn = QDoubleSpinBox()
+        spn.setRange(0, 99999999)
+        spn.setDecimals(2)
+        spn.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        spn.setValue(float(record.get("precio", 0) or 0))
+        spn.valueChanged.connect(self._recalcular)
+        return spn
+
     def _agregar_insumo(self) -> None:
         proveedor_id = self.cmb_proveedor.currentData()
-        dlg = DialogSeleccionarInsumo(
-            self, proveedor_id=proveedor_id, sin_proveedor=(proveedor_id is None)
-        )
+        dlg = DialogSeleccionarInsumo(self)
         if dlg.exec() == QDialog.Accepted:
             insumo = dlg.get_seleccion()
             if insumo:
-                for row in range(self.table_detalle.rowCount()):
-                    if self.table_detalle.item(row, 5) and self.table_detalle.item(row, 5).text() == str(insumo["id"]):
+                for row in range(self.table_detalle.row_count()):
+                    if self.table_detalle.cell_text(row, "id") == str(insumo["id"]):
                         QMessageBox.information(self, "Ya agregado",
                             f"'{insumo['nombre']}' ya está en la orden.")
                         return
-                row = self.table_detalle.rowCount()
-                self.table_detalle.insertRow(row)
-                self._set_fila(row, insumo, proveedor_id)
-
-    def _set_fila(self, row: int, insumo: dict, proveedor_id: int | None) -> None:
-        self.table_detalle.setItem(row, 0, QTableWidgetItem(insumo["nombre"]))
-
-        self._tallas_fila[row] = {}
-        btn_tallas = QPushButton("Configurar Tallas")
-        btn_tallas.setObjectName("btnSecondary")
-        btn_tallas.clicked.connect(lambda _=False, r=row: self._configurar_tallas(r))
-        self.table_detalle.setCellWidget(row, 1, btn_tallas)
-
-        precio_default = 0.0
-        if proveedor_id:
-            for pi in self.controller.listar_insumos_proveedor_por_insumo(insumo["id"]):
-                if pi["proveedor_id"] == proveedor_id:
-                    precio_default = float(pi.get("precio", 0) or 0)
-                    break
-
-        spn_c = QDoubleSpinBox()
-        spn_c.setRange(0, 999999)
-        spn_c.setDecimals(2)
-        spn_c.setValue(1)
-        spn_c.valueChanged.connect(self._recalcular)
-        self.table_detalle.setCellWidget(row, 2, spn_c)
-
-        spn_p = QDoubleSpinBox()
-        spn_p.setRange(0, 99999999)
-        spn_p.setDecimals(2)
-        spn_p.setValue(precio_default)
-        spn_p.valueChanged.connect(self._recalcular)
-        self.table_detalle.setCellWidget(row, 3, spn_p)
-
-        self.table_detalle.setItem(row, 4, QTableWidgetItem(f"{precio_default:.2f}"))
-        self.table_detalle.setItem(row, 5, QTableWidgetItem(str(insumo["id"])))
-        self._recalcular()
+                precio_default = 0.0
+                if proveedor_id:
+                    for pi in self.controller.listar_insumos_proveedor_por_insumo(insumo["id"]):
+                        if pi["proveedor_id"] == proveedor_id:
+                            precio_default = float(pi.get("precio", 0) or 0)
+                            break
+                row = self.table_detalle.row_count()
+                self.table_detalle.add_row({
+                    "nombre": insumo["nombre"], "tallas": None, "cantidad": 1,
+                    "precio": precio_default, "subtotal": "0.00", "id": insumo["id"],
+                })
+                self._tallas_fila[row] = {}
+                self._recalcular()
 
     def _configurar_tallas(self, row: int) -> None:
-        dlg = DialogMatrizTallas(self.controller, self._tallas_fila.get(row))
+        prev = self._tallas_fila.get(row, {})
+        dlg = DialogMatrizTallas(
+            self.controller,
+            inicial={tid: v["pares"] for tid, v in prev.items()},
+            precios_iniciales={tid: v["precio"] for tid, v in prev.items()},
+        )
         if dlg.exec() == QDialog.Accepted:
             matriz = dlg.get_matriz()
-            self._tallas_fila[row] = matriz
+            precios = dlg.get_precios()
+            self._tallas_fila[row] = {
+                tid: {"pares": matriz[tid], "precio": precios.get(tid, 0.0)}
+                for tid in matriz
+            }
             total_pares = sum(matriz.values())
-            btn = self.table_detalle.cellWidget(row, 1)
+            btn = self.table_detalle.cell_widget(row, "tallas")
             if btn:
                 btn.setText(f"Editar Tallas ({total_pares} pr)")
-            spn_c = self.table_detalle.cellWidget(row, 2)
+            spn_c = self.table_detalle.cell_widget(row, "cantidad")
             if spn_c:
                 spn_c.setValue(total_pares)
             self._recalcular()
 
     def _quitar_insumo(self) -> None:
-        row = self.table_detalle.currentRow()
+        row = self.table_detalle.current_row()
         if row >= 0:
-            self.table_detalle.removeRow(row)
+            self.table_detalle.remove_row(row)
             self._tallas_fila.pop(row, None)
             self._recalcular()
 
     def _recalcular(self, *_args) -> None:
         total = 0.0
-        for row in range(self.table_detalle.rowCount()):
-            spn_c = self.table_detalle.cellWidget(row, 2)
-            spn_p = self.table_detalle.cellWidget(row, 3)
-            if spn_c and spn_p:
+        for row in range(self.table_detalle.row_count()):
+            spn_c = self.table_detalle.cell_widget(row, "cantidad")
+            spn_p = self.table_detalle.cell_widget(row, "precio")
+            puntos = self._tallas_fila.get(row, {})
+            if puntos:
+                sub = sum(v["pares"] * v["precio"] for v in puntos.values())
+            elif spn_c and spn_p:
                 sub = spn_c.value() * spn_p.value()
-                self.table_detalle.item(row, 4).setText(f"{sub:.2f}")
-                total += sub
+            else:
+                sub = 0.0
+            self.table_detalle.set_cell_text(row, "subtotal", f"{sub:.2f}")
+            total += sub
         self.lbl_total.setText(f"Total: ${total:.2f}")
 
     def _save(self) -> None:
@@ -825,31 +1371,35 @@ class DialogOrdenCompra(QDialog):
             return
         proveedor_id = self.cmb_proveedor.currentData()
         detalle = []
-        for row in range(self.table_detalle.rowCount()):
-            insumo_id = int(self.table_detalle.item(row, 5).text())
-            spn_c = self.table_detalle.cellWidget(row, 2)
-            spn_p = self.table_detalle.cellWidget(row, 3)
-            tallas = self._tallas_fila.get(row, {})
-            cantidad = sum(tallas.values()) if tallas else (spn_c.value() if spn_c else 0)
+        for row in range(self.table_detalle.row_count()):
+            insumo_id = int(self.table_detalle.cell_text(row, "id"))
+            spn_c = self.table_detalle.cell_widget(row, "cantidad")
+            spn_p = self.table_detalle.cell_widget(row, "precio")
+            puntos = self._tallas_fila.get(row, {})
+            cantidad = sum(v["pares"] for v in puntos.values()) if puntos else (spn_c.value() if spn_c else 0)
             precio = spn_p.value() if spn_p else 0
             if cantidad > 0:
                 detalle.append({
                     "insumo_id": insumo_id,
                     "cantidad": cantidad,
                     "precio": precio,
-                    "tallas": [{"talla_id": tid, "pares": pr}
-                                for tid, pr in tallas.items()],
+                    "tallas": [
+                        {"talla_id": tid, "pares": v["pares"], "precio": v["precio"]}
+                        for tid, v in puntos.items()
+                    ],
                 })
         if not detalle:
             QMessageBox.warning(self, "Detalle vacío", "Agregue al menos un insumo a la orden.")
             return
-        self.controller.crear_orden(
+        oc_id = self.controller.crear_orden(
             folio, detalle, self.txt_obs.toPlainText().strip(),
             proveedor_id=proveedor_id,
             metodo_pago=self.cmb_metodo_pago.currentText().strip(),
             solo_remision=self.chk_remision.isChecked(),
             tipo=self.tipo,
         )
+        if self.tipo in ("factura", "remision"):
+            self.controller.recibir_orden(oc_id)
         self.accept()
 
 
@@ -858,12 +1408,37 @@ class DialogSeleccionarInsumo(QDialog):
                  sin_proveedor: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("Seleccionar Insumo")
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(700, 400)
         self.setModal(True)
         self._selected = None
         self._proveedor_id = proveedor_id
         self._sin_proveedor = sin_proveedor
         self._setup_ui()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        ancho = self._ancho_ventana_principal()
+        self.resize(ancho, self.height())
+        self._centrar_en_pantalla()
+
+    def _centrar_en_pantalla(self) -> None:
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        geo = screen.availableGeometry()
+        frame = self.frameGeometry()
+        self.move(geo.center().x() - frame.width() // 2,
+                  geo.center().y() - frame.height() // 2)
+
+    def _ancho_ventana_principal(self) -> int:
+        app = QApplication.instance()
+        ancho = 1400
+        if app is not None:
+            for w in app.topLevelWidgets():
+                if w is self or not w.isVisible():
+                    continue
+                ancho = max(ancho, w.width())
+        return ancho
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -872,15 +1447,15 @@ class DialogSeleccionarInsumo(QDialog):
         self.txt_buscar.setPlaceholderText("Buscar insumo...")
         layout.addWidget(self.txt_buscar)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Código", "Nombre", "Categoría", "Stock"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._accept)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "codigo", "label": "Código"},
+                {"key": "nombre", "label": "Nombre", "stretch": True},
+                {"key": "categoria", "label": "Categoría"},
+                {"key": "stock_actual", "label": "Stock", "align": "right"},
+            ],
+        )
+        self.table.recordDoubleClicked.connect(self._accept)
 
         ctrl = InventarioController()
         if self._proveedor_id is not None:
@@ -890,13 +1465,7 @@ class DialogSeleccionarInsumo(QDialog):
         else:
             insumos = ctrl.listar_insumos()
         self._insumos = insumos
-        self.table.setRowCount(len(insumos))
-        for i, ins in enumerate(insumos):
-            self.table.setItem(i, 0, QTableWidgetItem(ins["codigo"]))
-            self.table.setItem(i, 1, QTableWidgetItem(ins["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(ins["categoria"]))
-            self.table.setItem(i, 3, QTableWidgetItem(str(ins["stock_actual"])))
-            self.table.item(i, 0).setData(Qt.UserRole, ins["id"])
+        self._mostrar(insumos)
 
         self.txt_buscar.textChanged.connect(self._filtrar)
         layout.addWidget(self.table)
@@ -913,24 +1482,27 @@ class DialogSeleccionarInsumo(QDialog):
         btns.addWidget(btn_sel)
         layout.addLayout(btns)
 
+    def _mostrar(self, insumos: list[dict]) -> None:
+        self.table.set_records(list(insumos))
+
     def _filtrar(self, texto: str) -> None:
-        for row in range(self.table.rowCount()):
-            match = False
-            for col in range(self.table.columnCount()):
-                item = self.table.item(row, col)
-                if item and texto.lower() in item.text().lower():
-                    match = True
-                    break
-            self.table.setRowHidden(row, not match)
+        texto = texto.strip().lower()
+        if not texto:
+            self._mostrar(self._insumos)
+            return
+        filtrados = [
+            ins for ins in self._insumos
+            if texto in str(ins.get("codigo", "")).lower()
+            or texto in str(ins.get("nombre", "")).lower()
+            or texto in str(ins.get("categoria", "")).lower()
+        ]
+        self._mostrar(filtrados)
 
     def _accept(self) -> None:
-        row = self.table.currentRow()
-        if row >= 0:
-            insumo_id = self.table.item(row, 0).data(Qt.UserRole)
-            ins = next((x for x in self._insumos if x["id"] == insumo_id), None)
-            if ins:
-                self._selected = ins
-                self.accept()
+        rec = self.table.current_record()
+        if rec is not None:
+            self._selected = rec
+            self.accept()
 
     def get_seleccion(self) -> dict | None:
         return self._selected
@@ -957,8 +1529,7 @@ class DialogVerOrden(QDialog):
 
         info = QFormLayout()
         info.addRow("Folio:", QLabel(oc.get("folio", "")))
-        info.addRow("Tipo:", QLabel(
-            "Factura" if oc.get("tipo") == "factura" else "Orden de Compra"))
+        info.addRow("Tipo:", QLabel(_tipo_documento(oc.get("tipo", "orden"))))
         info.addRow("Proveedor:", QLabel(oc.get("proveedor_nombre") or "Compra a inventario"))
         info.addRow("Fecha:", QLabel(oc.get("fecha_emision", "")))
         info.addRow("Estatus:", QLabel(oc.get("estatus", "").capitalize()))
@@ -990,13 +1561,17 @@ class DialogVerOrden(QDialog):
             self.table.setItem(i, 1, QTableWidgetItem(d.get("proveedor_nombre", "") or "—"))
             tallas = d.get("tallas", [])
             if tallas:
-                texto_tallas = ", ".join(f"T{t['talla']}: {t['pares']}" for t in tallas)
+                texto_tallas = ", ".join(
+                    f"T{t['talla']}: {t['pares']}"
+                    + (f" (${float(t['precio']):,.2f})"
+                       if float(t.get('precio', 0) or 0) > 0 else "")
+                    for t in tallas)
                 self.table.setItem(i, 2, QTableWidgetItem(texto_tallas))
             else:
                 self.table.setItem(i, 2, QTableWidgetItem("—"))
             self.table.setItem(i, 3, QTableWidgetItem(str(d.get("cantidad", 0))))
             self.table.setItem(i, 4, QTableWidgetItem(f"${d.get('precio_unitario', 0):.2f}"))
-            sub = d.get("cantidad", 0) * d.get("precio_unitario", 0)
+            sub = _subtotal_detalle(d)
             self.table.setItem(i, 5, QTableWidgetItem(f"${sub:.2f}"))
 
         layout.addWidget(self.table)
@@ -1043,8 +1618,7 @@ class DialogRecibirOrden(QDialog):
 
         info = QFormLayout()
         info.addRow("Folio:", QLabel(f"<b>{oc.get('folio', '')}</b>"))
-        info.addRow("Tipo:", QLabel(
-            "Factura" if oc.get("tipo") == "factura" else "Orden de Compra"))
+        info.addRow("Tipo:", QLabel(_tipo_documento(oc.get("tipo", "orden"))))
         info.addRow("Proveedor:", QLabel(oc.get("proveedor_nombre") or "Compra a inventario"))
         info.addRow("Fecha:", QLabel(oc.get("fecha_emision", "")))
         layout.addLayout(info)
@@ -1053,41 +1627,31 @@ class DialogRecibirOrden(QDialog):
         instruccion.setStyleSheet("font-weight: bold; color: #475569; margin-top: 8px;")
         layout.addWidget(instruccion)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Insumo", "Proveedor", "Cant. Solicitada", "Cant. Recibida",
-            "Precio Unit.", "Subtotal", "DetalleID"
-        ])
-        self.table.setColumnHidden(6, True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "insumo_nombre", "label": "Insumo", "stretch": True},
+                {"key": "proveedor_nombre", "label": "Proveedor", "stretch": True},
+                {"key": "cantidad", "label": "Cant. Solicitada", "align": "right"},
+                {"key": "recibida", "label": "Cant. Recibida", "widget": self._factory_recibida},
+                {"key": "precio", "label": "Precio Unit.", "align": "right"},
+                {"key": "subtotal", "label": "Subtotal", "align": "right"},
+                {"key": "id", "label": "DetalleID", "hidden": True},
+            ],
+            sortable=False,
+        )
 
         detalle = self.controller.obtener_detalle_orden(self.oc_id)
-        self._spins: list[QDoubleSpinBox] = []
-        self._detalle_ids: list[int] = []
-        self.table.setRowCount(len(detalle))
-        for i, d in enumerate(detalle):
-            cant = d.get("cantidad", 0)
-            precio = d.get("precio_unitario", 0)
-            self.table.setItem(i, 0, QTableWidgetItem(d.get("insumo_nombre", "")))
-            self.table.setItem(i, 1, QTableWidgetItem(d.get("proveedor_nombre", "") or "—"))
-            self.table.setItem(i, 2, QTableWidgetItem(str(cant)))
-            spn = QDoubleSpinBox()
-            spn.setRange(0, cant * 10)
-            spn.setDecimals(2)
-            spn.setValue(cant)
-            spn.valueChanged.connect(self._on_cantidad_changed)
-            self._spins.append(spn)
-            self.table.setCellWidget(i, 3, spn)
-            self.table.setItem(i, 4, QTableWidgetItem(f"${precio:.2f}"))
-            sub_item = QTableWidgetItem(f"${cant * precio:.2f}")
-            self.table.setItem(i, 5, sub_item)
-            self.table.setItem(i, 6, QTableWidgetItem(str(d.get("id", ""))))
-            self._detalle_ids.append(d.get("id", 0))
+        self._detalle = detalle
+        self.table.set_records([
+            {"insumo_nombre": d.get("insumo_nombre", ""),
+             "proveedor_nombre": d.get("proveedor_nombre", "") or "—",
+             "cantidad": d.get("cantidad", 0),
+             "recibida": d.get("cantidad", 0),
+             "precio": f"${d.get('precio_unitario', 0):.2f}",
+             "subtotal": f"${_subtotal_detalle(d):.2f}",
+             "id": d.get("id", "")}
+            for d in detalle
+        ])
 
         layout.addWidget(self.table)
 
@@ -1107,16 +1671,24 @@ class DialogRecibirOrden(QDialog):
         btns.addWidget(btn_recibir)
         layout.addLayout(btns)
 
+    def _factory_recibida(self, record: dict, row: int) -> QDoubleSpinBox:
+        cant = float(record.get("cantidad", 0) or 0)
+        spn = QDoubleSpinBox()
+        spn.setRange(0, cant * 10)
+        spn.setDecimals(2)
+        spn.setValue(cant)
+        spn.valueChanged.connect(self._on_cantidad_changed)
+        return spn
+
     def _on_cantidad_changed(self) -> None:
-        detalle = self.controller.obtener_detalle_orden(self.oc_id)
         diferencias = False
         total = 0
-        for i, d in enumerate(detalle):
-            recibido = self._spins[i].value()
+        for i, d in enumerate(self._detalle):
+            spn = self.table.cell_widget(i, "recibida")
+            recibido = spn.value() if spn else d.get("cantidad", 0)
             solicitado = d.get("cantidad", 0)
-            precio = d.get("precio_unitario", 0)
-            sub = recibido * precio
-            self.table.item(i, 5).setText(f"${sub:.2f}")
+            sub = _subtotal_recibido(d, recibido)
+            self.table.set_cell_text(i, "subtotal", f"${sub:.2f}")
             total += sub
             if abs(recibido - solicitado) > 0.01:
                 diferencias = True
@@ -1128,9 +1700,10 @@ class DialogRecibirOrden(QDialog):
             self.lbl_diferencia.setText("✓ Cantidades coinciden. Orden se marcará como 'recibida'.")
 
     def _save(self) -> None:
-        detalle = self.controller.obtener_detalle_orden(self.oc_id)
-        for i, d in enumerate(detalle):
-            recibido = self._spins[i].value()
+        recibidos = []
+        for i, d in enumerate(self._detalle):
+            spn = self.table.cell_widget(i, "recibida")
+            recibido = spn.value() if spn else 0
             if recibido > 0:
                 from src.database.db_manager import DatabaseManager
                 db = DatabaseManager()
@@ -1143,11 +1716,14 @@ class DialogRecibirOrden(QDialog):
                     (d["insumo_id"], recibido, self.oc_id,
                      f"OC {d['orden_compra_id']} - Recibido: {recibido}/{d['cantidad']}"),
                 )
+            recibidos.append({"insumo_id": d["insumo_id"], "solicitado": d["cantidad"],
+                              "recibido": recibido})
 
         estatus = "recibida_con_diferencias" if self._diferencias else "recibida"
         total = sum(
-            self._spins[i].value() * d.get("precio_unitario", 0)
-            for i, d in enumerate(detalle)
+            _subtotal_recibido(d, self.table.cell_widget(i, "recibida").value()
+                               if self.table.cell_widget(i, "recibida") else 0)
+            for i, d in enumerate(self._detalle)
         )
         from src.database.db_manager import DatabaseManager
         db = DatabaseManager()
@@ -1155,6 +1731,10 @@ class DialogRecibirOrden(QDialog):
             "UPDATE ordenes_compra SET estatus=?, fecha_recibido=datetime('now'), total=? WHERE id=?",
             (estatus, total, self.oc_id),
         )
+        from src.utils.logs import registrar_log
+        registrar_log("ordenes_compra", "recibir", "orden", self.oc_id,
+                      datos={"estatus": estatus, "total": total,
+                             "diferencias": self._diferencias, "detalle_recibido": recibidos})
         self.accept()
 
 
@@ -1259,6 +1839,18 @@ class DialogModelo(QDialog):
             self._color_checks.append((chk, c))
             grid.addWidget(chk, i // 3, i % 3)
         fc.addLayout(grid)
+
+        sel_col = QHBoxLayout()
+        btn_gen_col = QPushButton("Generar")
+        btn_gen_col.setObjectName("btnPrimary")
+        btn_gen_col.clicked.connect(self._regenerar_variantes)
+        sel_col.addWidget(btn_gen_col)
+        btn_limpiar_col = QPushButton("Limpiar")
+        btn_limpiar_col.setObjectName("btnSecondary")
+        btn_limpiar_col.clicked.connect(self._limpiar_variantes)
+        sel_col.addWidget(btn_limpiar_col)
+        sel_col.addStretch()
+        fc.addLayout(sel_col)
 
         layout.addWidget(self.frame_colores)
         self.frame_colores.setVisible(False)
@@ -1522,23 +2114,17 @@ class DialogBOM(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Insumo", "Cantidad por Par", "Unidad", "InsumoID"])
-        self.table.setColumnHidden(3, True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.verticalHeader().setDefaultSectionSize(46)
-        configurar_tabla_excel(self.table)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "insumo_nombre", "label": "Insumo", "stretch": True},
+                {"key": "cantidad_por_par", "label": "Cantidad por Par", "widget": self._factory_cantidad_bom},
+                {"key": "unidad", "label": "Unidad", "widget": self._factory_unidad_bom},
+                {"key": "id", "label": "InsumoID", "hidden": True},
+            ],
+            sortable=False,
+        )
 
-        bom = self.controller.obtener_bom(self.modelo_id)
-        self.table.setRowCount(len(bom))
-        for i, b in enumerate(bom):
-            self.table.setItem(i, 0, QTableWidgetItem(b.get("insumo_nombre", "")))
-            self._set_widgets_fila(i, b.get("cantidad_por_par", 0),
-                                   b.get("unidad_medida", "") or "pieza",
-                                   b.get("insumo_id", ""))
+        self._cargar_bom()
 
         layout.addWidget(self.table)
 
@@ -1568,43 +2154,54 @@ class DialogBOM(QDialog):
         btns.addWidget(btn_save)
         layout.addLayout(btns)
 
-    def _set_widgets_fila(self, row: int, cantidad: float, unidad: str, insumo_id) -> None:
+    def _factory_cantidad_bom(self, record: dict, row: int) -> QDoubleSpinBox:
         spn = QDoubleSpinBox()
         spn.setRange(0, 999999)
         spn.setDecimals(2)
-        spn.setValue(cantidad)
-        self.table.setCellWidget(row, 1, spn)
+        spn.setValue(float(record.get("cantidad_por_par", 0) or 0))
+        return spn
+
+    def _factory_unidad_bom(self, record: dict, row: int) -> QComboBox:
         cmb = QComboBox()
         for u in self.controller.listar_unidades():
             cmb.addItem(u["abreviatura"], u["nombre"])
-        idx = cmb.findText(unidad)
+        idx = cmb.findText(record.get("unidad", "pieza"))
         if idx >= 0:
             cmb.setCurrentIndex(idx)
-        self.table.setCellWidget(row, 2, cmb)
-        self.table.setItem(row, 3, QTableWidgetItem(str(insumo_id)))
+        return cmb
+
+    def _cargar_bom(self) -> None:
+        bom = self.controller.obtener_bom(self.modelo_id)
+        self.table.set_records([
+            {"insumo_nombre": b.get("insumo_nombre", ""),
+             "cantidad_por_par": b.get("cantidad_por_par", 0),
+             "unidad": b.get("unidad_medida", "") or "pieza",
+             "id": b.get("insumo_id", "")}
+            for b in bom
+        ])
 
     def _agregar(self) -> None:
         dlg = DialogSeleccionarInsumo(self)
         if dlg.exec() == QDialog.Accepted:
             ins = dlg.get_seleccion()
             if ins:
-                row = self.table.rowCount()
-                self.table.insertRow(row)
-                self.table.setItem(row, 0, QTableWidgetItem(ins["nombre"]))
-                self._set_widgets_fila(row, 1, "pieza", ins["id"])
+                self.table.add_row({
+                    "insumo_nombre": ins["nombre"], "cantidad_por_par": 1,
+                    "unidad": "pieza", "id": ins["id"],
+                })
 
     def _quitar(self) -> None:
-        row = self.table.currentRow()
+        row = self.table.current_row()
         if row >= 0:
-            self.table.removeRow(row)
+            self.table.remove_row(row)
 
     def _save(self) -> None:
         insumos = []
-        for row in range(self.table.rowCount()):
-            spn = self.table.cellWidget(row, 1)
-            cmb = self.table.cellWidget(row, 2)
+        for row in range(self.table.row_count()):
+            spn = self.table.cell_widget(row, "cantidad_por_par")
+            cmb = self.table.cell_widget(row, "unidad")
             insumos.append({
-                "insumo_id": int(self.table.item(row, 3).text()),
+                "insumo_id": int(self.table.cell_text(row, "id")),
                 "cantidad": spn.value() if spn else 0,
                 "unidad": cmb.currentText() if cmb else "pieza",
             })
@@ -1644,14 +2241,9 @@ class DialogOrdenProduccion(QDialog):
                 v["id"],
             )
 
-        self.dte_inicio = QDateEdit()
-        self.dte_inicio.setCalendarPopup(True)
         from PySide6.QtCore import QDate
-        self.dte_inicio.setDate(QDate.currentDate())
-
-        self.dte_entrega = QDateEdit()
-        self.dte_entrega.setCalendarPopup(True)
-        self.dte_entrega.setDate(QDate.currentDate().addDays(7))
+        self.dte_inicio = DatePicker()
+        self.dte_entrega = DatePicker(QDate.currentDate().addDays(7))
 
         self.cmb_prioridad = QComboBox()
         self.cmb_prioridad.addItems(["baja", "normal", "alta", "urgente"])
@@ -1755,8 +2347,8 @@ class DialogOrdenProduccion(QDialog):
 
         self.controller.crear_op(
             folio, self.cmb_variante.currentData(), matriz,
-            self.dte_inicio.date().toString("yyyy-MM-dd"),
-            self.dte_entrega.date().toString("yyyy-MM-dd"),
+            self.dte_inicio.fecha_bd(),
+            self.dte_entrega.fecha_bd(),
             self.cmb_prioridad.currentText(),
             self.txt_obs.toPlainText().strip(),
         )
@@ -1796,28 +2388,17 @@ class DialogSeguimientoOP(QDialog):
             layout.addWidget(t_label)
 
         layout.addWidget(QLabel("Avance en línea de producción:"))
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Estación", "Entrada", "Salida", "Procesados", "Estatus"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-
-        seguimiento = self.controller.obtener_seguimiento(self.op_id)
-        self.table.setRowCount(len(seguimiento))
-        for i, s in enumerate(seguimiento):
-            self.table.setItem(i, 0, QTableWidgetItem(s.get("estacion_nombre", "")))
-            self.table.setItem(i, 1, QTableWidgetItem(s.get("fecha_entrada", "") or "-"))
-            self.table.setItem(i, 2, QTableWidgetItem(s.get("fecha_salida", "") or "-"))
-            self.table.setItem(i, 3, QTableWidgetItem(str(s.get("pares_procesados", 0) or 0)))
-            est_item = QTableWidgetItem(s.get("estatus", "").capitalize())
-            if s.get("estatus") == "completado":
-                est_item.setForeground(Qt.darkGreen)
-            elif s.get("estatus") == "en_proceso":
-                est_item.setForeground(Qt.darkYellow)
-            self.table.setItem(i, 4, est_item)
+        self.table = GorettiTable(
+            columns=[
+                {"key": "estacion_nombre", "label": "Estación", "stretch": True},
+                {"key": "fecha_entrada", "label": "Entrada"},
+                {"key": "fecha_salida", "label": "Salida"},
+                {"key": "pares_procesados", "label": "Procesados", "align": "right"},
+                {"key": "estatus", "label": "Estatus"},
+            ],
+            foreground_fn=self._color_estatus,
+        )
+        self._cargar_seguimiento()
 
         layout.addWidget(self.table)
 
@@ -1832,6 +2413,26 @@ class DialogSeguimientoOP(QDialog):
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close, 0, Qt.AlignRight)
 
+    def _color_estatus(self, record: dict, key: str) -> QColor | None:
+        if key == "estatus":
+            if record.get("estatus_raw") == "completado":
+                return QColor("#15803d")
+            if record.get("estatus_raw") == "en_proceso":
+                return QColor("#ca8a04")
+        return None
+
+    def _cargar_seguimiento(self) -> None:
+        seguimiento = self.controller.obtener_seguimiento(self.op_id)
+        self.table.set_records([
+            {"estacion_nombre": s.get("estacion_nombre", ""),
+             "fecha_entrada": s.get("fecha_entrada", "") or "-",
+             "fecha_salida": s.get("fecha_salida", "") or "-",
+             "pares_procesados": s.get("pares_procesados", 0) or 0,
+             "estatus": s.get("estatus", "").capitalize(),
+             "estatus_raw": s.get("estatus", "")}
+            for s in seguimiento
+        ])
+
     def _avanzar(self, op: dict) -> None:
         seg = self.controller.obtener_seguimiento(self.op_id)
         siguiente = None
@@ -1845,23 +2446,7 @@ class DialogSeguimientoOP(QDialog):
 
         dlg = DialogAvanceEstacion(self.controller, self.op_id, siguiente)
         if dlg.exec() == QDialog.Accepted:
-            self._refresh()
-
-    def _refresh(self) -> None:
-        op = self.controller.obtener_op(self.op_id)
-        seguimiento = self.controller.obtener_seguimiento(self.op_id)
-        self.table.setRowCount(len(seguimiento))
-        for i, s in enumerate(seguimiento):
-            self.table.setItem(i, 0, QTableWidgetItem(s.get("estacion_nombre", "")))
-            self.table.setItem(i, 1, QTableWidgetItem(s.get("fecha_entrada", "") or "-"))
-            self.table.setItem(i, 2, QTableWidgetItem(s.get("fecha_salida", "") or "-"))
-            self.table.setItem(i, 3, QTableWidgetItem(str(s.get("pares_procesados", 0) or 0)))
-            est_item = QTableWidgetItem(s.get("estatus", "").capitalize())
-            if s.get("estatus") == "completado":
-                est_item.setForeground(Qt.darkGreen)
-            elif s.get("estatus") == "en_proceso":
-                est_item.setForeground(Qt.darkYellow)
-            self.table.setItem(i, 4, est_item)
+            self._cargar_seguimiento()
 
 
 class DialogAvanceEstacion(QDialog):
@@ -1927,3 +2512,461 @@ class DialogAvanceEstacion(QDialog):
             procesados, defectuosos, self.txt_obs.toPlainText().strip(),
         )
         self.accept()
+
+
+class DialogFichaTecnica(QDialog):
+    """Edición e impresión de la ficha técnica de un modelo.
+
+    Se abre en pantalla completa y organiza la información en paneles:
+      • Izquierda: datos generales del proyecto, comentarios/firmas y las
+        fotos de las piezas.
+      • Derecha (arriba): características agrupadas por sección, con un
+        buscador para localizar cualquier campo al instante.
+      • Derecha (abajo): materiales del modelo con cantidad por par editable
+        y el costo calculado en vivo (último precio de compra o, en su
+        defecto, el menor precio de proveedor activo).
+    El guardado persiste la ficha, sus fotos y las cantidades de materiales.
+    """
+
+    def __init__(self, controller: InventarioController,
+                 produccion_controller: ProduccionController,
+                 modelo_id: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.controller = controller
+        self.produccion_controller = produccion_controller
+        self.modelo_id = modelo_id
+        self.modelo = self.produccion_controller.obtener_modelo(modelo_id) or {}
+        self.setWindowTitle(f"Ficha técnica - {self.modelo.get('codigo', '')} {self.modelo.get('nombre', '')}".strip())
+        self.setMinimumSize(1024, 700)
+        self.setModal(True)
+        self._maximizada = False
+        self._costos: dict[int, float] = {}
+        self._insumos: list[dict] = []
+        self._filas_caracteristica: list[tuple[QGroupBox, QLabel, QComboBox, str]] = []
+        self._setup_ui()
+        self._cargar_materiales()
+        self._load_data()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if not self._maximizada:
+            self._maximizada = True
+            self.setWindowState(self.windowState() | Qt.WindowMaximized)
+
+    def _setup_ui(self) -> None:
+        from src.models.ficha_tecnica_model import CAMPOS_ENCABEZADO, CAMPOS_FICHA, TIPOS_FOTO
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        titulo = QLabel(
+            f"{self.modelo.get('codigo', '')} — {self.modelo.get('nombre', '')}".strip(" —"))
+        titulo.setStyleSheet("font-size: 15pt; font-weight: bold;")
+        layout.addWidget(titulo)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+
+        # --------------------------------------------------------------
+        # Panel izquierdo: datos generales + comentarios + fotos
+        # --------------------------------------------------------------
+        panel_izq = QScrollArea()
+        panel_izq.setWidgetResizable(True)
+        panel_izq.setMaximumWidth(430)
+        izq = QWidget()
+        il = QVBoxLayout(izq)
+        il.setSpacing(12)
+
+        grp_datos = QGroupBox("Datos generales")
+        form = QFormLayout(grp_datos)
+        form.setSpacing(8)
+        self.campos_encabezado: dict[str, QLineEdit] = {}
+        for etiqueta, col in CAMPOS_ENCABEZADO:
+            edit = QLineEdit()
+            edit.setPlaceholderText(etiqueta)
+            self.campos_encabezado[col] = edit
+            form.addRow(QLabel(f"{etiqueta}:"), edit)
+        self.campos_encabezado["etapa"].setText("MUESTRA")
+        il.addWidget(grp_datos)
+
+        # Comentarios y firmas
+        grp_extra = QGroupBox("Comentarios y firmas")
+        form_extra = QFormLayout(grp_extra)
+        form_extra.setSpacing(8)
+        self.txt_comentarios = QTextEdit()
+        self.txt_comentarios.setMaximumHeight(90)
+        self.txt_comentarios.setPlaceholderText("Comentarios generales (opcional)")
+        self.campos_extra_edits: dict[str, QLineEdit] = {}
+        for col in ("realizo", "recibio"):
+            edit = QLineEdit()
+            self.campos_extra_edits[col] = edit
+            form_extra.addRow(QLabel(f"{col.capitalize()}:"), edit)
+        form_extra.addRow("Comentarios:", self.txt_comentarios)
+        il.addWidget(grp_extra)
+
+        # Fotos de las piezas (rejilla de 2 columnas)
+        fotos_box = QGroupBox("Fotos de las piezas")
+        fgrid = QGridLayout(fotos_box)
+        fgrid.setSpacing(8)
+        self.widgets_foto: dict[str, WidgetImagen] = {}
+        for i, (etiqueta, tipo) in enumerate(TIPOS_FOTO):
+            widget = WidgetImagen()
+            widget.lbl_preview.setText(f"Sin imagen\n({etiqueta})")
+            self.widgets_foto[tipo] = widget
+            fgrid.addWidget(widget, i // 2, i % 2)
+        il.addWidget(fotos_box)
+        il.addStretch()
+        panel_izq.setWidget(izq)
+        splitter.addWidget(panel_izq)
+
+        # --------------------------------------------------------------
+        # Panel derecho: características (arriba) + materiales/costos (abajo)
+        # --------------------------------------------------------------
+        splitter_der = QSplitter(Qt.Vertical)
+        splitter_der.setChildrenCollapsible(False)
+
+        caracteristicas = QWidget()
+        cl = QVBoxLayout(caracteristicas)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(8)
+
+        fila_busqueda = QHBoxLayout()
+        self.txt_buscar = QLineEdit()
+        self.txt_buscar.setPlaceholderText("🔍 Buscar característica…")
+        self.txt_buscar.setClearButtonEnabled(True)
+        self.txt_buscar.textChanged.connect(self._filtrar_caracteristicas)
+        fila_busqueda.addWidget(self.txt_buscar)
+        cl.addLayout(fila_busqueda)
+
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        contenido = QWidget()
+        grid_secciones = QGridLayout(contenido)
+        grid_secciones.setSpacing(10)
+
+        # Características agrupadas en secciones (los campos de firmas y
+        # comentarios se manejan aparte en el panel izquierdo).
+        secciones = self._secciones()
+        self.campos_ficha: dict[str, QComboBox] = {}
+        columnas_ficha = {c: etiqueta for etiqueta, c in CAMPOS_FICHA}
+        campos_extra = {"comentarios", "realizo", "recibio"}
+
+        # Cargar catálogo de insumos una sola vez para poblar combos
+        self._insumos = self.controller.insumos_activos()
+        insumos = self._insumos
+
+        for n_sec, (titulo_sec, columnas) in enumerate(secciones):
+            grupo = QGroupBox(titulo_sec)
+            gform = QFormLayout(grupo)
+            gform.setSpacing(6)
+            for col in columnas:
+                if col in campos_extra:
+                    continue
+                lbl = QLabel(f"{columnas_ficha.get(col, col)}:")
+                combo = QComboBox()
+                combo.setEditable(True)
+                combo.setInsertPolicy(QComboBox.NoInsert)
+                combo.setDuplicatesEnabled(False)
+                # Poblar con insumos activos: "nombre (código)"
+                for ins in insumos:
+                    etiqueta_ins = f"{ins['nombre']} ({ins['codigo']})"
+                    combo.addItem(etiqueta_ins, ins["id"])
+                # Agregar valores históricos de otros modelos
+                for val in self.controller.valores_historicos_ficha(col):
+                    if combo.findText(val) == -1:
+                        combo.addItem(val)
+                combo.setPlaceholderText(columnas_ficha.get(col, col))
+                # Elegir un insumo del catálogo lo agrega a Materiales
+                combo.activated.connect(
+                    lambda _idx, c=col: self._on_insumo_elegido(c))
+                self.campos_ficha[col] = combo
+                gform.addRow(lbl, combo)
+                self._filas_caracteristica.append((grupo, lbl, combo, columnas_ficha.get(col, col)))
+            grid_secciones.addWidget(grupo, n_sec // 2, n_sec % 2)
+
+        area.setWidget(contenido)
+        cl.addWidget(area)
+        splitter_der.addWidget(caracteristicas)
+
+        splitter_der.addWidget(self._construir_panel_materiales())
+        splitter_der.setStretchFactor(0, 3)
+        splitter_der.setStretchFactor(1, 2)
+        splitter_der.setSizes([520, 320])
+        splitter.addWidget(splitter_der)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        layout.addWidget(splitter)
+
+        # Botones
+        btns = QHBoxLayout()
+        self.btn_imprimir = QPushButton("🖨 Imprimir")
+        self.btn_imprimir.setObjectName("btnSecondary")
+        self.btn_imprimir.clicked.connect(self._imprimir)
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setObjectName("btnSecondary")
+        btn_cancel.clicked.connect(self.reject)
+        btn_save = QPushButton("Guardar")
+        btn_save.setObjectName("btnPrimary")
+        btn_save.clicked.connect(self._save)
+        btns.addWidget(self.btn_imprimir)
+        btns.addStretch()
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_save)
+        layout.addLayout(btns)
+
+    def _construir_panel_materiales(self) -> QGroupBox:
+        """Panel inferior derecho: tabla de materiales con cantidades y costo."""
+        grupo = QGroupBox("Materiales · Cantidades y Costo por Par")
+        lay = QVBoxLayout(grupo)
+        lay.setSpacing(8)
+
+        toolbar = QHBoxLayout()
+        btn_add = QPushButton("＋ Agregar material")
+        btn_add.setObjectName("btnPrimary")
+        btn_add.clicked.connect(self._agregar_material)
+        btn_del = QPushButton("Quitar seleccionado")
+        btn_del.setObjectName("btnDanger")
+        btn_del.clicked.connect(self._quitar_material)
+        toolbar.addWidget(btn_add)
+        toolbar.addWidget(btn_del)
+        toolbar.addStretch()
+        lay.addLayout(toolbar)
+
+        self.tabla_mat = QTableWidget(0, 5)
+        self.tabla_mat.setHorizontalHeaderLabels([
+            "Material", "Código", "Cantidad por par", "Unidad", "Costo",
+        ])
+        self.tabla_mat.verticalHeader().setVisible(False)
+        header = self.tabla_mat.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for c in range(1, 5):
+            self.tabla_mat.setColumnWidth(c, 130 if c != 1 else 100)
+        self.tabla_mat.setSelectionBehavior(QTableWidget.SelectRows)
+        lay.addWidget(self.tabla_mat)
+
+        fila_total = QHBoxLayout()
+        fila_total.addStretch()
+        self.lbl_costo_total = QLabel("Costo total de materiales por par: $0.00")
+        self.lbl_costo_total.setStyleSheet(
+            "font-size: 13pt; font-weight: bold; color: #1B5E20;")
+        fila_total.addWidget(self.lbl_costo_total)
+        lay.addLayout(fila_total)
+        return grupo
+
+    def _agregar_fila_material(self, ins: dict) -> None:
+        """Agrega (o actualiza) una fila de material con cantidad y costo."""
+        iid = int(ins.get("insumo_id", ins.get("id", 0)))
+        if not iid:
+            return
+        for r in range(self.tabla_mat.rowCount()):
+            item = self.tabla_mat.item(r, 0)
+            if item is not None and item.data(Qt.UserRole) == iid:
+                return  # ya está en la lista
+        row = self.tabla_mat.rowCount()
+        self.tabla_mat.insertRow(row)
+
+        it_mat = QTableWidgetItem(ins.get("nombre") or ins.get("insumo_nombre") or "")
+        it_mat.setData(Qt.UserRole, iid)
+        self.tabla_mat.setItem(row, 0, it_mat)
+        it_cod = QTableWidgetItem(ins.get("codigo") or ins.get("insumo_codigo") or "")
+        it_cod.setFlags(it_cod.flags() & ~Qt.ItemIsEditable)
+        self.tabla_mat.setItem(row, 1, it_cod)
+
+        spn = QDoubleSpinBox()
+        spn.setRange(0, 999999)
+        spn.setDecimals(2)
+        spn.setValue(float(ins.get("cantidad_por_par", 0) or 0))
+        spn.valueChanged.connect(self._recalcular_costos)
+        self.tabla_mat.setCellWidget(row, 2, spn)
+
+        it_uni = QTableWidgetItem(ins.get("unidad_medida", "pieza") or "pieza")
+        it_uni.setFlags(it_uni.flags() & ~Qt.ItemIsEditable)
+        self.tabla_mat.setItem(row, 3, it_uni)
+
+        costo = float(self._costos.get(iid, 0) or 0)
+        it_costo = QTableWidgetItem(f"${costo:,.2f}")
+        it_costo.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        it_costo.setFlags(it_costo.flags() & ~Qt.ItemIsEditable)
+        it_costo.setData(Qt.UserRole, costo)
+        self.tabla_mat.setItem(row, 4, it_costo)
+
+    def _recalcular_costos(self) -> None:
+        """Recalcula el costo total por par con las cantidades en pantalla."""
+        total = 0.0
+        for r in range(self.tabla_mat.rowCount()):
+            spn = self.tabla_mat.cellWidget(r, 2)
+            it_costo = self.tabla_mat.item(r, 4)
+            if spn is None or it_costo is None:
+                continue
+            total += spn.value() * float(it_costo.data(Qt.UserRole) or 0)
+        self.lbl_costo_total.setText(
+            f"Costo total de materiales por par: ${total:,.2f}")
+
+    def _cargar_materiales(self) -> None:
+        bom = self.controller.obtener_bom(self.modelo_id)
+        self._costos = self.controller.costos_bom(self.modelo_id)
+        self.tabla_mat.setRowCount(0)
+        for b in sorted(bom, key=lambda x: (x.get("insumo_nombre") or "").lower()):
+            self._agregar_fila_material(b)
+        self._recalcular_costos()
+
+    def _on_insumo_elegido(self, col: str) -> None:
+        """Al elegir un insumo del catálogo en una característica, lo muestra
+        automáticamente en la tabla de Materiales para capturar su cantidad."""
+        combo = self.campos_ficha.get(col)
+        if combo is None or not combo.currentText().strip():
+            return
+        idx = combo.currentIndex()
+        if idx < 0:
+            return
+        insumo_id = combo.itemData(idx)
+        if insumo_id is None:
+            return
+        ins = next((i for i in self._insumos if i["id"] == insumo_id), None)
+        if ins is None:
+            return
+        if ins["id"] not in self._costos:
+            self._costos.update(self.controller.costos_bom(self.modelo_id, [ins["id"]]))
+        self._agregar_fila_material({
+            "insumo_id": ins["id"], "nombre": ins["nombre"],
+            "codigo": ins["codigo"], "cantidad_por_par": 0,
+            "unidad_medida": "pieza",
+        })
+
+    def _agregar_material(self) -> None:
+        dlg = DialogSeleccionarInsumo(self)
+        if dlg.exec() == QDialog.Accepted:
+            ins = dlg.get_seleccion()
+            if not ins:
+                return
+            if ins["id"] not in self._costos:
+                self._costos.update(self.controller.costos_bom(self.modelo_id, [ins["id"]]))
+            self._agregar_fila_material({
+                "insumo_id": ins["id"], "nombre": ins["nombre"],
+                "codigo": ins.get("codigo", ""), "cantidad_por_par": 0,
+                "unidad_medida": ins.get("unidad_medida", "pieza"),
+            })
+
+    def _quitar_material(self) -> None:
+        row = self.tabla_mat.currentRow()
+        if row >= 0:
+            self.tabla_mat.removeRow(row)
+            self._recalcular_costos()
+
+    def _filtrar_caracteristicas(self, texto: str) -> None:
+        """Muestra solo los campos cuya sección o etiqueta coincida con *texto*."""
+        texto = texto.strip().lower()
+        grupos: list[QGroupBox] = []
+        for grupo, _, _, _ in self._filas_caracteristica:
+            if grupo not in grupos:
+                grupos.append(grupo)
+        con_coincidencias: set[int] = set()
+        for n, (grupo, lbl, combo, etiqueta) in enumerate(self._filas_caracteristica):
+            coincide_grupo = bool(texto) and texto in grupo.title().lower()
+            visible = not texto or coincide_grupo or texto in etiqueta.lower()
+            lbl.setVisible(visible)
+            combo.setVisible(visible)
+            if visible:
+                con_coincidencias.add(grupos.index(grupo))
+        for n, grupo in enumerate(grupos):
+            grupo.setVisible(not texto or n in con_coincidencias)
+
+    def _secciones(self) -> list[tuple[str, list[str]]]:
+        from src.utils.ficha_tecnica_print import SECCIONES
+        return SECCIONES
+
+    def _load_data(self) -> None:
+        ficha = self.controller.obtener_ficha(self.modelo_id) or {}
+        for col, edit in self.campos_encabezado.items():
+            edit.setText(ficha.get(col, "") or "")
+        for col, combo in self.campos_ficha.items():
+            valor = ficha.get(col, "") or ""
+            idx = combo.findText(valor)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            else:
+                combo.setEditText(valor)
+        self.txt_comentarios.setPlainText(ficha.get("comentarios", "") or "")
+        for col, edit in self.campos_extra_edits.items():
+            edit.setText(ficha.get(col, "") or "")
+        for tipo, widget in self.widgets_foto.items():
+            widget.set_imagen(self.controller.obtener_foto_ficha(self.modelo_id, tipo))
+
+    def _guardar_materiales(self) -> None:
+        """Persiste cantidades/unidades de la tabla sin perder relaciones BOM
+        que no estén visibles en pantalla."""
+        capturados: dict[int, tuple[float, str]] = {}
+        for r in range(self.tabla_mat.rowCount()):
+            item = self.tabla_mat.item(r, 0)
+            spn = self.tabla_mat.cellWidget(r, 2)
+            it_uni = self.tabla_mat.item(r, 3)
+            if item is None or spn is None:
+                continue
+            iid = int(item.data(Qt.UserRole))
+            unidad = (it_uni.text() if it_uni else "") or "pieza"
+            capturados[iid] = (spn.value(), unidad)
+        finales: list[dict] = []
+        for b in self.controller.obtener_bom(self.modelo_id):
+            iid = b["insumo_id"]
+            cant, uni = capturados.pop(
+                iid, (float(b.get("cantidad_por_par", 0) or 0),
+                      b.get("unidad_medida") or "pieza"))
+            finales.append({"insumo_id": iid, "cantidad": cant, "unidad": uni})
+        for iid, (cant, uni) in capturados.items():
+            finales.append({"insumo_id": iid, "cantidad": cant, "unidad": uni})
+        self.controller.guardar_bom(self.modelo_id, finales)
+
+    def _save(self) -> None:
+        datos = {}
+        for col, edit in self.campos_encabezado.items():
+            datos[col] = edit.text().strip()
+        for col, combo in self.campos_ficha.items():
+            texto = combo.currentText().strip()
+            datos[col] = texto
+            # Si el usuario seleccionó un insumo del dropdown (tiene itemData),
+            # registrar en lista de materiales.
+            idx = combo.currentIndex()
+            if idx >= 0:
+                insumo_id = combo.itemData(idx)
+                if insumo_id is not None and texto:
+                    self.controller.agregar_insumo_a_lista(
+                        self.modelo_id, insumo_id)
+        datos["comentarios"] = self.txt_comentarios.toPlainText().strip()
+        for col, edit in self.campos_extra_edits.items():
+            datos[col] = edit.text().strip()
+        self.controller.guardar_ficha(self.modelo_id, datos)
+        for tipo, widget in self.widgets_foto.items():
+            self.controller.guardar_foto_ficha(self.modelo_id, tipo, widget.get_imagen())
+        self._guardar_materiales()
+        QMessageBox.information(self, "Ficha técnica", "Ficha técnica guardada.")
+        self.accept()
+
+    def _imprimir(self) -> None:
+        """Abre la vista previa con el formato profesional usando lo que hay
+        en pantalla (aunque aún no se haya guardado)."""
+        from src.utils.ficha_tecnica_print import imprimir_ficha_tecnica
+        ficha: dict = {col: edit.text().strip()
+                       for col, edit in self.campos_encabezado.items()}
+        for col, combo in self.campos_ficha.items():
+            ficha[col] = combo.currentText().strip()
+        ficha["comentarios"] = self.txt_comentarios.toPlainText().strip()
+        for col, edit in self.campos_extra_edits.items():
+            ficha[col] = edit.text().strip()
+        fotos = {tipo: widget.get_imagen()
+                 for tipo, widget in self.widgets_foto.items()}
+        materiales: list[dict] = []
+        for r in range(self.tabla_mat.rowCount()):
+            item = self.tabla_mat.item(r, 0)
+            spn = self.tabla_mat.cellWidget(r, 2)
+            it_uni = self.tabla_mat.item(r, 3)
+            if item is None or spn is None:
+                continue
+            iid = int(item.data(Qt.UserRole))
+            materiales.append({
+                "nombre": item.text(),
+                "cantidad": spn.value(),
+                "unidad": it_uni.text() if it_uni else "",
+                "costo": float(self._costos.get(iid, 0) or 0),
+            })
+        imprimir_ficha_tecnica(self.modelo, ficha, fotos, self,
+                               materiales=materiales)

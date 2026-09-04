@@ -1,21 +1,34 @@
+from datetime import datetime
+
 from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QMessageBox, QPushButton, QDoubleSpinBox, QSpinBox, QStackedWidget, QTableWidget,
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
+    QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
+    QDoubleSpinBox, QRadioButton, QSpinBox, QStackedWidget, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
+from src.components.grid_hibrido import GridHibrido
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.accesos_controller import AccesosController
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.controllers.produccion_controller import ProduccionController
+from src.controllers.respaldo_controller import RespaldoController
 from src.models.accesos_model import ACCIONES, MODULOS, tiene
-from src.utils.icons import mono_icon, tile_icon
+from src.models.empresa_model import EmpresaModel
+from src.utils.icons import tile_icon
+from src.utils.impresion_virtual import (
+    guardar_impresora_virtual, impresora_virtual_habilitada,
+)
 from src.utils.table_utils import configurar_tabla_excel
 
 
 _SECCIONES = [
+    ("empresa", "Empresa",
+     "Nombre, razón social, logo (membrete) y video de splash de la empresa."),
     ("unidades", "Unidades de Medida",
      "Catálogo de unidades usadas en insumos y órdenes de compra."),
     ("areas", "Áreas de Producción",
@@ -26,6 +39,11 @@ _SECCIONES = [
      "Colores y códigos cortos para variantes de insumo."),
     ("usuarios", "Usuarios y Accesos",
      "Usuarios del sistema y sus permisos por módulo."),
+    ("impresion", "Impresión",
+     "Impresora virtual SIAC para simular la impresión en pantalla."),
+    ("basedatos", "Base de Datos",
+     "Exporta e importa conjuntos de datos de la base de datos "
+     "(respaldos parciales por grupo de tablas)."),
 ]
 
 
@@ -126,7 +144,7 @@ class DialogConfiguracion(QDialog):
         if not tiene(self.permisos, "configuracion", "ver"):
             secciones = [s for s in secciones if s[0] != "unidades"
                          and s[0] != "areas" and s[0] != "tallas"
-                         and s[0] != "colores"]
+                         and s[0] != "colores" and s[0] != "impresion"]
         if not tiene(self.permisos, "usuarios", "ver"):
             secciones = [s for s in secciones if s[0] != "usuarios"]
         self._secciones = secciones
@@ -187,6 +205,8 @@ class DialogConfiguracion(QDialog):
         self._navegar(0)
 
     def _crear_pagina(self, key: str) -> QWidget:
+        if key == "empresa":
+            return _TabEmpresa(self.permisos)
         if key == "unidades":
             return _TabUnidades(self.controller, self.permisos)
         if key == "areas":
@@ -197,6 +217,10 @@ class DialogConfiguracion(QDialog):
             return _TabColores(self.inv_controller, self.permisos)
         if key == "usuarios":
             return _TabAccesos(self.accesos_controller, self.permisos)
+        if key == "impresion":
+            return _TabImpresion(self.permisos)
+        if key == "basedatos":
+            return _TabBaseDatos(self.permisos, al_importar=self._cargar)
         raise ValueError(f"Sección de configuración desconocida: {key}")
 
     def _navegar(self, index: int) -> None:
@@ -215,6 +239,196 @@ class DialogConfiguracion(QDialog):
                 recargar()
 
 
+class _TabEmpresa(QWidget):
+    """Sección de configuración de empresa: nombre, razón social, logo y video."""
+
+    def __init__(self, permisos: set) -> None:
+        super().__init__()
+        self.permisos = permisos
+        self.model = EmpresaModel()
+        self._logo_bytes: bytes | None = None
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        hint = QLabel(
+            "Configure los datos de la empresa que usa el sistema. "
+            "El nombre y razón social se usan en documentos y reportes. "
+            "El logo se usa como membrete en todos los PDFs generados."
+        )
+        hint.setStyleSheet("color: #64748b; font-size: 12px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        grp_datos = QGroupBox("Datos de la empresa")
+        grp_datos.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        form = QFormLayout(grp_datos)
+        form.setSpacing(10)
+
+        self.txt_nombre = QLineEdit()
+        self.txt_nombre.setPlaceholderText(
+            "Nombre que se muestra en el sistema y documentos")
+        form.addRow("Nombre de la empresa:", self.txt_nombre)
+
+        self.txt_razon = QLineEdit()
+        self.txt_razon.setPlaceholderText(
+            "Razón social para documentos legales (facturas, etc.)")
+        form.addRow("Razón social:", self.txt_razon)
+
+        layout.addWidget(grp_datos)
+
+        grp_logo = QGroupBox("Logo / Membrete")
+        grp_logo.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        logo_layout = QHBoxLayout(grp_logo)
+        logo_layout.setSpacing(16)
+
+        self.lbl_logo_preview = QLabel("Sin logo")
+        self.lbl_logo_preview.setFixedSize(120, 120)
+        self.lbl_logo_preview.setAlignment(Qt.AlignCenter)
+        self.lbl_logo_preview.setStyleSheet(
+            "border: 2px dashed #cbd5e1; border-radius: 8px; "
+            "color: #94a3b8; font-size: 11px;")
+        logo_layout.addWidget(self.lbl_logo_preview)
+
+        logo_btns = QVBoxLayout()
+        logo_btns.setSpacing(8)
+        self.btn_seleccionar_logo = QPushButton("Seleccionar imagen")
+        self.btn_seleccionar_logo.setObjectName("btnSecondary")
+        self.btn_seleccionar_logo.setCursor(Qt.PointingHandCursor)
+        self.btn_seleccionar_logo.clicked.connect(self._seleccionar_logo)
+        logo_btns.addWidget(self.btn_seleccionar_logo)
+
+        self.btn_quitar_logo = QPushButton("Quitar logo")
+        self.btn_quitar_logo.setObjectName("btnDanger")
+        self.btn_quitar_logo.setCursor(Qt.PointingHandCursor)
+        self.btn_quitar_logo.clicked.connect(self._quitar_logo)
+        logo_btns.addWidget(self.btn_quitar_logo)
+
+        lbl_hint = QLabel(
+            "Se recomienda una imagen cuadrada o rectangular\n"
+            "con fondo transparente o blanco.\n"
+            "Se usará en el membrete de todos los PDFs.")
+        lbl_hint.setStyleSheet(
+            "color: #94a3b8; font-size: 10px;")
+        lbl_hint.setWordWrap(True)
+        logo_btns.addWidget(lbl_hint)
+        logo_btns.addStretch()
+
+        logo_layout.addLayout(logo_btns)
+        logo_layout.addStretch()
+
+        layout.addWidget(grp_logo)
+
+        grp_video = QGroupBox("Video de Splash")
+        grp_video.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        video_layout = QHBoxLayout(grp_video)
+        video_layout.setSpacing(12)
+
+        self.txt_video = QLineEdit()
+        self.txt_video.setPlaceholderText(
+            "Ruta del archivo de video (.mp4) para la pantalla de inicio")
+        self.txt_video.setReadOnly(True)
+        video_layout.addWidget(self.txt_video, 1)
+
+        self.btn_seleccionar_video = QPushButton("Seleccionar")
+        self.btn_seleccionar_video.setObjectName("btnSecondary")
+        self.btn_seleccionar_video.setCursor(Qt.PointingHandCursor)
+        self.btn_seleccionar_video.clicked.connect(
+            self._seleccionar_video)
+        video_layout.addWidget(self.btn_seleccionar_video)
+
+        self.btn_quitar_video = QPushButton("Quitar")
+        self.btn_quitar_video.setObjectName("btnDanger")
+        self.btn_quitar_video.setCursor(Qt.PointingHandCursor)
+        self.btn_quitar_video.clicked.connect(self._quitar_video)
+        video_layout.addWidget(self.btn_quitar_video)
+
+        layout.addWidget(grp_video)
+
+        btns = QHBoxLayout()
+        btns.addStretch()
+        btn_guardar = QPushButton("Guardar configuración")
+        btn_guardar.setObjectName("btnPrimary")
+        btn_guardar.setCursor(Qt.PointingHandCursor)
+        btn_guardar.clicked.connect(self._guardar)
+        btns.addWidget(btn_guardar)
+        layout.addLayout(btns)
+
+        layout.addStretch()
+
+    def recargar(self) -> None:
+        datos = self.model.obtener_todas()
+        self.txt_nombre.setText(datos.get('nombre_empresa', ''))
+        self.txt_razon.setText(datos.get('razon_social', ''))
+        self.txt_video.setText(datos.get('video_splash', ''))
+        self._logo_bytes = self.model.obtener_logo_bytes()
+        self._actualizar_preview_logo()
+
+    def _actualizar_preview_logo(self) -> None:
+        if self._logo_bytes:
+            pixmap = QPixmap()
+            pixmap.loadFromData(self._logo_bytes)
+            self.lbl_logo_preview.setPixmap(
+                pixmap.scaled(112, 112, Qt.KeepAspectRatio,
+                              Qt.SmoothTransformation))
+            self.lbl_logo_preview.setStyleSheet(
+                "border: 1px solid #e2e8f0; border-radius: 8px;")
+        else:
+            self.lbl_logo_preview.setText("Sin logo")
+            self.lbl_logo_preview.setPixmap(QPixmap())
+            self.lbl_logo_preview.setStyleSheet(
+                "border: 2px dashed #cbd5e1; border-radius: 8px; "
+                "color: #94a3b8; font-size: 11px;")
+
+    def _seleccionar_logo(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar logo",
+            "", "Imágenes (*.png *.jpg *.jpeg *.bmp *.svg)")
+        if not path:
+            return
+        try:
+            with open(path, "rb") as f:
+                self._logo_bytes = f.read()
+            self._actualizar_preview_logo()
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error", f"No se pudo leer la imagen:\n{e}")
+
+    def _quitar_logo(self) -> None:
+        self._logo_bytes = None
+        self._actualizar_preview_logo()
+
+    def _seleccionar_video(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar video de splash",
+            "", "Video (*.mp4 *.avi *.mov *.mkv)")
+        if path:
+            self.txt_video.setText(path)
+
+    def _quitar_video(self) -> None:
+        self.txt_video.clear()
+
+    def _guardar(self) -> None:
+        nombre = self.txt_nombre.text().strip()
+        razon = self.txt_razon.text().strip()
+        video = self.txt_video.text().strip()
+        self.model.guardar_varias({
+            'nombre_empresa': nombre,
+            'razon_social': razon,
+            'video_splash': video,
+        })
+        self.model.guardar_logo(self._logo_bytes)
+        notificar_flotante(
+            "Configuración de empresa guardada correctamente.",
+            tipo="success", titulo="Guardado", host=self)
+
+
 class _TabUnidades(QWidget):
     def __init__(self, controller: OrdenesCompraController, permisos=None) -> None:
         super().__init__()
@@ -226,51 +440,31 @@ class _TabUnidades(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Abreviatura"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nueva Unidad", "mas", "#ffffff", self._crear)
+        self.grid.agregar_boton_toolbar(
+            "editar", "Editar", "editar", "#1892D4", self._editar)
+        self.grid.agregar_boton_toolbar(
+            "desactivar", "Desactivar", "eliminar", "#C93744", self._desactivar)
+        self.grid.set_columnas([
+            {"key": "nombre", "titulo": "Nombre", "ancho": 300},
+            {"key": "abreviatura", "titulo": "Abreviatura", "ancho": 160},
+        ])
+        self.grid.set_renderers(estilo=self._estilo)
+        self.grid.set_exportar_visible(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.grid.doubleClicked.connect(self._editar)
+        layout.addWidget(self.grid)
 
-        layout.addWidget(self.table)
-
-        self.btn_add = QPushButton("+ Nueva Unidad")
-        self.btn_add.setObjectName("btnPrimary")
-        self.btn_add.clicked.connect(self._crear)
-        self.btn_edit = QPushButton("Editar")
-        self.btn_edit.setObjectName("btnSecondary")
-        self.btn_edit.clicked.connect(self._editar)
-        self.btn_del = QPushButton("Desactivar")
-        self.btn_del.setObjectName("btnDanger")
-        self.btn_del.clicked.connect(self._desactivar)
-
-        self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
-        self.btn_edit.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        self.btn_del.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_add)
-        toolbar.addWidget(self.btn_edit)
-        toolbar.addWidget(self.btn_del)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
 
     def recargar(self) -> None:
         unidades = self.controller.listar_unidades(solo_activos=False)
-        self.table.setRowCount(len(unidades))
-        for i, u in enumerate(unidades):
-            self.table.setItem(i, 0, QTableWidgetItem(str(u["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(u["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(u["abreviatura"]))
-            if not u["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.grid.set_datos(unidades)
 
     def _crear(self) -> None:
         dlg = _DialogUnidad(self.controller)
@@ -278,29 +472,26 @@ class _TabUnidades(QWidget):
             self.recargar()
 
     def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione una unidad de la lista.")
             return
-        unidad_id = int(self.table.item(row, 0).text())
-        dlg = _DialogUnidad(self.controller, unidad_id)
+        dlg = _DialogUnidad(self.controller, rec["id"])
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione una unidad de la lista.")
             return
-        unidad_id = int(self.table.item(row, 0).text())
-        nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar la unidad '{nombre}'?",
+            f"¿Desactivar la unidad '{rec['nombre']}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_unidad(unidad_id)
+            self.controller.desactivar_unidad(rec["id"])
             self.recargar()
 
 
@@ -386,111 +577,73 @@ class _TabEstaciones(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.btn_add = QPushButton("+ Nueva Área")
-        self.btn_add.setObjectName("btnPrimary")
-        self.btn_add.setCursor(Qt.PointingHandCursor)
-        self.btn_add.clicked.connect(self._crear)
-        self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nueva Área", "mas", "#ffffff", self._crear)
+        self.grid.set_columnas([
+            {"key": "orden", "titulo": "Orden", "ancho": 90, "tipo": "numero"},
+            {"key": "nombre", "titulo": "Área", "ancho": 260},
+            {"key": "descripcion", "titulo": "Descripción", "ancho": 320},
+        ])
+        self.grid.set_renderers(estilo=self._estilo)
+        self.grid.set_acciones(self._acciones())
+        self.grid.set_exportar_visible(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.grid.doubleClicked.connect(self._editar)
+        layout.addWidget(self.grid)
 
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_add)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+    def _acciones(self) -> list:
+        acciones = []
+        if tiene(self.permisos, "configuracion", "editar"):
+            acciones.append({"texto": "", "icono": "editar",
+                             "color": "#4f46e5", "callback": self._editar})
+        if tiene(self.permisos, "configuracion", "eliminar"):
+            acciones.append({"texto": "", "icono": "eliminar",
+                             "color": "#dc2626", "callback": self._eliminar})
+        return acciones
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Orden", "Área", "Descripción", "Acciones", "ID"])
-        self.table.setColumnHidden(4, True)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.table.verticalHeader().setDefaultSectionSize(60)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(lambda _index: self._editar())
-
-        layout.addWidget(self.table)
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
 
     def recargar(self) -> None:
         estaciones = self.controller.listar_estaciones(solo_activos=False)
-        self.table.setRowCount(len(estaciones))
-        for i, e in enumerate(estaciones):
-            self.table.setItem(i, 0, QTableWidgetItem(str(e.get("orden", 0))))
-            self.table.setItem(i, 1, QTableWidgetItem(e.get("nombre", "")))
-            self.table.setItem(i, 2, QTableWidgetItem(e.get("descripcion", "") or ""))
-            self.table.setItem(i, 4, QTableWidgetItem(str(e.get("id", ""))))
-            self.table.setCellWidget(i, 3, self._celda_acciones(i))
-            if not e.get("activo"):
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
-
-    def _celda_acciones(self, row: int) -> QWidget:
-        contenedor = QWidget()
-        fila = QHBoxLayout(contenedor)
-        fila.setContentsMargins(4, 8, 4, 8)
-        fila.setSpacing(6)
-
-        btn_editar = QPushButton()
-        btn_editar.setIcon(mono_icon("editar", 18, "#4f46e5"))
-        btn_editar.setIconSize(QSize(18, 18))
-        btn_editar.setFixedSize(34, 34)
-        btn_editar.setToolTip("Editar")
-        btn_editar.setObjectName("btnRowEdit")
-        btn_editar.setCursor(Qt.PointingHandCursor)
-        btn_editar.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        btn_editar.clicked.connect(lambda: self._editar(row))
-        fila.addWidget(btn_editar)
-
-        btn_eliminar = QPushButton()
-        btn_eliminar.setIcon(mono_icon("eliminar", 18, "#dc2626"))
-        btn_eliminar.setIconSize(QSize(18, 18))
-        btn_eliminar.setFixedSize(34, 34)
-        btn_eliminar.setToolTip("Eliminar")
-        btn_eliminar.setObjectName("btnRowDel")
-        btn_eliminar.setCursor(Qt.PointingHandCursor)
-        btn_eliminar.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-        btn_eliminar.clicked.connect(lambda: self._eliminar(row))
-        fila.addWidget(btn_eliminar)
-
-        fila.addStretch()
-        return contenedor
+        self.grid.set_datos(estaciones)
 
     def _crear(self) -> None:
         dlg = _DialogEstacion(self.controller)
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _editar(self, row: int | None = None) -> None:
-        if row is None:
-            row = self.table.currentRow()
-        if row < 0:
+    def _editar(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un área de la lista.")
             return
-        estacion_id = int(self.table.item(row, 4).text())
-        dlg = _DialogEstacion(self.controller, estacion_id)
+        dlg = _DialogEstacion(self.controller, rec["id"])
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
-    def _eliminar(self, row: int) -> None:
-        estacion_id = int(self.table.item(row, 4).text())
-        nombre = self.table.item(row, 1).text()
+    def _eliminar(self, rec: dict | None = None) -> None:
+        if rec is None:
+            rec = self.grid.registro_seleccionado()
+        if rec is None:
+            return
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Eliminar el área '{nombre}'?\nEsta acción no se puede deshacer.",
+            f"¿Eliminar el área '{rec.get('nombre', '')}'?\nEsta acción no se puede deshacer.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp != QMessageBox.Yes:
             return
         try:
-            self.controller.eliminar_estacion(estacion_id)
+            self.controller.eliminar_estacion(rec["id"])
         except Exception:
             QMessageBox.warning(
                 self, "No se pudo eliminar",
-                f"El área '{nombre}' está en uso por órdenes de producción y no se puede eliminar.")
+                f"El área '{rec.get('nombre', '')}' está en uso por órdenes de producción y no se puede eliminar.")
             return
         self.recargar()
 
@@ -744,8 +897,8 @@ class _TabTallas(QWidget):
                     f"No se pudo vaciar la lista:\n{e}\n\n"
                     "Verifique que ninguna talla esté en uso en órdenes.")
                 return
-            QMessageBox.information(self, "Lista vaciada",
-                f"Se eliminaron {eliminados} tallas del catálogo.")
+            notificar_flotante(f"Se eliminaron {eliminados} tallas del catálogo.",
+                               tipo="success", titulo="Lista vaciada", host=self)
             self.recargar()
 
 
@@ -825,51 +978,32 @@ class _TabColores(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["ID", "Nombre", "Código", "Orden"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.doubleClicked.connect(self._editar)
-        layout.addWidget(self.table)
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nuevo Color", "mas", "#ffffff", self._crear)
+        self.grid.agregar_boton_toolbar(
+            "editar", "Editar", "editar", "#1892D4", self._editar)
+        self.grid.agregar_boton_toolbar(
+            "desactivar", "Desactivar", "eliminar", "#C93744", self._desactivar)
+        self.grid.set_columnas([
+            {"key": "nombre", "titulo": "Nombre", "ancho": 240},
+            {"key": "codigo", "titulo": "Código", "ancho": 140},
+            {"key": "orden", "titulo": "Orden", "ancho": 100, "tipo": "numero"},
+        ])
+        self.grid.set_renderers(estilo=self._estilo)
+        self.grid.set_exportar_visible(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.grid.doubleClicked.connect(self._editar)
+        layout.addWidget(self.grid)
 
-        self.btn_add = QPushButton("+ Nuevo Color")
-        self.btn_add.setObjectName("btnPrimary")
-        self.btn_add.clicked.connect(self._crear)
-        self.btn_edit = QPushButton("Editar")
-        self.btn_edit.setObjectName("btnSecondary")
-        self.btn_edit.clicked.connect(self._editar)
-        self.btn_del = QPushButton("Desactivar")
-        self.btn_del.setObjectName("btnDanger")
-        self.btn_del.clicked.connect(self._desactivar)
-
-        self.btn_add.setEnabled(tiene(self.permisos, "configuracion", "crear"))
-        self.btn_edit.setEnabled(tiene(self.permisos, "configuracion", "editar"))
-        self.btn_del.setEnabled(tiene(self.permisos, "configuracion", "eliminar"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_add)
-        toolbar.addWidget(self.btn_edit)
-        toolbar.addWidget(self.btn_del)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
 
     def recargar(self) -> None:
         colores = self.controller.listar_colores(solo_activos=False)
-        self.table.setRowCount(len(colores))
-        for i, c in enumerate(colores):
-            self.table.setItem(i, 0, QTableWidgetItem(str(c["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(c["nombre"]))
-            self.table.setItem(i, 2, QTableWidgetItem(c["codigo"]))
-            self.table.setItem(i, 3, QTableWidgetItem(str(c["orden"])))
-            if not c["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
+        self.grid.set_datos(colores)
 
     def _crear(self) -> None:
         dlg = _DialogColor(self.controller)
@@ -877,27 +1011,26 @@ class _TabColores(QWidget):
             self.recargar()
 
     def _editar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un color de la lista.")
             return
-        dlg = _DialogColor(self.controller, int(self.table.item(row, 0).text()))
+        dlg = _DialogColor(self.controller, rec["id"])
         if dlg.exec() == QDialog.Accepted:
             self.recargar()
 
     def _desactivar(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             QMessageBox.information(self, "Seleccione", "Seleccione un color de la lista.")
             return
-        nombre = self.table.item(row, 1).text()
         resp = QMessageBox.question(
             self, "Confirmar",
-            f"¿Desactivar el color '{nombre}'?",
+            f"¿Desactivar el color '{rec['nombre']}'?",
             QMessageBox.Yes | QMessageBox.No,
         )
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_color(int(self.table.item(row, 0).text()))
+            self.controller.desactivar_color(rec["id"])
             self.recargar()
 
 
@@ -989,44 +1122,29 @@ class _TabAccesos(QWidget):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["ID", "Usuario", "Nombre", "Rol", "Estatus"])
-        self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        configurar_tabla_excel(self.table)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-        self.table.itemSelectionChanged.connect(self._on_seleccion)
-        layout.addWidget(self.table)
-
-        self.btn_nuevo = QPushButton("+ Nuevo Usuario")
-        self.btn_nuevo.setObjectName("btnPrimary")
-        self.btn_nuevo.clicked.connect(self._crear_usuario)
-        self.btn_editar = QPushButton("Editar")
-        self.btn_editar.setObjectName("btnSecondary")
-        self.btn_editar.clicked.connect(self._editar_usuario)
-        self.btn_password = QPushButton("Cambiar Contraseña")
-        self.btn_password.setObjectName("btnSecondary")
-        self.btn_password.clicked.connect(self._cambiar_password)
-        self.btn_toggle = QPushButton("Activar / Desactivar")
-        self.btn_toggle.setObjectName("btnDanger")
-        self.btn_toggle.clicked.connect(self._toggle_usuario)
-
-        self.btn_nuevo.setEnabled(tiene(self.permisos, "usuarios", "crear"))
-        can_edit = tiene(self.permisos, "usuarios", "editar")
-        self.btn_editar.setEnabled(can_edit)
-        self.btn_password.setEnabled(can_edit)
-        self.btn_toggle.setEnabled(tiene(self.permisos, "usuarios", "eliminar"))
-
-        toolbar = QHBoxLayout()
-        toolbar.addWidget(self.btn_nuevo)
-        toolbar.addWidget(self.btn_editar)
-        toolbar.addWidget(self.btn_password)
-        toolbar.addWidget(self.btn_toggle)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+        self.grid = GridHibrido()
+        self.grid.agregar_boton_toolbar(
+            "crear", "+ Nuevo Usuario", "mas", "#ffffff",
+            self._crear_usuario)
+        self.grid.agregar_boton_toolbar(
+            "editar", "Editar", "editar", "#1892D4", self._editar_usuario)
+        self.grid.agregar_boton_toolbar(
+            "password", "Cambiar Contraseña", "editar", "#1892D4",
+            self._cambiar_password)
+        self.grid.agregar_boton_toolbar(
+            "toggle", "Activar / Desactivar", "toggle", "#C93744",
+            self._toggle_usuario)
+        self.grid.set_columnas([
+            {"key": "username", "titulo": "Usuario", "ancho": 180},
+            {"key": "nombre_completo", "titulo": "Nombre", "ancho": 260},
+            {"key": "rol", "titulo": "Rol", "ancho": 130},
+            {"key": "activo", "titulo": "Estatus", "ancho": 110},
+        ])
+        self.grid.set_renderers(fila=self._fila, claves=self._fila,
+                                estilo=self._estilo)
+        self.grid.set_exportar_visible(tiene(self.permisos, "usuarios", "exportar"))
+        self.grid.selectionChanged.connect(self._on_seleccion)
+        layout.addWidget(self.grid)
 
         box = QGroupBox("Permisos de acceso")
         box_layout = QVBoxLayout(box)
@@ -1056,42 +1174,45 @@ class _TabAccesos(QWidget):
 
         self.btn_guardar = QPushButton("Guardar Permisos")
         self.btn_guardar.setObjectName("btnPrimary")
-        self.btn_guardar.setEnabled(can_edit)
+        self.btn_guardar.setEnabled(tiene(self.permisos, "usuarios", "editar"))
         self.btn_guardar.clicked.connect(self._guardar_permisos)
         layout.addWidget(self.btn_guardar, 0, Qt.AlignLeft)
 
+    @staticmethod
+    def _fila(rec) -> list:
+        return [
+            str(rec.get("username", "")),
+            str(rec.get("nombre_completo", "")),
+            "Administrador" if rec.get("rol") == "admin" else "Operador",
+            "Activo" if rec.get("activo") else "Inactivo",
+        ]
+
+    @staticmethod
+    def _estilo(rec, item, col) -> None:
+        if not rec.get("activo"):
+            item.setForeground(Qt.gray)
+
     def recargar(self) -> None:
-        seleccionado = self._usuario_id
+        objetivo = self._usuario_id
         usuarios = self.controller.listar_usuarios()
-        self.table.setRowCount(len(usuarios))
-        for i, u in enumerate(usuarios):
-            self.table.setItem(i, 0, QTableWidgetItem(str(u["id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(u["username"]))
-            self.table.setItem(i, 2, QTableWidgetItem(u["nombre_completo"]))
-            rol = "Administrador" if u["rol"] == "admin" else "Operador"
-            self.table.setItem(i, 3, QTableWidgetItem(rol))
-            self.table.setItem(i, 4, QTableWidgetItem("Activo" if u["activo"] else "Inactivo"))
-            if not u["activo"]:
-                for col in range(self.table.columnCount()):
-                    item = self.table.item(i, col)
-                    if item:
-                        item.setForeground(Qt.gray)
-        if seleccionado is not None:
-            for i in range(self.table.rowCount()):
-                if int(self.table.item(i, 0).text()) == seleccionado:
-                    self.table.selectRow(i)
-                    return
-        if self.table.rowCount() > 0:
-            self.table.selectRow(0)
+        self.grid.set_datos(usuarios)
+        fila = -1
+        for i, u in enumerate(self.grid.datos_visibles()):
+            if objetivo is not None and u["id"] == objetivo:
+                fila = i
+                break
+        if fila < 0 and self.grid.table.rowCount() > 0:
+            fila = 0
+        if fila >= 0:
+            self.grid.table.selectRow(fila)
 
     def _on_seleccion(self) -> None:
-        row = self.table.currentRow()
-        if row < 0:
+        rec = self.grid.registro_seleccionado()
+        if rec is None:
             self._usuario_id = None
             return
-        self._usuario_id = int(self.table.item(row, 0).text())
-        user = self.controller.obtener_usuario(self._usuario_id)
-        es_admin = bool(user and user.get("rol") == "admin")
+        self._usuario_id = rec["id"]
+        es_admin = bool(rec.get("rol") == "admin")
         if es_admin:
             for chk in self._checks.values():
                 chk.setChecked(True)
@@ -1114,7 +1235,8 @@ class _TabAccesos(QWidget):
             return
         concedidas = {f"{m}.{a}" for (m, a), chk in self._checks.items() if chk.isChecked()}
         self.controller.guardar_permisos(self._usuario_id, concedidas)
-        QMessageBox.information(self, "Guardado", "Permisos actualizados correctamente.")
+        notificar_flotante("Permisos actualizados correctamente.",
+                           tipo="success", titulo="Guardado", host=self)
 
     def _crear_usuario(self) -> None:
         dlg = _DialogUsuario(self.controller)
@@ -1133,7 +1255,8 @@ class _TabAccesos(QWidget):
             return
         dlg = _DialogPassword(self.controller, self._usuario_id)
         if dlg.exec() == QDialog.Accepted:
-            QMessageBox.information(self, "Listo", "Contraseña actualizada.")
+            notificar_flotante("Contraseña actualizada.",
+                               tipo="success", titulo="Listo", host=self)
 
     def _toggle_usuario(self) -> None:
         if not self._validar_seleccion():
@@ -1297,3 +1420,301 @@ class _DialogPassword(QDialog):
             QMessageBox.warning(self, "Error", f"No se pudo guardar:\n{e}")
             return
         self.accept()
+
+
+class _TabImpresion(QWidget):
+    """Preferencias de impresión: impresora virtual SIAC (simulación).
+
+    Al habilitarla, los diálogos de impresión del sistema ofrecen la opción
+    "Impresora virtual SIAC (simulación)" que muestra la salida en pantalla
+    en lugar de enviar el trabajo a una impresora física.
+    """
+
+    def __init__(self, permisos=None) -> None:
+        super().__init__()
+        self.permisos = permisos or set()
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        grupo = QGroupBox("Impresora virtual")
+        g = QVBoxLayout(grupo)
+        g.setSpacing(8)
+
+        self.chk_virtual = QCheckBox(
+            "Habilitar impresora virtual SIAC (simulación en pantalla)")
+        self.chk_virtual.toggled.connect(self._guardar)
+        g.addWidget(self.chk_virtual)
+
+        hint = QLabel(
+            "Cuando está habilitada, al imprimir podrá elegir la \"Impresora "
+            "virtual SIAC\": el sistema mostrará en pantalla una simulación "
+            "del resultado sin enviar el trabajo a una impresora física. "
+            "Las impresoras reales siguen disponibles para imprimir de verdad.")
+        hint.setObjectName("cfgHint")
+        hint.setWordWrap(True)
+        g.addWidget(hint)
+
+        layout.addWidget(grupo)
+        layout.addStretch()
+
+    def _guardar(self, habilitada: bool) -> None:
+        guardar_impresora_virtual(habilitada)
+
+    def recargar(self) -> None:
+        self.chk_virtual.setChecked(impresora_virtual_habilitada())
+
+
+class _TabBaseDatos(QWidget):
+    """Exportación e importación de conjuntos de datos de la base de datos.
+
+    Exporta grupos lógicos de tablas a un archivo JSON portable (con
+    imágenes) e importa respaldos eligiendo los conjuntos y el modo
+    (reemplazar lo local o agregar solo faltantes).
+    """
+
+    def __init__(self, permisos: set, al_importar=None) -> None:
+        super().__init__()
+        self.permisos = permisos or set()
+        self.controller = RespaldoController()
+        self._al_importar = al_importar
+        self._archivo: str | None = None
+        self._setup_ui()
+        self.recargar()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        hint = QLabel(
+            "Exporta o importa grupos lógicos de datos (conjuntos) en un "
+            "archivo JSON portable, con imágenes incluidas. Use la "
+            "importación con cuidado: el modo Reemplazar borra los datos "
+            "locales de los conjuntos seleccionados.")
+        hint.setStyleSheet("color: #64748b; font-size: 12px;")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        # ------------------------------------------------------ Exportar
+        grp_exportar = QGroupBox("Exportar datos")
+        grp_exportar.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        lay_exp = QVBoxLayout(grp_exportar)
+        lay_exp.setSpacing(8)
+
+        self.lista_exportar = QListWidget()
+        self.lista_exportar.setMaximumHeight(170)
+        lay_exp.addWidget(self.lista_exportar)
+
+        btns_exp = QHBoxLayout()
+        self.btn_marcar = QPushButton("Quitar todas")
+        self.btn_marcar.setObjectName("btnSecondary")
+        self.btn_marcar.clicked.connect(self._alternar_marca)
+        btns_exp.addWidget(self.btn_marcar)
+        btns_exp.addStretch()
+        self.btn_exportar = QPushButton("Exportar seleccionados...")
+        self.btn_exportar.setObjectName("btnPrimary")
+        self.btn_exportar.setCursor(Qt.PointingHandCursor)
+        self.btn_exportar.setEnabled(
+            tiene(self.permisos, "configuracion", "exportar"))
+        self.btn_exportar.clicked.connect(self._exportar)
+        btns_exp.addWidget(self.btn_exportar)
+        lay_exp.addLayout(btns_exp)
+        layout.addWidget(grp_exportar)
+
+        # ------------------------------------------------------ Importar
+        grp_importar = QGroupBox("Importar datos")
+        grp_importar.setStyleSheet(
+            "QGroupBox { font-weight: bold; font-size: 12px; }")
+        lay_imp = QVBoxLayout(grp_importar)
+        lay_imp.setSpacing(8)
+
+        fila_archivo = QHBoxLayout()
+        self.btn_cargar = QPushButton("Cargar archivo de respaldo...")
+        self.btn_cargar.setObjectName("btnSecondary")
+        self.btn_cargar.setCursor(Qt.PointingHandCursor)
+        self.btn_cargar.clicked.connect(self._cargar_archivo)
+        fila_archivo.addWidget(self.btn_cargar)
+        self.lbl_archivo = QLabel("Sin archivo cargado.")
+        self.lbl_archivo.setStyleSheet("color: #64748b; font-size: 11px;")
+        fila_archivo.addWidget(self.lbl_archivo, 1)
+        lay_imp.addLayout(fila_archivo)
+
+        self.lista_importar = QListWidget()
+        self.lista_importar.setMaximumHeight(170)
+        self.lista_importar.setVisible(False)
+        lay_imp.addWidget(self.lista_importar)
+
+        self.rb_reemplazar = QRadioButton(
+            "Reemplazar: borra los datos locales de los conjuntos "
+            "seleccionados y carga los del archivo")
+        self.rb_reemplazar.setChecked(True)
+        self.rb_agregar = QRadioButton(
+            "Agregar: incorpora solo los registros que falten, sin tocar "
+            "los existentes")
+        self.rb_reemplazar.setVisible(False)
+        self.rb_agregar.setVisible(False)
+        lay_imp.addWidget(self.rb_reemplazar)
+        lay_imp.addWidget(self.rb_agregar)
+
+        btns_imp = QHBoxLayout()
+        btns_imp.addStretch()
+        self.btn_importar = QPushButton("Importar seleccionados...")
+        self.btn_importar.setObjectName("btnPrimary")
+        self.btn_importar.setCursor(Qt.PointingHandCursor)
+        self.btn_importar.setEnabled(False)
+        self.btn_importar.clicked.connect(self._importar)
+        btns_imp.addWidget(self.btn_importar)
+        lay_imp.addLayout(btns_imp)
+        layout.addWidget(grp_importar)
+
+        layout.addStretch()
+
+    # ------------------------------------------------------------ exportar
+    def recargar(self) -> None:
+        self.lista_exportar.clear()
+        for c in self.controller.listar_conjuntos():
+            item = QListWidgetItem(
+                f"{c['nombre']}  ·  {c['filas']} filas  ·  "
+                f"{len(c['tablas'])} tablas")
+            item.setData(Qt.UserRole, c["clave"])
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.lista_exportar.addItem(item)
+        self._actualizar_boton_marca()
+
+    def _claves_marcadas(self, lista: QListWidget) -> list[str]:
+        claves = []
+        for i in range(lista.count()):
+            item = lista.item(i)
+            if item.checkState() == Qt.Checked:
+                claves.append(item.data(Qt.UserRole))
+        return claves
+
+    def _alternar_marca(self) -> None:
+        marcar = any(
+            self.lista_exportar.item(i).checkState() != Qt.Checked
+            for i in range(self.lista_exportar.count()))
+        estado = Qt.Checked if marcar else Qt.Unchecked
+        for i in range(self.lista_exportar.count()):
+            self.lista_exportar.item(i).setCheckState(estado)
+        self._actualizar_boton_marca()
+
+    def _actualizar_boton_marca(self) -> None:
+        todas = all(
+            self.lista_exportar.item(i).checkState() == Qt.Checked
+            for i in range(self.lista_exportar.count()))
+        self.btn_marcar.setText("Quitar todas" if todas else "Marcar todas")
+
+    def _exportar(self) -> None:
+        claves = self._claves_marcadas(self.lista_exportar)
+        if not claves:
+            QMessageBox.information(
+                self, "Seleccione", "Marque al menos un conjunto.")
+            return
+        predeterminado = f"respaldo_siac_{datetime.now():%Y%m%d_%H%M}.json"
+        ruta, _ = QFileDialog.getSaveFileName(
+            self, "Exportar base de datos", predeterminado,
+            "Respaldo SIAC (*.json)")
+        if not ruta:
+            return
+        try:
+            resumen = self.controller.exportar(claves, ruta)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error", f"No se pudo exportar:\n{e}")
+            return
+        notificar_flotante(
+            f"{resumen['filas']} filas exportadas en "
+            f"{len(resumen['tablas'])} tablas.\n{resumen['archivo']}",
+            tipo="success", titulo="Exportación completa", host=self)
+
+    # ------------------------------------------------------------ importar
+    def _cargar_archivo(self) -> None:
+        ruta, _ = QFileDialog.getOpenFileName(
+            self, "Abrir respaldo de datos", "",
+            "Respaldo SIAC (*.json);;Todos los archivos (*)")
+        if not ruta:
+            return
+        try:
+            info = self.controller.inspeccionar(ruta)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Archivo no válido", f"No se pudo leer el respaldo:\n{e}")
+            return
+        self._archivo = ruta
+        self._info_archivo = info
+        self.lista_importar.clear()
+        for clave, datos in info["conjuntos"].items():
+            item = QListWidgetItem(
+                f"{clave}  ·  {datos['filas']} filas  ·  "
+                f"{len(datos['tablas'])} tablas")
+            item.setData(Qt.UserRole, clave)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked)
+            self.lista_importar.addItem(item)
+        generado = info.get("generado", "") or "fecha desconocida"
+        self.lbl_archivo.setText(
+            f"{ruta}  ·  generado: {generado}  ·  motor: "
+            f"{info.get('motor', '?')}")
+        self.lista_importar.setVisible(True)
+        self.rb_reemplazar.setVisible(True)
+        self.rb_agregar.setVisible(True)
+        self.btn_importar.setEnabled(
+            tiene(self.permisos, "configuracion", "editar"))
+
+    def _importar(self) -> None:
+        if not self._archivo:
+            return
+        claves = self._claves_marcadas(self.lista_importar)
+        if not claves:
+            QMessageBox.information(
+                self, "Seleccione", "Marque al menos un conjunto.")
+            return
+        reemplazar = self.rb_reemplazar.isChecked()
+        if reemplazar:
+            texto = ("Se BORRARÁN los datos locales de las tablas de los "
+                     "conjuntos seleccionados y se reemplazarán con el "
+                     f"contenido del archivo.\n\nConjuntos: "
+                     f"{', '.join(claves)}\n\nEsta acción no se puede "
+                     "deshacer. ¿Continuar?")
+        else:
+            texto = ("Se agregarán los registros faltantes de los conjuntos "
+                     f"seleccionados ({', '.join(claves)}). Los datos "
+                     "actuales no se modifican. ¿Continuar?")
+        resp = QMessageBox.warning(
+            self, "Confirmar importación", texto,
+            QMessageBox.Yes | QMessageBox.No)
+        if resp != QMessageBox.Yes:
+            return
+        try:
+            resumen = self.controller.importar(
+                self._archivo, claves, reemplazar)
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Error", f"No se pudo importar:\n{e}")
+            return
+        errores = resumen.get("errores") or []
+        if errores or resumen.get("fk_violaciones"):
+            detalle = "\n".join(errores[:6])
+            extra = []
+            if resumen.get("fk_violaciones"):
+                extra.append(
+                    f"{resumen['fk_violaciones']} referencias quedaron sin "
+                    "correspondencia (FK).")
+            QMessageBox.warning(
+                self, "Importación con observaciones",
+                f"Importadas: {resumen['importadas']} filas · "
+                f"Omitidas: {resumen['omitidas']}.\n"
+                + (" ".join(extra) + "\n" if extra else "")
+                + (f"\n{detalle}" if detalle else ""))
+        else:
+            notificar_flotante(
+                f"{resumen['importadas']} filas importadas "
+                f"({resumen['omitidas']} omitidas).",
+                tipo="success", titulo="Importación completa", host=self)
+        if callable(self._al_importar):
+            self._al_importar()

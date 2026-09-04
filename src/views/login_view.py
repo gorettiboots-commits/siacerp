@@ -39,10 +39,22 @@ class LoginView(QWidget):
         layout.setContentsMargins(40, 48, 40, 48)
 
         logo_label = QLabel()
-        logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
-        if logo_path.exists():
-            pixmap = QPixmap(str(logo_path)).scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo_label.setPixmap(pixmap)
+        logo_pixmap = None
+        try:
+            from src.models.empresa_model import EmpresaModel
+            logo_bytes = EmpresaModel().obtener_logo_bytes()
+            if logo_bytes:
+                logo_pixmap = QPixmap()
+                logo_pixmap.loadFromData(logo_bytes)
+        except Exception:
+            pass
+        if logo_pixmap is None or logo_pixmap.isNull():
+            logo_path = Path(__file__).resolve().parent / "assets" / "logo.jpeg"
+            if logo_path.exists():
+                logo_pixmap = QPixmap(str(logo_path))
+        if logo_pixmap is not None and not logo_pixmap.isNull():
+            logo_label.setPixmap(logo_pixmap.scaled(
+                120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             logo_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(logo_label)
 
@@ -107,4 +119,6 @@ class LoginView(QWidget):
             self.lbl_error.setVisible(True)
             return
 
+        self.btn_login.setEnabled(False)
+        self.btn_login.setText("Conectando...")
         self.login_successful.emit({"username": user, "password": password})

@@ -1,0 +1,274 @@
+{
+  "fecha": "2026-08-26T12:12:03.576859",
+  "tablas": {
+    "insumos_movil": [
+      {
+        "id": 1,
+        "codigo": "INS-0001",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 2,
+        "codigo": "INS-0001-15",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 694.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 3,
+        "codigo": "INS-0001-15.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 4,
+        "codigo": "INS-0001-16",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 5,
+        "codigo": "INS-0001-16.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 6,
+        "codigo": "INS-0001-17",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 7,
+        "codigo": "INS-0001-17.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 8,
+        "codigo": "INS-0001-18",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 9,
+        "codigo": "INS-0001-18.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 10,
+        "codigo": "INS-0001-19",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 11,
+        "codigo": "INS-0001-19.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 12,
+        "codigo": "INS-0001-20",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 13,
+        "codigo": "INS-0001-20.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 14,
+        "codigo": "INS-0001-21",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 15,
+        "codigo": "INS-0001-21.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 16,
+        "codigo": "INS-0001-22",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 17,
+        "codigo": "INS-0001-22.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 18,
+        "codigo": "INS-0001-23",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 19,
+        "codigo": "INS-0001-23.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 20,
+        "codigo": "INS-0001-24",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 21,
+        "codigo": "INS-0001-24.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 22,
+        "codigo": "INS-0001-25",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 23,
+        "codigo": "INS-0001-25.5",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      },
+      {
+        "id": 24,
+        "codigo": "INS-0001-26",
+        "nombre": "SUELA RX",
+        "categoria": "LO",
+        "unidad_medida": "par",
+        "stock_actual": 0.0,
+        "stock_minimo": 1.0,
+        "activo": true
+      }
+    ],
+    "ordenes_compra_movil": [
+      {
+        "id": 1,
+        "folio": "OC-0001",
+        "proveedor_nombre": "SUELAS CHELIS",
+        "fecha_emision": "2026-08-06 02:26:10",
+        "estatus": "recibida",
+        "total": 21030.0,
+        "metodo_pago": "Efectivo",
+        "solo_remision": false,
+        "tipo": "orden",
+        "observaciones": "X"
+      }
+    ],
+    "ordenes_produccion_movil": [
+      {
+        "id": 3,
+        "folio": "OP-0003",
+        "modelo_nombre": "9201",
+        "codigo_variante": "MOD-0001-30-NTN",
+        "total_pares": 68,
+        "fecha_inicio": "2026-08-26",
+        "fecha_entrega": "2026-09-02",
+        "prioridad": "normal",
+        "estatus": "planeada"
+      }
+    ]
+  }
+}

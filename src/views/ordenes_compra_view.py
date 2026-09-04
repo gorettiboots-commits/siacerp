@@ -1,18 +1,17 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QMessageBox,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
+from src.components.grid_hibrido import GridHibrido
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.ordenes_compra_controller import OrdenesCompraController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import (
     export_orden_compra_excel, export_table_to_excel, print_orden_compra, print_table,
 )
-from src.utils.odoo_list import OdooListView
-from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import DialogOrdenCompra, DialogProveedor, DialogRecibirOrden, DialogVerOrden
 
 
@@ -23,17 +22,30 @@ class OrdenesCompraView(QWidget):
         self._setup_ui()
         self._load_ordenes()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_prov.set_datos([])
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (OC y proveedores)."""
+        self._load_ordenes()
+
     def set_permisos(self, permisos) -> None:
-        self.btn_nueva.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_factura.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_recibir.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_cancelar.setEnabled(tiene(permisos, "ordenes_compra", "eliminar"))
-        self.btn_export.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
-        self.btn_print.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
-        self.btn_nuevo_prov.setEnabled(tiene(permisos, "ordenes_compra", "crear"))
-        self.btn_editar_prov.setEnabled(tiene(permisos, "ordenes_compra", "editar"))
-        self.btn_desactivar_prov.setEnabled(tiene(permisos, "ordenes_compra", "eliminar"))
-        self.btn_export_prov.setEnabled(tiene(permisos, "ordenes_compra", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "nueva_orden", tiene(permisos, "ordenes_compra", "crear"))
+        self.vista.establecer_boton_modulo(
+            "factura", tiene(permisos, "ordenes_compra", "crear"))
+        self.vista.establecer_boton_modulo(
+            "recibir", tiene(permisos, "ordenes_compra", "crear"))
+        self.vista.establecer_boton_modulo(
+            "cancelar", tiene(permisos, "ordenes_compra", "eliminar"))
+        self.vista.set_exportar_visible(
+            tiene(permisos, "ordenes_compra", "exportar"))
+        self.grid_prov.establecer_boton_modulo(
+            "nuevo_prov", tiene(permisos, "ordenes_compra", "crear"))
+        self.grid_prov.set_exportar_visible(
+            tiene(permisos, "ordenes_compra", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -52,23 +64,11 @@ class OrdenesCompraView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nueva = QPushButton("+ Nueva Orden")
-        self.btn_nueva.setObjectName("btnPrimary")
-        self.btn_nueva.clicked.connect(self._nueva_orden)
-
-        self.btn_factura = QPushButton("Ingresar Factura")
-        self.btn_factura.setObjectName("btnPrimary")
-        self.btn_factura.clicked.connect(self._nueva_factura)
-
-        self.btn_proveedor = QPushButton("Proveedores")
-        self.btn_proveedor.setObjectName("btnSecondary")
-        self.btn_proveedor.clicked.connect(self._gestionar_proveedores)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_proveedor)
-        hlayout.addWidget(self.btn_factura)
-        hlayout.addWidget(self.btn_nueva)
+
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("ordenes_compra", "#1892D4"))
 
         self.tabs = QTabWidget()
         self.tab_ordenes = QWidget()
@@ -84,47 +84,30 @@ class OrdenesCompraView(QWidget):
         layout = QVBoxLayout(self.tab_ordenes)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar por folio, insumo o proveedor...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar)
-
-        btn_ver = QPushButton("Ver Detalle")
-        btn_ver.setObjectName("btnSecondary")
-        btn_ver.clicked.connect(self._ver_orden)
-
-        self.btn_recibir = QPushButton("Recibir Orden")
-        self.btn_recibir.setObjectName("btnSuccess")
-        self.btn_recibir.clicked.connect(self._recibir_orden)
-
-        self.btn_cancelar = QPushButton("Cancelar")
-        self.btn_cancelar.setObjectName("btnDanger")
-        self.btn_cancelar.clicked.connect(self._cancelar_orden)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(self._exportar)
-
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(self._imprimir)
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_ordenes)
-
-        toolbar.addWidget(self.txt_buscar)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        toolbar.addWidget(btn_ver)
-        toolbar.addWidget(self.btn_recibir)
-        toolbar.addWidget(self.btn_cancelar)
-        toolbar.addWidget(self.btn_export)
-        toolbar.addWidget(self.btn_print)
-        layout.addLayout(toolbar)
-
-        self.vista = OdooListView(["Folio", "Tipo", "Proveedor", "Fecha", "Total", "Estatus"])
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nueva_orden", "+ Nueva Orden", "mas", "#ffffff", self._nueva_orden)
+        self.vista.agregar_boton_toolbar(
+            "factura", "Ingresar Factura", "mas", "#ffffff", self._nueva_factura)
+        self.vista.agregar_boton_toolbar(
+            "proveedores", "Proveedores", "clientes", "#1892D4",
+            self._gestionar_proveedores)
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_ordenes)
+        self.vista.agregar_boton_toolbar(
+            "ver_detalle", "Ver Detalle", "ver", "#1892D4", self._ver_orden)
+        self.vista.agregar_boton_toolbar(
+            "recibir", "Recibir Orden", "ok", "#16A34A", self._recibir_orden)
+        self.vista.agregar_boton_toolbar(
+            "cancelar", "Cancelar", "eliminar", "#C93744", self._cancelar_orden)
+        self.vista.set_columnas([
+            {"key": "folio", "titulo": "Folio", "ancho": 110},
+            {"key": "tipo", "titulo": "Tipo", "ancho": 120},
+            {"key": "proveedores", "titulo": "Proveedor", "ancho": 220},
+            {"key": "fecha_emision", "titulo": "Fecha", "ancho": 110},
+            {"key": "total", "titulo": "Total", "ancho": 110, "tipo": "numero"},
+            {"key": "estatus", "titulo": "Estatus", "ancho": 130},
+        ])
         self.vista.set_renderers(
             fila=self._fila_orden,
             claves=self._claves_orden,
@@ -139,51 +122,25 @@ class OrdenesCompraView(QWidget):
         layout = QVBoxLayout(self.tab_proveedores)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar_prov = QLineEdit()
-        self.txt_buscar_prov.setPlaceholderText("Buscar proveedor...")
-        self.txt_buscar_prov.setMinimumWidth(300)
-        self.txt_buscar_prov.textChanged.connect(self._buscar_proveedores)
-
-        self.btn_nuevo_prov = QPushButton("+ Nuevo Proveedor")
-        self.btn_nuevo_prov.setObjectName("btnPrimary")
-        self.btn_nuevo_prov.clicked.connect(self._nuevo_proveedor)
-        self.btn_editar_prov = QPushButton("Editar")
-        self.btn_editar_prov.setObjectName("btnSecondary")
-        self.btn_editar_prov.clicked.connect(self._editar_proveedor)
-        self.btn_desactivar_prov = QPushButton("Desactivar")
-        self.btn_desactivar_prov.setObjectName("btnDanger")
-        self.btn_desactivar_prov.clicked.connect(self._desactivar_proveedor)
-        self.btn_export_prov = QPushButton("Exportar Excel")
-        self.btn_export_prov.setObjectName("btnPrimary")
-        self.btn_export_prov.clicked.connect(self._exportar_proveedores)
-        btn_refresh_prov = QPushButton("Actualizar")
-        btn_refresh_prov.setObjectName("btnPrimary")
-        btn_refresh_prov.clicked.connect(self._load_proveedores)
-
-        toolbar.addWidget(self.txt_buscar_prov)
-        toolbar.addWidget(btn_refresh_prov)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_nuevo_prov)
-        toolbar.addWidget(self.btn_editar_prov)
-        toolbar.addWidget(self.btn_desactivar_prov)
-        toolbar.addWidget(self.btn_export_prov)
-        layout.addLayout(toolbar)
-
-        self.table_prov = QTableWidget()
-        self.table_prov.setColumnCount(7)
-        self.table_prov.setHorizontalHeaderLabels(
-            ["RFC", "Nombre", "Nombre Comercial", "Teléfono", "Email", "Dirección", "ID"])
-        self.table_prov.setColumnHidden(6, True)
-        self.table_prov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_prov.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_prov.setAlternatingRowColors(True)
-        self.table_prov.horizontalHeader().setStretchLastSection(True)
-        self.table_prov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_prov)
-        self.table_prov.doubleClicked.connect(self._editar_proveedor)
-        self.table_prov.setStyleSheet(self.vista.table.styleSheet())
-        layout.addWidget(self.table_prov)
+        self.grid_prov = GridHibrido()
+        self.grid_prov.agregar_boton_toolbar(
+            "nuevo_prov", "+ Nuevo Proveedor", "mas", "#ffffff",
+            self._nuevo_proveedor)
+        self.grid_prov.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4",
+            self._load_proveedores)
+        self.grid_prov.set_columnas([
+            {"key": "rfc", "titulo": "RFC", "ancho": 120},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 200},
+            {"key": "nombre_comercial", "titulo": "Nombre Comercial", "ancho": 160},
+            {"key": "telefono", "titulo": "Teléfono", "ancho": 110},
+            {"key": "email", "titulo": "Email", "ancho": 180},
+            {"key": "direccion", "titulo": "Dirección", "ancho": 220},
+        ])
+        self.grid_prov.set_buscador_visible(False)
+        self.grid_prov.set_exportar_visible(False)
+        self.grid_prov.doubleClicked.connect(self._editar_proveedor)
+        layout.addWidget(self.grid_prov)
 
     def _load_ordenes(self) -> None:
         try:
@@ -243,15 +200,7 @@ class OrdenesCompraView(QWidget):
     def _load_proveedores(self) -> None:
         try:
             proveedores = self.controller.listar_proveedores()
-            self.table_prov.setRowCount(len(proveedores))
-            for i, p in enumerate(proveedores):
-                self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
-                self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            self.grid_prov.set_datos(proveedores)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -271,15 +220,7 @@ class OrdenesCompraView(QWidget):
             return
         try:
             resultados = self.controller.buscar_proveedores(texto)
-            self.table_prov.setRowCount(len(resultados))
-            for i, p in enumerate(resultados):
-                self.table_prov.setItem(i, 0, QTableWidgetItem(p.get("rfc", "")))
-                self.table_prov.setItem(i, 1, QTableWidgetItem(p.get("nombre", "")))
-                self.table_prov.setItem(i, 2, QTableWidgetItem(p.get("nombre_comercial", "")))
-                self.table_prov.setItem(i, 3, QTableWidgetItem(p.get("telefono", "")))
-                self.table_prov.setItem(i, 4, QTableWidgetItem(p.get("email", "")))
-                self.table_prov.setItem(i, 5, QTableWidgetItem(p.get("direccion", "")))
-                self.table_prov.setItem(i, 6, QTableWidgetItem(str(p.get("id", ""))))
+            self.grid_prov.set_datos(resultados)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -318,7 +259,8 @@ class OrdenesCompraView(QWidget):
             return
         dlg = DialogRecibirOrden(self.controller, oc["id"])
         if dlg.exec():
-            QMessageBox.information(self, "Éxito", "Orden recibida. Stock actualizado.")
+            notificar_flotante("Orden recibida. Stock actualizado.",
+                               tipo="success", titulo="Éxito", host=self)
             self._load_ordenes()
 
     def _cancelar_orden(self) -> None:
@@ -345,7 +287,8 @@ class OrdenesCompraView(QWidget):
             detalle = self.controller.obtener_detalle_orden(oc["id"])
             path = export_orden_compra_excel(datos, detalle, self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)
 
     def _imprimir(self) -> None:
         oc = self.vista.registro_seleccionado()
@@ -357,9 +300,10 @@ class OrdenesCompraView(QWidget):
             print_orden_compra(datos, detalle, self)
 
     def _exportar_proveedores(self) -> None:
-        path = export_table_to_excel(self.table_prov, "Proveedores", self)
+        path = export_table_to_excel(self.grid_prov.table, "Proveedores", self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)
 
     def _gestionar_proveedores(self) -> None:
         self.tabs.setCurrentIndex(1)
@@ -370,23 +314,20 @@ class OrdenesCompraView(QWidget):
             self._load_proveedores()
 
     def _editar_proveedor(self) -> None:
-        row = self.table_prov.currentRow()
-        if row < 0:
+        prov = self.grid_prov.registro_seleccionado()
+        if not prov:
             QMessageBox.information(self, "Seleccionar", "Seleccione un proveedor.")
             return
-        proveedor_id = int(self.table_prov.item(row, 6).text())
-        dlg = DialogProveedor(self.controller, proveedor_id)
+        dlg = DialogProveedor(self.controller, prov["id"])
         if dlg.exec():
             self._load_proveedores()
 
     def _desactivar_proveedor(self) -> None:
-        row = self.table_prov.currentRow()
-        if row < 0:
+        prov = self.grid_prov.registro_seleccionado()
+        if not prov:
             return
-        nombre = self.table_prov.item(row, 1).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{prov['nombre']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            proveedor_id = int(self.table_prov.item(row, 6).text())
-            self.controller.desactivar_proveedor(proveedor_id)
+            self.controller.desactivar_proveedor(prov["id"])
             self._load_proveedores()

@@ -1,18 +1,17 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
-    QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QTabWidget, QVBoxLayout, QWidget,
 )
 
+from src.components.grid_hibrido import GridHibrido
+from src.components.notificacion_flotante import notificar_flotante
 from src.controllers.inventario_controller import InventarioController
 from src.controllers.produccion_controller import ProduccionController
 from src.models.accesos_model import tiene
 from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.odoo_list import OdooListView
-from src.utils.table_utils import configurar_tabla_excel
 from src.views.dialogs import (
-    DialogBOM, DialogModelo, DialogOrdenProduccion,
+    DialogBOM, DialogFichaTecnica, DialogModelo, DialogOrdenProduccion,
     DialogSeguimientoOP, DialogVariante,
 )
 
@@ -26,25 +25,44 @@ class ProduccionView(QWidget):
         self._setup_ui()
         self._load_ops()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_modelos.set_datos([])
+        self.grid_variantes.set_datos([])
+        self.grid_bom.set_datos([])
+        self.grid_pt.set_datos([])
+        if hasattr(self, 'gantt'):
+            self.gantt.recargar()
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (OPs, catálogos, PT)."""
+        self._load_ops()
+
     def set_permisos(self, permisos) -> None:
         self._permisos = permisos or set()
-        self.btn_nueva_op.setEnabled(tiene(self._permisos, "produccion", "crear"))
-        self.btn_seguimiento.setEnabled(tiene(self._permisos, "produccion", "ver"))
-        self.btn_avanzar.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_export.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_print.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_nuevo_m.setEnabled(tiene(self._permisos, "produccion", "crear"))
-        self.btn_editar_m.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_desactivar_m.setEnabled(tiene(self._permisos, "produccion", "eliminar"))
-        self.btn_export_m.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_nuevo_v.setEnabled(tiene(self._permisos, "produccion", "crear"))
-        self.btn_editar_v.setEnabled(tiene(self._permisos, "produccion", "editar"))
-        self.btn_desactivar_v.setEnabled(tiene(self._permisos, "produccion", "eliminar"))
-        self.btn_export_v.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_editar_bom.setEnabled(
-            tiene(self._permisos, "produccion", "editar") and hasattr(self, "_modelo_bom_id"))
-        self.btn_export_pt.setEnabled(tiene(self._permisos, "produccion", "exportar"))
-        self.btn_print_pt.setEnabled(tiene(self._permisos, "produccion", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "nueva_op", tiene(self._permisos, "produccion", "crear"))
+        self.vista.establecer_boton_modulo(
+            "ver_seguimiento", tiene(self._permisos, "produccion", "ver"))
+        self.vista.establecer_boton_modulo(
+            "avanzar", tiene(self._permisos, "produccion", "editar"))
+        self.vista.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
+        self.grid_modelos.establecer_boton_modulo(
+            "nuevo_modelo", tiene(self._permisos, "produccion", "crear"))
+        self.grid_modelos.establecer_boton_modulo(
+            "ficha_tecnica", tiene(self._permisos, "produccion", "editar"))
+        self.grid_modelos.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
+        self.grid_variantes.establecer_boton_modulo(
+            "nueva_variante", tiene(self._permisos, "produccion", "crear"))
+        self.grid_variantes.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
+        self.grid_bom.boton_modulo("editar_bom").setEnabled(
+            tiene(self._permisos, "produccion", "editar"))
+        self.grid_pt.set_exportar_visible(
+            tiene(self._permisos, "produccion", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -63,77 +81,59 @@ class ProduccionView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nueva_op = QPushButton("+ Nueva OP")
-        self.btn_nueva_op.setObjectName("btnPrimary")
-        self.btn_nueva_op.clicked.connect(self._nueva_op)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_nueva_op)
+
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("produccion", "#16A34A"))
 
         self.tabs = QTabWidget()
-        self.tab_kanban = QWidget()
+        self.tab_gantt = QWidget()
         self.tab_ops = QWidget()
         self.tab_catalogos = QWidget()
         self.tab_pt = QWidget()
-        self.tabs.addTab(self.tab_kanban, "Kanban")
+        self.tabs.addTab(self.tab_gantt, "Gantt")
         self.tabs.addTab(self.tab_ops, "Órdenes de Producción")
         self.tabs.addTab(self.tab_catalogos, "Catálogos")
         self.tabs.addTab(self.tab_pt, "Producto Terminado")
-        self._setup_tab_kanban()
+        self._setup_tab_gantt()
         self._setup_tab_ops()
         self._setup_tab_catalogos()
         self._setup_tab_pt()
         layout.addWidget(header)
         layout.addWidget(self.tabs)
 
-    def _setup_tab_kanban(self) -> None:
-        from src.views.kanban_view import KanbanView
-        self.kanban = KanbanView(self.controller, on_change=self._load_ops)
-        layout = QVBoxLayout(self.tab_kanban)
+    def _setup_tab_gantt(self) -> None:
+        from src.views.gantt_view import GanttView
+        self.gantt = GanttView(self.controller, on_change=self._load_ops)
+        layout = QVBoxLayout(self.tab_gantt)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.kanban)
+        layout.addWidget(self.gantt)
 
     def _setup_tab_ops(self) -> None:
         layout = QVBoxLayout(self.tab_ops)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar OP por folio, modelo o variante...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar)
-
-        self.btn_seguimiento = QPushButton("Ver Seguimiento")
-        self.btn_seguimiento.setObjectName("btnSecondary")
-        self.btn_seguimiento.clicked.connect(self._ver_seguimiento)
-        self.btn_avanzar = QPushButton("Avanzar Estación")
-        self.btn_avanzar.setObjectName("btnSuccess")
-        self.btn_avanzar.clicked.connect(self._avanzar_desde_tabla)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(lambda: self._exportar_tabla(self.vista.table, "Ordenes_Produccion"))
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(lambda: print_table(self.vista.table, "Ordenes_Produccion", self))
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_ops)
-
-        toolbar.addWidget(self.txt_buscar)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_seguimiento)
-        toolbar.addWidget(self.btn_avanzar)
-        toolbar.addWidget(self.btn_export)
-        toolbar.addWidget(self.btn_print)
-        layout.addLayout(toolbar)
-
-        self.vista = OdooListView([
-            "Folio", "Modelo", "Variante", "Pares", "F. Inicio",
-            "F. Entrega", "Prioridad", "Estatus",
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nueva_op", "+ Nueva OP", "mas", "#ffffff", self._nueva_op)
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_ops)
+        self.vista.agregar_boton_toolbar(
+            "ver_seguimiento", "Ver Seguimiento", "ver", "#1892D4",
+            self._ver_seguimiento)
+        self.vista.agregar_boton_toolbar(
+            "avanzar", "Avanzar Estación", "ok", "#16A34A",
+            self._avanzar_desde_tabla)
+        self.vista.set_columnas([
+            {"key": "folio", "titulo": "Folio", "ancho": 110},
+            {"key": "modelo_nombre", "titulo": "Modelo", "ancho": 150},
+            {"key": "codigo_variante", "titulo": "Variante", "ancho": 140},
+            {"key": "total_pares", "titulo": "Pares", "ancho": 80, "tipo": "numero"},
+            {"key": "fecha_inicio", "titulo": "F. Inicio", "ancho": 100},
+            {"key": "fecha_entrega", "titulo": "F. Entrega", "ancho": 100},
+            {"key": "prioridad", "titulo": "Prioridad", "ancho": 90},
+            {"key": "estatus", "titulo": "Estatus", "ancho": 110},
         ])
         self.vista.set_renderers(
             fila=self._fila_op,
@@ -205,88 +205,45 @@ class ProduccionView(QWidget):
         tab_bom = QWidget()
         subtabs.addTab(tab_modelos, "Modelos")
         subtabs.addTab(tab_variantes, "Variantes")
-        subtabs.addTab(tab_bom, "Lista de Materiales")
+        self.tab_bom_index = subtabs.addTab(tab_bom, "Lista de Materiales")
+        # Refrescar la lista de materiales al entrar a la pestaña, para que
+        # refleje los materiales capturados en la ficha técnica u otros cambios.
+        subtabs.currentChanged.connect(self._on_subtab_catalogo_cambio)
         layout.addWidget(subtabs)
 
         # Modelos
         mlayout = QVBoxLayout(tab_modelos)
-        mtoolbar = QHBoxLayout()
-        self.txt_buscar_m = QLineEdit()
-        self.txt_buscar_m.setPlaceholderText("Buscar modelo...")
-        self.txt_buscar_m.textChanged.connect(self._buscar_modelos)
-        self.btn_nuevo_m = QPushButton("+ Nuevo Modelo")
-        self.btn_nuevo_m.setObjectName("btnPrimary")
-        self.btn_nuevo_m.clicked.connect(self._nuevo_modelo)
-        self.btn_editar_m = QPushButton("Editar")
-        self.btn_editar_m.setObjectName("btnSecondary")
-        self.btn_editar_m.clicked.connect(self._editar_modelo)
-        self.btn_desactivar_m = QPushButton("Desactivar")
-        self.btn_desactivar_m.setObjectName("btnDanger")
-        self.btn_desactivar_m.clicked.connect(self._desactivar_modelo)
-        self.btn_export_m = QPushButton("Exportar Excel")
-        self.btn_export_m.setObjectName("btnPrimary")
-        self.btn_export_m.clicked.connect(lambda: self._exportar_tabla(self.table_modelos, "Modelos"))
-        mtoolbar.addWidget(self.txt_buscar_m)
-        mtoolbar.addStretch()
-        mtoolbar.addWidget(self.btn_nuevo_m)
-        mtoolbar.addWidget(self.btn_editar_m)
-        mtoolbar.addWidget(self.btn_desactivar_m)
-        mtoolbar.addWidget(self.btn_export_m)
-        mlayout.addLayout(mtoolbar)
-
-        self.table_modelos = QTableWidget()
-        self.table_modelos.setColumnCount(4)
-        self.table_modelos.setHorizontalHeaderLabels(["Código", "Nombre", "Descripción", "ID"])
-        self.table_modelos.setColumnHidden(3, True)
-        self.table_modelos.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_modelos.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_modelos.setAlternatingRowColors(True)
-        self.table_modelos.horizontalHeader().setStretchLastSection(True)
-        self.table_modelos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_modelos)
-        self.table_modelos.doubleClicked.connect(self._editar_modelo)
-        self.table_modelos.setStyleSheet(self.vista.table.styleSheet())
-        mlayout.addWidget(self.table_modelos)
+        self.grid_modelos = GridHibrido()
+        self.grid_modelos.agregar_boton_toolbar(
+            "nuevo_modelo", "+ Nuevo Modelo", "mas", "#ffffff",
+            self._nuevo_modelo)
+        self.grid_modelos.agregar_boton_toolbar(
+            "ficha_tecnica", "Ficha Técnica", "ver", "#1892D4",
+            self._ficha_tecnica)
+        self.grid_modelos.set_columnas([
+            {"key": "codigo", "titulo": "Código", "ancho": 140},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 220},
+            {"key": "descripcion", "titulo": "Descripción", "ancho": 320},
+        ])
+        self.grid_modelos.doubleClicked.connect(self._editar_modelo)
+        self.grid_modelos.selectionChanged.connect(self._on_modelo_selected)
+        mlayout.addWidget(self.grid_modelos)
 
         # Variantes
         vlayout = QVBoxLayout(tab_variantes)
-        vtoolbar = QHBoxLayout()
-        self.txt_buscar_v = QLineEdit()
-        self.txt_buscar_v.setPlaceholderText("Buscar variante...")
-        self.txt_buscar_v.textChanged.connect(self._buscar_variantes)
-        self.btn_nuevo_v = QPushButton("+ Nueva Variante")
-        self.btn_nuevo_v.setObjectName("btnPrimary")
-        self.btn_nuevo_v.clicked.connect(self._nueva_variante)
-        self.btn_editar_v = QPushButton("Editar")
-        self.btn_editar_v.setObjectName("btnSecondary")
-        self.btn_editar_v.clicked.connect(self._editar_variante)
-        self.btn_desactivar_v = QPushButton("Desactivar")
-        self.btn_desactivar_v.setObjectName("btnDanger")
-        self.btn_desactivar_v.clicked.connect(self._desactivar_variante)
-        self.btn_export_v = QPushButton("Exportar Excel")
-        self.btn_export_v.setObjectName("btnPrimary")
-        self.btn_export_v.clicked.connect(lambda: self._exportar_tabla(self.table_variantes, "Variantes"))
-        vtoolbar.addWidget(self.txt_buscar_v)
-        vtoolbar.addStretch()
-        vtoolbar.addWidget(self.btn_nuevo_v)
-        vtoolbar.addWidget(self.btn_editar_v)
-        vtoolbar.addWidget(self.btn_desactivar_v)
-        vtoolbar.addWidget(self.btn_export_v)
-        vlayout.addLayout(vtoolbar)
-
-        self.table_variantes = QTableWidget()
-        self.table_variantes.setColumnCount(6)
-        self.table_variantes.setHorizontalHeaderLabels(["Código", "Modelo", "Talla", "Color", "Piel", "ID"])
-        self.table_variantes.setColumnHidden(5, True)
-        self.table_variantes.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_variantes.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_variantes.setAlternatingRowColors(True)
-        self.table_variantes.horizontalHeader().setStretchLastSection(True)
-        self.table_variantes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_variantes)
-        self.table_variantes.doubleClicked.connect(self._editar_variante)
-        self.table_variantes.setStyleSheet(self.vista.table.styleSheet())
-        vlayout.addWidget(self.table_variantes)
+        self.grid_variantes = GridHibrido()
+        self.grid_variantes.agregar_boton_toolbar(
+            "nueva_variante", "+ Nueva Variante", "mas", "#ffffff",
+            self._nueva_variante)
+        self.grid_variantes.set_columnas([
+            {"key": "codigo_variante", "titulo": "Código", "ancho": 160},
+            {"key": "modelo_nombre", "titulo": "Modelo", "ancho": 150},
+            {"key": "talla", "titulo": "Talla", "ancho": 80},
+            {"key": "color", "titulo": "Color", "ancho": 110},
+            {"key": "piel", "titulo": "Piel", "ancho": 120},
+        ])
+        self.grid_variantes.doubleClicked.connect(self._editar_variante)
+        vlayout.addWidget(self.grid_variantes)
 
         # BOM
         blayout = QVBoxLayout(tab_bom)
@@ -294,63 +251,46 @@ class ProduccionView(QWidget):
         self.cmb_bom_modelo = QLineEdit()
         self.cmb_bom_modelo.setReadOnly(True)
         self.cmb_bom_modelo.setPlaceholderText("(seleccione un modelo)")
-        self.btn_editar_bom = QPushButton("Editar Lista de Materiales")
-        self.btn_editar_bom.setObjectName("btnPrimary")
-        self.btn_editar_bom.setMinimumHeight(40)
-        self.btn_editar_bom.clicked.connect(self._editar_bom)
-        self.btn_editar_bom.setEnabled(False)
-        self.table_bom = QTableWidget()
-        self.table_bom.setColumnCount(4)
-        self.table_bom.setHorizontalHeaderLabels(["Insumo", "Cant. por Par", "Unidad", "Stock Actual"])
-        self.table_bom.horizontalHeader().setStretchLastSection(True)
-        self.table_bom.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_bom)
-        self.table_bom.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.grid_bom = GridHibrido()
+        self.grid_bom.agregar_boton_toolbar(
+            "editar_bom", "Editar Lista de Materiales", "editar", "#1892D4",
+            self._editar_bom)
+        self.grid_bom.boton_modulo("editar_bom").setEnabled(False)
+        self.grid_bom.set_columnas([
+            {"key": "insumo_nombre", "titulo": "Insumo", "ancho": 260},
+            {"key": "cantidad_por_par", "titulo": "Cant. por Par",
+             "ancho": 100, "tipo": "numero"},
+            {"key": "unidad_medida", "titulo": "Unidad", "ancho": 100},
+            {"key": "stock_actual", "titulo": "Stock Actual",
+             "ancho": 110, "tipo": "numero"},
+        ])
         blayout.addWidget(self.cmb_bom_modelo)
-        blayout.addWidget(self.btn_editar_bom)
-        blayout.addWidget(self.table_bom)
-        self.table_modelos.itemSelectionChanged.connect(self._on_modelo_selected)
+        blayout.addWidget(self.grid_bom)
 
     def _setup_tab_pt(self) -> None:
         layout = QVBoxLayout(self.tab_pt)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.btn_export_pt = QPushButton("Exportar Excel")
-        self.btn_export_pt.setObjectName("btnPrimary")
-        self.btn_export_pt.clicked.connect(lambda: self._exportar_tabla(self.table_pt, "Producto_Terminado"))
-        self.btn_print_pt = QPushButton("Imprimir")
-        self.btn_print_pt.setObjectName("btnSecondary")
-        self.btn_print_pt.clicked.connect(lambda: print_table(self.table_pt, "Producto_Terminado", self))
-
-        btn_refresh_pt = QPushButton("Actualizar")
-        btn_refresh_pt.setObjectName("btnPrimary")
-        btn_refresh_pt.clicked.connect(self._load_pt)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_export_pt)
-        toolbar.addWidget(self.btn_print_pt)
-        toolbar.addWidget(btn_refresh_pt)
-        layout.addLayout(toolbar)
-
-        self.table_pt = QTableWidget()
-        self.table_pt.setColumnCount(6)
-        self.table_pt.setHorizontalHeaderLabels([
-            "Modelo", "Variante", "Color", "Piel", "Talla", "Pares"
+        self.grid_pt = GridHibrido()
+        self.grid_pt.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_pt)
+        self.grid_pt.set_columnas([
+            {"key": "modelo_nombre", "titulo": "Modelo", "ancho": 180},
+            {"key": "codigo_variante", "titulo": "Variante", "ancho": 160},
+            {"key": "color", "titulo": "Color", "ancho": 120},
+            {"key": "piel", "titulo": "Piel", "ancho": 120},
+            {"key": "talla", "titulo": "Talla", "ancho": 80},
+            {"key": "pares", "titulo": "Pares", "ancho": 90, "tipo": "numero"},
         ])
-        self.table_pt.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_pt.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_pt.setAlternatingRowColors(True)
-        self.table_pt.horizontalHeader().setStretchLastSection(True)
-        self.table_pt.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_pt)
-        self.table_pt.setStyleSheet(self.vista.table.styleSheet())
-        layout.addWidget(self.table_pt)
+        self.grid_pt.set_buscador_visible(False)
+        self.grid_pt.set_exportar_visible(False)
+        layout.addWidget(self.grid_pt)
 
     def _load_ops(self) -> None:
         try:
             ops = self.controller.listar_ops()
-            if hasattr(self, "kanban"):
-                self.kanban.recargar()
+            if hasattr(self, "gantt"):
+                self.gantt.recargar()
             self.vista.set_datos(ops)
             self._load_catalogos()
             self._load_pt()
@@ -360,35 +300,16 @@ class ProduccionView(QWidget):
     def _load_catalogos(self) -> None:
         try:
             modelos = self.controller.listar_modelos()
-            self.table_modelos.setRowCount(len(modelos))
-            for i, m in enumerate(modelos):
-                self.table_modelos.setItem(i, 0, QTableWidgetItem(m.get("codigo", "")))
-                self.table_modelos.setItem(i, 1, QTableWidgetItem(m.get("nombre", "")))
-                self.table_modelos.setItem(i, 2, QTableWidgetItem(m.get("descripcion", "") or ""))
-                self.table_modelos.setItem(i, 3, QTableWidgetItem(str(m.get("id", ""))))
+            self.grid_modelos.set_datos(modelos)
             variantes = self.controller.listar_variantes()
-            self.table_variantes.setRowCount(len(variantes))
-            for i, v in enumerate(variantes):
-                self.table_variantes.setItem(i, 0, QTableWidgetItem(v.get("codigo_variante", "")))
-                self.table_variantes.setItem(i, 1, QTableWidgetItem(v.get("modelo_nombre", "")))
-                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("talla", "")))
-                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("color", "")))
-                self.table_variantes.setItem(i, 4, QTableWidgetItem(v.get("piel", "")))
-                self.table_variantes.setItem(i, 5, QTableWidgetItem(str(v.get("id", ""))))
+            self.grid_variantes.set_datos(variantes)
         except Exception as e:
             print(f"Error catálogos: {e}")
 
     def _load_pt(self) -> None:
         try:
             pts = self.controller.listar_pt()
-            self.table_pt.setRowCount(len(pts))
-            for i, p in enumerate(pts):
-                self.table_pt.setItem(i, 0, QTableWidgetItem(p.get("modelo_nombre", "")))
-                self.table_pt.setItem(i, 1, QTableWidgetItem(p.get("codigo_variante", "")))
-                self.table_pt.setItem(i, 2, QTableWidgetItem(p.get("color", "")))
-                self.table_pt.setItem(i, 3, QTableWidgetItem(p.get("piel", "")))
-                self.table_pt.setItem(i, 4, QTableWidgetItem(p.get("talla", "")))
-                self.table_pt.setItem(i, 5, QTableWidgetItem(str(p.get("pares", 0))))
+            self.grid_pt.set_datos(pts)
         except Exception as e:
             print(f"Error PT: {e}")
 
@@ -408,12 +329,7 @@ class ProduccionView(QWidget):
             return
         try:
             res = self.controller.buscar_modelos(texto)
-            self.table_modelos.setRowCount(len(res))
-            for i, m in enumerate(res):
-                self.table_modelos.setItem(i, 0, QTableWidgetItem(m.get("codigo", "")))
-                self.table_modelos.setItem(i, 1, QTableWidgetItem(m.get("nombre", "")))
-                self.table_modelos.setItem(i, 2, QTableWidgetItem(m.get("descripcion", "") or ""))
-                self.table_modelos.setItem(i, 3, QTableWidgetItem(str(m.get("id", ""))))
+            self.grid_modelos.set_datos(res)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -423,14 +339,7 @@ class ProduccionView(QWidget):
             return
         try:
             res = self.controller.buscar_variantes(texto)
-            self.table_variantes.setRowCount(len(res))
-            for i, v in enumerate(res):
-                self.table_variantes.setItem(i, 0, QTableWidgetItem(v.get("codigo_variante", "")))
-                self.table_variantes.setItem(i, 1, QTableWidgetItem(v.get("modelo_nombre", "")))
-                self.table_variantes.setItem(i, 2, QTableWidgetItem(v.get("talla", "")))
-                self.table_variantes.setItem(i, 3, QTableWidgetItem(v.get("color", "")))
-                self.table_variantes.setItem(i, 4, QTableWidgetItem(v.get("piel", "")))
-                self.table_variantes.setItem(i, 5, QTableWidgetItem(str(v.get("id", ""))))
+            self.grid_variantes.set_datos(res)
         except Exception as e:
             print(f"Error: {e}")
 
@@ -463,25 +372,41 @@ class ProduccionView(QWidget):
             self._load_catalogos()
 
     def _editar_modelo(self) -> None:
-        row = self.table_modelos.currentRow()
-        if row < 0:
+        m = self.grid_modelos.registro_seleccionado()
+        if m is None:
             QMessageBox.information(self, "Seleccionar", "Seleccione un modelo.")
             return
-        modelo_id = int(self.table_modelos.item(row, 3).text())
-        dlg = DialogModelo(self.controller, self.inv_controller, modelo_id)
+        dlg = DialogModelo(self.controller, self.inv_controller, m["id"])
         if dlg.exec():
             self._load_catalogos()
 
     def _desactivar_modelo(self) -> None:
-        row = self.table_modelos.currentRow()
-        if row < 0:
+        m = self.grid_modelos.registro_seleccionado()
+        if m is None:
             return
-        nombre = self.table_modelos.item(row, 1).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{m['nombre']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_modelo(int(self.table_modelos.item(row, 3).text()))
+            self.controller.desactivar_modelo(m["id"])
             self._load_catalogos()
+
+    def _ficha_tecnica(self) -> None:
+        m = self.grid_modelos.registro_seleccionado()
+        if m is None:
+            QMessageBox.information(self, "Seleccionar", "Seleccione un modelo.")
+            return
+        dlg = DialogFichaTecnica(self.inv_controller, self.controller, m["id"])
+        dlg.exec()
+        # La ficha puede haber modificado la lista de materiales: refrescar.
+        self._cargar_bom(m["id"])
+
+    def _on_subtab_catalogo_cambio(self, idx: int) -> None:
+        """Al entrar a la pestaña Lista de Materiales, recarga su contenido."""
+        if idx != getattr(self, "tab_bom_index", -1):
+            return
+        m = self.grid_modelos.registro_seleccionado()
+        if m is not None:
+            self._cargar_bom(m["id"])
 
     def _nueva_variante(self) -> None:
         dlg = DialogVariante(self.controller)
@@ -489,48 +414,39 @@ class ProduccionView(QWidget):
             self._load_catalogos()
 
     def _editar_variante(self) -> None:
-        row = self.table_variantes.currentRow()
-        if row < 0:
+        v = self.grid_variantes.registro_seleccionado()
+        if v is None:
             return
-        v_id = int(self.table_variantes.item(row, 5).text())
-        dlg = DialogVariante(self.controller, v_id)
+        dlg = DialogVariante(self.controller, v["id"])
         if dlg.exec():
             self._load_catalogos()
 
     def _desactivar_variante(self) -> None:
-        row = self.table_variantes.currentRow()
-        if row < 0:
+        v = self.grid_variantes.registro_seleccionado()
+        if v is None:
             return
-        cod = self.table_variantes.item(row, 0).text()
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar variante '{cod}'?",
+        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar variante '{v['codigo_variante']}'?",
                                      QMessageBox.Yes | QMessageBox.No)
         if resp == QMessageBox.Yes:
-            self.controller.desactivar_variante(int(self.table_variantes.item(row, 5).text()))
+            self.controller.desactivar_variante(v["id"])
             self._load_catalogos()
 
     def _on_modelo_selected(self) -> None:
-        row = self.table_modelos.currentRow()
-        if row >= 0:
-            modelo_id = int(self.table_modelos.item(row, 3).text())
-            nombre = self.table_modelos.item(row, 1).text()
-            self.cmb_bom_modelo.setText(f"[{self.table_modelos.item(row, 0).text()}] {nombre}")
+        m = self.grid_modelos.registro_seleccionado()
+        if m is not None:
+            self.cmb_bom_modelo.setText(f"[{m.get('codigo', '')}] {m.get('nombre', '')}")
             self.btn_editar_bom.setEnabled(tiene(self._permisos, "produccion", "editar"))
-            self._modelo_bom_id = modelo_id
-            self._modelo_bom_nombre = nombre
-            self._cargar_bom(modelo_id)
+            self._modelo_bom_id = m["id"]
+            self._modelo_bom_nombre = m.get("nombre", "")
+            self._cargar_bom(m["id"])
         else:
             self.cmb_bom_modelo.clear()
             self.btn_editar_bom.setEnabled(False)
-            self.table_bom.setRowCount(0)
+            self.grid_bom.set_datos([])
 
     def _cargar_bom(self, modelo_id: int) -> None:
         bom = self.controller.obtener_bom(modelo_id)
-        self.table_bom.setRowCount(len(bom))
-        for i, b in enumerate(bom):
-            self.table_bom.setItem(i, 0, QTableWidgetItem(b.get("insumo_nombre", "")))
-            self.table_bom.setItem(i, 1, QTableWidgetItem(str(b.get("cantidad_por_par", 0))))
-            self.table_bom.setItem(i, 2, QTableWidgetItem(b.get("unidad_medida", "")))
-            self.table_bom.setItem(i, 3, QTableWidgetItem(str(b.get("stock_actual", 0))))
+        self.grid_bom.set_datos(bom)
 
     def _editar_bom(self) -> None:
         if hasattr(self, "_modelo_bom_id"):
@@ -539,7 +455,8 @@ class ProduccionView(QWidget):
             if dlg.exec():
                 self._cargar_bom(self._modelo_bom_id)
 
-    def _exportar_tabla(self, table: QTableWidget, nombre: str) -> None:
+    def _exportar_tabla(self, table, nombre: str) -> None:
         path = export_table_to_excel(table, nombre, self)
         if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
+            notificar_flotante(f"Excel guardado en:\n{path}",
+                               tipo="success", titulo="Exportado", host=self)

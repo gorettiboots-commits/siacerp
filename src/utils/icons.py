@@ -3,6 +3,15 @@ from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 _TILES = {
+    "empresa": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#7c3aed"/>
+          <path d="M20 44V22a2 2 0 0 1 2-2h20a2 2 0 0 1 2 2v22"
+                fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+          <path d="M16 44h32" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+          <rect x="28" y="14" width="8" height="6" rx="1" fill="#ffffff"/>
+          <path d="M28 32h8M28 38h8" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>""",
     "unidades": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <rect x="4" y="4" width="56" height="56" rx="14" fill="#6366f1"/>
@@ -64,6 +73,29 @@ _TILES = {
           <path d="M20 24l12-6 12 6v16l-12 6-12-6z" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
           <path d="M20 24l12 6 12-6M32 30v16" fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
         </svg>""",
+    "logs": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#7c3aed"/>
+          <path d="M20 24l-6 8 6 8M44 24l6 8-6 8" fill="none"
+                stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M37 16l-8 32" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>""",
+    "impresion": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#0891b2"/>
+          <rect x="18" y="30" width="28" height="18" rx="3" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <rect x="24" y="15" width="16" height="13" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <path d="M24 30v8h16v-8M26 38v8h12v-8" fill="#0891b2" stroke="#ffffff" stroke-width="3"/>
+        </svg>""",
+    "basedatos": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="#0f766e"/>
+          <ellipse cx="32" cy="19" rx="15" ry="6" fill="none" stroke="#ffffff" stroke-width="3"/>
+          <path d="M17 19v26c0 3.3 6.7 6 15 6s15-2.7 15-6V19"
+                fill="none" stroke="#ffffff" stroke-width="3"/>
+          <path d="M17 32c0 3.3 6.7 6 15 6s15-2.7 15-6"
+                fill="none" stroke="#ffffff" stroke-width="3"/>
+        </svg>""",
 }
 
 _GLIFOS = {
@@ -84,6 +116,20 @@ _GLIFOS = {
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M16 24l16-8 16 8v18l-16 8-16-8z" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
           <path d="M16 24l16 8 16-8M32 32v18" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+        </svg>""",
+    "clientes": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <path d="M14 28h36l-4 26H18z" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M14 28L19 12h26l5 16" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M24 54v-16h16v16" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M24 34c2-6 14-6 16 0" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>""",
+    "programacion": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="12" y="10" width="40" height="46" rx="6" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <path d="M12 24h40" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <path d="M22 10v8M42 10v8" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round"/>
+          <path d="M22 32h4M30 32h4M38 32h4M22 40h4M30 40h4M38 40h4" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round"/>
         </svg>""",
     "logout": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
@@ -106,6 +152,11 @@ _GLIFOS = {
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M14 20h36M28 20v-6a4 4 0 0 1 4-4h0a4 4 0 0 1 4 4v6M22 20l2.5 32a4 4 0 0 0 4 3.6h7a4 4 0 0 0 4-3.6L42 20M27 28v16M37 28v16"
                 fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>""",
+    "filas": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="8" y="12" width="48" height="40" rx="5" fill="none" stroke="#COLOR" stroke-width="3.5" stroke-linejoin="round"/>
+          <path d="M8 23h48M24 12v40M40 12v40" fill="none" stroke="#COLOR" stroke-width="2.6"/>
         </svg>""",
     "lista": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
@@ -165,6 +216,13 @@ _GLIFOS = {
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <path d="M32 14v36M14 32h36" stroke="#COLOR" stroke-width="4.5" stroke-linecap="round"/>
         </svg>""",
+    "dashboard": """
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="10" y="10" width="20" height="16" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="34" y="10" width="20" height="28" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="10" y="30" width="20" height="24" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+          <rect x="34" y="42" width="20" height="12" rx="3" fill="none" stroke="#COLOR" stroke-width="3.5"/>
+        </svg>""",
     "info": """
         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
           <circle cx="32" cy="32" r="20" fill="none" stroke="#COLOR" stroke-width="3.5"/>
@@ -203,6 +261,29 @@ def _render_svg(svg: str, size: int) -> QPixmap:
 def tile_icon(key: str, size: int = 28) -> QIcon:
     icon = QIcon()
     icon.addPixmap(_render_svg(_TILES[key], size))
+    return icon
+
+
+def _cuerpo_svg(svg: str) -> str:
+    """Extrae el contenido interno de un SVG (sin el wrapper <svg>...</svg>)."""
+    inicio = svg.find(">") + 1
+    fin = svg.rfind("</svg>")
+    if inicio == 0 or fin == -1:
+        return svg
+    return svg[inicio:fin]
+
+
+def tile_icon_color(key: str, size: int = 16, color: str = "#4f46e5") -> QIcon:
+    """Tile de acción: glifo blanco sobre rectángulo de fondo con el color dado."""
+    glifo = _GLIFOS.get(key, _GLIFOS["mas"])
+    cuerpo = _cuerpo_svg(glifo).replace("#COLOR", "#ffffff")
+    svg = f"""
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <rect x="2" y="2" width="60" height="60" rx="14" fill="{color}"/>
+          {cuerpo}
+        </svg>"""
+    icon = QIcon()
+    icon.addPixmap(_render_svg(svg, size))
     return icon
 
 

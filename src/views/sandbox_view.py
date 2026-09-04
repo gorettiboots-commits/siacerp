@@ -1,8 +1,14 @@
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QLabel, QPushButton, QTabWidget, QVBoxLayout, QWidget,
+)
 
 from src.components.tallas_matrix import MatrizTallasDialog
+from src.views.sandbox_catalogo import CatalogoControles
 from src.views.sandbox_complex_grid import ComplexGridDemo
+from src.views.sandbox_controles import ControlesPreview
+from src.views.sandbox_editor_etiqueta import EditorEtiquetaPreview
+from src.views.sandbox_grid_hibrido import GridHibridoDemo
 from src.views.sandbox_notificaciones import NotificacionesDemo
 from src.views.sandbox_preview_impresion import PreviewImpresionDemo
 
@@ -31,6 +37,19 @@ class SandboxView(QWidget):
             "Área de pruebas para componentes propios del sistema.")
         subtitulo.setObjectName("sectionSubtitle")
         layout.addWidget(subtitulo)
+
+        tabs = QTabWidget()
+        tabs.addTab(CatalogoControles(self), "Catálogo de controles")
+        tabs.addTab(self._crear_tab_componentes(), "Componentes")
+        tabs.addTab(ControlesPreview(self), "Controles del sistema (prototipo)")
+        tabs.addTab(GridHibridoDemo(self), "Grid Híbrido (ComplexGrid + Controles)")
+        tabs.addTab(EditorEtiquetaPreview(self), "Editor de etiquetas (prototipo)")
+        layout.addWidget(tabs, 1)
+
+    def _crear_tab_componentes(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(12)
 
         btn_tallas = QPushButton("Controles de tallas")
         btn_tallas.setObjectName("btnPrimary")
@@ -61,6 +80,7 @@ class SandboxView(QWidget):
         layout.addWidget(btn_preview, 0, Qt.AlignLeft)
 
         layout.addStretch()
+        return widget
 
     def _abrir_tallas(self) -> None:
         dlg = MatrizTallasDialog(parent=self)

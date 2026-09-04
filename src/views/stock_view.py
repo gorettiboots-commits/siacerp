@@ -1,16 +1,15 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget,
+    QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QTabWidget,
     QVBoxLayout, QWidget,
 )
 
+from src.components.grid_hibrido import GridHibrido
 from src.controllers.inventario_controller import InventarioController
 from src.models.accesos_model import tiene
-from src.utils.export_utils import export_table_to_excel, print_table
-from src.utils.odoo_list import OdooListView
-from src.utils.table_utils import configurar_tabla_excel
-from src.views.dialogs import DialogInsumo, DialogMovimientoStock
+from src.views.dialogs import (
+    DialogInsumo, DialogMovimientoMultiPartida, DialogMovimientoStock,
+)
 
 
 class StockView(QWidget):
@@ -20,15 +19,27 @@ class StockView(QWidget):
         self._setup_ui()
         self._load_insumos()
 
+    def limpiar(self) -> None:
+        """Vacía los grids (logout)."""
+        self.vista.set_datos([])
+        self.grid_mov.set_datos([])
+        self.grid_conflicto.set_datos([])
+
+    def recargar(self) -> None:
+        """Recarga todos los datos de la vista (insumos, movimientos, conflicto)."""
+        self._load_insumos()
+
     def set_permisos(self, permisos) -> None:
-        self.btn_nuevo.setEnabled(tiene(permisos, "inventario", "crear"))
-        self.btn_movimiento.setEnabled(tiene(permisos, "inventario", "crear"))
-        self.btn_editar.setEnabled(tiene(permisos, "inventario", "editar"))
-        self.btn_eliminar.setEnabled(tiene(permisos, "inventario", "eliminar"))
-        self.btn_export.setEnabled(tiene(permisos, "inventario", "exportar"))
-        self.btn_print.setEnabled(tiene(permisos, "inventario", "exportar"))
-        self.btn_export_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
-        self.btn_print_mov.setEnabled(tiene(permisos, "inventario", "exportar"))
+        self.vista.establecer_boton_modulo(
+            "nuevo", tiene(permisos, "inventario", "crear"))
+        self.vista.establecer_boton_modulo(
+            "movimiento", tiene(permisos, "inventario", "crear"))
+        self.vista.set_exportar_visible(
+            tiene(permisos, "inventario", "exportar"))
+        self.grid_mov.set_exportar_visible(
+            tiene(permisos, "inventario", "exportar"))
+        self.grid_conflicto.set_exportar_visible(
+            tiene(permisos, "inventario", "exportar"))
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -47,29 +58,22 @@ class StockView(QWidget):
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
 
-        self.btn_nuevo = QPushButton("+ Nuevo Insumo")
-        self.btn_nuevo.setObjectName("btnPrimary")
-        self.btn_nuevo.clicked.connect(self._nuevo_insumo)
-        self.btn_movimiento = QPushButton("Movimiento")
-        self.btn_movimiento.setObjectName("btnWarning")
-        self.btn_movimiento.clicked.connect(self._registrar_movimiento)
-        self.btn_stock_bajo = QPushButton("Alertas")
-        self.btn_stock_bajo.setObjectName("btnDanger")
-        self.btn_stock_bajo.clicked.connect(self._mostrar_stock_bajo)
-
         hlayout.addLayout(title_col)
         hlayout.addStretch()
-        hlayout.addWidget(self.btn_stock_bajo)
-        hlayout.addWidget(self.btn_movimiento)
-        hlayout.addWidget(self.btn_nuevo)
+
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("inventario", "#E3C14D"))
 
         self.tabs = QTabWidget()
         self.tab_insumos = QWidget()
         self.tab_movimientos = QWidget()
+        self.tab_conflicto = QWidget()
         self.tabs.addTab(self.tab_insumos, "Insumos")
         self.tabs.addTab(self.tab_movimientos, "Movimientos")
+        self.tabs.addTab(self.tab_conflicto, "Insumos en Conflicto")
         self._setup_tab_insumos()
         self._setup_tab_movimientos()
+        self._setup_tab_conflicto()
         layout.addWidget(header)
         layout.addWidget(self.tabs)
 
@@ -77,40 +81,22 @@ class StockView(QWidget):
         layout = QVBoxLayout(self.tab_insumos)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.txt_buscar = QLineEdit()
-        self.txt_buscar.setPlaceholderText("Buscar insumo por código, nombre o categoría...")
-        self.txt_buscar.setMinimumWidth(300)
-        self.txt_buscar.textChanged.connect(self._buscar)
-
-        self.btn_editar = QPushButton("Editar")
-        self.btn_editar.setObjectName("btnSecondary")
-        self.btn_editar.clicked.connect(self._editar_insumo)
-        self.btn_eliminar = QPushButton("Desactivar")
-        self.btn_eliminar.setObjectName("btnDanger")
-        self.btn_eliminar.clicked.connect(self._desactivar_insumo)
-
-        self.btn_export = QPushButton("Exportar Excel")
-        self.btn_export.setObjectName("btnPrimary")
-        self.btn_export.clicked.connect(self._exportar_insumos)
-        self.btn_print = QPushButton("Imprimir")
-        self.btn_print.setObjectName("btnSecondary")
-        self.btn_print.clicked.connect(self._imprimir_insumos)
-
-        btn_refresh = QPushButton("Actualizar")
-        btn_refresh.setObjectName("btnPrimary")
-        btn_refresh.clicked.connect(self._load_insumos)
-
-        toolbar.addWidget(self.txt_buscar)
-        toolbar.addWidget(btn_refresh)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_editar)
-        toolbar.addWidget(self.btn_eliminar)
-        toolbar.addWidget(self.btn_export)
-        toolbar.addWidget(self.btn_print)
-        layout.addLayout(toolbar)
-
-        self.vista = OdooListView(["Código", "Nombre", "Categoría", "Unidad", "Stock Actual", "Stock Mínimo"])
+        self.vista = GridHibrido()
+        self.vista.agregar_boton_toolbar(
+            "nuevo", "+ Nuevo Insumo", "mas", "#ffffff", self._nuevo_insumo)
+        self.vista.agregar_boton_toolbar(
+            "movimiento", "Movimiento", "toggle", "#ffffff",
+            self._registrar_movimiento)
+        self.vista.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4", self._load_insumos)
+        self.vista.set_columnas([
+            {"key": "codigo", "titulo": "Codigo", "ancho": 120},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 220},
+            {"key": "categoria", "titulo": "Categoria", "ancho": 140},
+            {"key": "unidad_medida", "titulo": "Unidad", "ancho": 90},
+            {"key": "stock_actual", "titulo": "Stock Actual", "ancho": 110, "tipo": "numero"},
+            {"key": "stock_minimo", "titulo": "Stock Minimo", "ancho": 110, "tipo": "numero"},
+        ])
         self.vista.set_renderers(
             fila=self._fila_insumo,
             claves=self._claves_insumo,
@@ -118,6 +104,15 @@ class StockView(QWidget):
             tarjeta=self._tarjeta_insumo,
             lista=self._lista_insumo,
         )
+        # Acciones en la columna del grid
+        self.vista.set_acciones([
+            {"texto": "Editar", "icono": "editar", "color": "#2563eb",
+             "callback": lambda rec: self._editar_insumo_directo(rec)},
+            {"texto": "Desactivar", "icono": "eliminar", "color": "#dc2626",
+             "callback": lambda rec: self._desactivar_insumo_directo(rec)},
+            {"texto": "Kardex", "icono": "inventario", "color": "#0d9488",
+             "callback": lambda rec: self._imprimir_kardex_directo(rec)},
+        ])
         self.vista.doubleClicked.connect(self._editar_insumo)
         layout.addWidget(self.vista)
 
@@ -125,31 +120,49 @@ class StockView(QWidget):
         layout = QVBoxLayout(self.tab_movimientos)
         layout.setContentsMargins(0, 8, 0, 0)
 
-        toolbar = QHBoxLayout()
-        self.btn_export_mov = QPushButton("Exportar Excel")
-        self.btn_export_mov.setObjectName("btnPrimary")
-        self.btn_export_mov.clicked.connect(self._exportar_movimientos)
-        self.btn_print_mov = QPushButton("Imprimir")
-        self.btn_print_mov.setObjectName("btnSecondary")
-        self.btn_print_mov.clicked.connect(self._imprimir_movimientos)
-        toolbar.addStretch()
-        toolbar.addWidget(self.btn_export_mov)
-        toolbar.addWidget(self.btn_print_mov)
-        layout.addLayout(toolbar)
-
-        self.table_mov = QTableWidget()
-        self.table_mov.setColumnCount(6)
-        self.table_mov.setHorizontalHeaderLabels([
-            "Fecha", "Insumo", "Tipo", "Cantidad", "Referencia", "Observaciones"
+        self.grid_mov = GridHibrido()
+        self.grid_mov.agregar_boton_toolbar(
+            "documento", "Documento", "pdf", "#1892D4",
+            self._imprimir_documento_movimiento)
+        self.grid_mov.set_columnas([
+            {"key": "folio", "titulo": "Folio", "ancho": 120},
+            {"key": "created_at", "titulo": "Fecha", "ancho": 150},
+            {"key": "insumo_nombre", "titulo": "Insumo", "ancho": 200},
+            {"key": "tipo_movimiento", "titulo": "Tipo", "ancho": 100},
+            {"key": "cantidad", "titulo": "Cantidad", "ancho": 100, "tipo": "numero"},
+            {"key": "referencia_tipo", "titulo": "Referencia", "ancho": 130},
+            {"key": "observaciones", "titulo": "Observaciones", "ancho": 200},
         ])
-        self.table_mov.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_mov.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_mov.setAlternatingRowColors(True)
-        self.table_mov.horizontalHeader().setStretchLastSection(True)
-        self.table_mov.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        configurar_tabla_excel(self.table_mov)
-        self.table_mov.setStyleSheet(self.vista.table.styleSheet())
-        layout.addWidget(self.table_mov)
+        self.grid_mov.set_renderers(fila=self._fila_mov, claves=self._claves_mov)
+        layout.addWidget(self.grid_mov)
+
+    def _setup_tab_conflicto(self) -> None:
+        layout = QVBoxLayout(self.tab_conflicto)
+        layout.setContentsMargins(0, 8, 0, 0)
+
+        self.grid_conflicto = GridHibrido()
+        self.grid_conflicto.agregar_boton_toolbar(
+            "actualizar", "Actualizar", "buscar", "#1892D4",
+            self._load_conflicto)
+        self.grid_conflicto.set_columnas([
+            {"key": "codigo", "titulo": "Codigo", "ancho": 120},
+            {"key": "nombre", "titulo": "Nombre", "ancho": 220},
+            {"key": "categoria", "titulo": "Categoria", "ancho": 140},
+            {"key": "unidad_medida", "titulo": "Unidad", "ancho": 90},
+            {"key": "stock_actual", "titulo": "Stock Actual", "ancho": 110, "tipo": "numero"},
+            {"key": "stock_minimo", "titulo": "Stock Minimo", "ancho": 110, "tipo": "numero"},
+            {"key": "deficit", "titulo": "Deficit", "ancho": 100, "tipo": "numero"},
+        ])
+        self.grid_conflicto.set_renderers(
+            fila=self._fila_conflicto,
+            claves=self._claves_conflicto,
+            estilo=self._estilo_conflicto,
+        )
+        layout.addWidget(self.grid_conflicto)
+
+    # ----------------------------------------------------------------
+    # Renderers Insumos
+    # ----------------------------------------------------------------
 
     def _fila_insumo(self, ins: dict) -> list[str]:
         return [
@@ -183,48 +196,167 @@ class StockView(QWidget):
         return {
             "tile": "inventario",
             "titulo": ins.get("nombre", ""),
-            "subtitulo": f"{ins.get('codigo', '')} · {ins.get('categoria', '')}",
+            "subtitulo": f"{ins.get('codigo', '')} . {ins.get('categoria', '')}",
             "badge": f"{stock} {unidad}",
         }
 
     def _lista_insumo(self, ins: dict) -> tuple:
         return (
             ins.get("nombre", ""),
-            f"{ins.get('codigo', '')} · {ins.get('categoria', '')} · "
+            f"{ins.get('codigo', '')} . {ins.get('categoria', '')} . "
             f"{ins.get('stock_actual', 0)} {ins.get('unidad_medida', '')}",
         )
+
+    # ----------------------------------------------------------------
+    # Renderers Movimientos
+    # ----------------------------------------------------------------
+
+    def _fila_mov(self, m: dict) -> list[str]:
+        return [
+            m.get("folio", "") or m.get("observaciones", "") or "",
+            m.get("created_at", ""),
+            m.get("insumo_nombre", ""),
+            m.get("tipo_movimiento", "").capitalize(),
+            str(m.get("cantidad", 0)),
+            m.get("referencia_tipo", "") or "",
+            m.get("observaciones", "") or "",
+        ]
+
+    def _claves_mov(self, m: dict) -> list:
+        return [
+            m.get("folio", "") or m.get("observaciones", "") or "",
+            m.get("created_at", ""),
+            m.get("insumo_nombre", ""),
+            m.get("tipo_movimiento", ""),
+            float(m.get("cantidad", 0) or 0),
+            m.get("referencia_tipo", "") or "",
+            m.get("observaciones", "") or "",
+        ]
+
+    # ----------------------------------------------------------------
+    # Renderers Insumos en Conflicto
+    # ----------------------------------------------------------------
+
+    def _fila_conflicto(self, ins: dict) -> list[str]:
+        stock = float(ins.get("stock_actual", 0) or 0)
+        stock_min = float(ins.get("stock_minimo", 0) or 0)
+        deficit = stock_min - stock if stock < stock_min else 0
+        return [
+            ins.get("codigo", ""),
+            ins.get("nombre", ""),
+            ins.get("categoria", ""),
+            ins.get("unidad_medida", ""),
+            str(stock),
+            str(stock_min),
+            str(round(deficit, 2)),
+        ]
+
+    def _claves_conflicto(self, ins: dict) -> list:
+        stock = float(ins.get("stock_actual", 0) or 0)
+        stock_min = float(ins.get("stock_minimo", 0) or 0)
+        deficit = stock_min - stock if stock < stock_min else 0
+        return [
+            ins.get("codigo", ""),
+            (ins.get("nombre", "") or "").lower(),
+            (ins.get("categoria", "") or "").lower(),
+            ins.get("unidad_medida", ""),
+            stock,
+            stock_min,
+            deficit,
+        ]
+
+    def _estilo_conflicto(self, ins: dict, item, col: int) -> None:
+        stock = float(ins.get("stock_actual", 0) or 0)
+        stock_min = float(ins.get("stock_minimo", 0) or 0)
+        if stock < stock_min:
+            if col in (4, 5):
+                item.setForeground(Qt.red)
+            if col == 6:
+                item.setForeground(Qt.darkRed)
+
+    # ----------------------------------------------------------------
+    # Carga de datos
+    # ----------------------------------------------------------------
 
     def _load_insumos(self) -> None:
         try:
             insumos = self.controller.listar_insumos()
             self.vista.set_datos(insumos)
             self._load_movimientos()
+            self._load_conflicto()
         except Exception as e:
             print(f"Error: {e}")
 
     def _load_movimientos(self) -> None:
         try:
             movs = self.controller.listar_movimientos()
-            self.table_mov.setRowCount(len(movs))
-            for i, m in enumerate(movs):
-                self.table_mov.setItem(i, 0, QTableWidgetItem(m.get("created_at", "")))
-                self.table_mov.setItem(i, 1, QTableWidgetItem(m.get("insumo_nombre", "")))
-                self.table_mov.setItem(i, 2, QTableWidgetItem(m.get("tipo_movimiento", "").capitalize()))
-                self.table_mov.setItem(i, 3, QTableWidgetItem(str(m.get("cantidad", 0))))
-                self.table_mov.setItem(i, 4, QTableWidgetItem(m.get("referencia_tipo", "") or ""))
-                self.table_mov.setItem(i, 5, QTableWidgetItem(m.get("observaciones", "") or ""))
+            self.grid_mov.set_datos(movs)
         except Exception as e:
             print(f"Error movimientos: {e}")
 
-    def _buscar(self, texto: str) -> None:
-        if not texto.strip():
-            self._load_insumos()
-            return
+    def _load_conflicto(self) -> None:
         try:
-            resultados = self.controller.buscar_insumos(texto)
-            self.vista.set_datos(resultados)
+            bajos = self.controller.stock_bajo()
+            self.grid_conflicto.set_datos(bajos)
         except Exception as e:
-            print(f"Error búsqueda: {e}")
+            print(f"Error conflicto: {e}")
+
+    # ----------------------------------------------------------------
+    # Acciones Insumos (desde columna del grid)
+    # ----------------------------------------------------------------
+
+    def _editar_insumo_directo(self, rec: dict) -> None:
+        dlg = DialogInsumo(self.controller, rec["id"])
+        if dlg.exec():
+            self._load_insumos()
+
+    def _desactivar_insumo_directo(self, rec: dict) -> None:
+        nombre = rec.get("nombre", "")
+        resp = QMessageBox.question(
+            self, "Confirmar", f"Desactivar '{nombre}'?",
+            QMessageBox.Yes | QMessageBox.No)
+        if resp == QMessageBox.Yes:
+            self.controller.desactivar_insumo(rec["id"])
+            self._load_insumos()
+
+    def _imprimir_kardex_directo(self, rec: dict) -> None:
+        from src.utils.kardex_print import imprimir_kardex
+        movimientos = self.controller.listar_kardex(rec["id"])
+        if not movimientos:
+            QMessageBox.information(
+                self, "Kardex", "El insumo no tiene movimientos.")
+            return
+        imprimir_kardex(rec, movimientos, self)
+
+    # ----------------------------------------------------------------
+    # Acciones Movimientos
+    # ----------------------------------------------------------------
+
+    def _imprimir_todas_movimientos(self) -> None:
+        """Imprime todas las partidas visibles en el grid de movimientos."""
+        self.grid_mov.imprimir()
+
+    def _imprimir_documento_movimiento(self) -> None:
+        """Imprime el documento del movimiento seleccionado por folio."""
+        registro = self.grid_mov.registro_seleccionado()
+        if not registro:
+            QMessageBox.information(
+                self, "Seleccionar",
+                "Seleccione un movimiento de la lista.")
+            return
+        ref_tipo = registro.get("referencia_tipo", "")
+        ref_id = registro.get("referencia_id")
+        if ref_tipo == "movimiento" and ref_id:
+            from src.utils.movimiento_print import imprimir_movimiento_documento
+            imprimir_movimiento_documento(ref_id, self)
+        else:
+            QMessageBox.information(
+                self, "Documento",
+                "El registro seleccionado no tiene un documento asociado.")
+
+    # ----------------------------------------------------------------
+    # Acciones generales
+    # ----------------------------------------------------------------
 
     def _nuevo_insumo(self) -> None:
         dlg = DialogInsumo(self.controller)
@@ -234,51 +366,27 @@ class StockView(QWidget):
     def _editar_insumo(self) -> None:
         ins = self.vista.registro_seleccionado()
         if not ins:
-            QMessageBox.information(self, "Seleccionar", "Seleccione un insumo.")
+            QMessageBox.information(
+                self, "Seleccionar", "Seleccione un insumo.")
             return
         dlg = DialogInsumo(self.controller, ins["id"])
         if dlg.exec():
             self._load_insumos()
 
-    def _desactivar_insumo(self) -> None:
-        ins = self.vista.registro_seleccionado()
-        if not ins:
-            return
-        nombre = ins.get("nombre", "")
-        resp = QMessageBox.question(self, "Confirmar", f"¿Desactivar '{nombre}'?",
-                                     QMessageBox.Yes | QMessageBox.No)
-        if resp == QMessageBox.Yes:
-            self.controller.desactivar_insumo(ins["id"])
-            self._load_insumos()
-
     def _registrar_movimiento(self) -> None:
         ins = self.vista.registro_seleccionado()
-        dlg = DialogMovimientoStock(self.controller, ins["id"] if ins else None)
+        dlg = DialogMovimientoMultiPartida(
+            self.controller, ins["id"] if ins else None)
         if dlg.exec():
+            mov_id = dlg.obtener_movimiento_id()
+            if mov_id:
+                resp = QMessageBox.question(
+                    self, "Imprimir documento",
+                    "Movimiento registrado. Desea imprimir el documento?",
+                    QMessageBox.Yes | QMessageBox.No)
+                if resp == QMessageBox.Yes:
+                    from src.utils.movimiento_print import (
+                        imprimir_movimiento_documento,
+                    )
+                    imprimir_movimiento_documento(mov_id, self)
             self._load_insumos()
-
-    def _mostrar_stock_bajo(self) -> None:
-        bajos = self.controller.stock_bajo()
-        if not bajos:
-            QMessageBox.information(self, "Stock", "No hay insumos con stock bajo.")
-            return
-        msg = "=== INSUMOS CON STOCK BAJO ===\n\n"
-        for ins in bajos:
-            msg += f"{ins['codigo']} - {ins['nombre']}: {ins['stock_actual']} / {ins['stock_minimo']} {ins['unidad_medida']}\n"
-        QMessageBox.warning(self, f"Alertas de Stock ({len(bajos)})", msg)
-
-    def _exportar_insumos(self) -> None:
-        path = export_table_to_excel(self.vista.table, "Insumos", self)
-        if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
-
-    def _imprimir_insumos(self) -> None:
-        print_table(self.vista.table, "Insumos", self)
-
-    def _exportar_movimientos(self) -> None:
-        path = export_table_to_excel(self.table_mov, "Movimientos_Inventario", self)
-        if path:
-            QMessageBox.information(self, "Exportado", f"Excel guardado en:\n{path}")
-
-    def _imprimir_movimientos(self) -> None:
-        print_table(self.table_mov, "Movimientos_Inventario", self)

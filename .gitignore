@@ -10,6 +10,7 @@ env/
 *.db
 *.db-wal
 *.db-shm
+goretti_erp.db*
 *.sqlite
 *.sqlite3
 
@@ -17,12 +18,21 @@ env/
 config.ini
 # opencode.json contiene API key (Google Stitch MCP) — no subir
 opencode.json
+# Code signing (contiene contrasena del certificado .pfx)
+sign_config.ini
+*.pfx
 
 # Exportaciones generadas por la app
 OC_*.xlsx
 Ordenes_Compra.xlsx
 Movimientos_Inventario.xlsx
 *.pdf
+!Manual_Usuario_SIAC_ERP.pdf
+
+# Empaquetado PyInstaller
+build/
+dist/
+installer_output/
 
 # Capturas de preview (pruebas de UI)
 ui_preview/
@@ -33,3 +43,17 @@ ui_preview/
 .DS_Store
 Thumbs.db
 *.log
+
+# Archivos pesados / multimedia (no versionar)
+video.mp4
+logo.png
+IMG_4082.MOV
+
+# App móvil
+mobile/.env
+mobile/node_modules/
+mobile/.expo/
+
+# Chrome downloads
+*.crdownload
+Unconfirmed*

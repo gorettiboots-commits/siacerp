@@ -1,5 +1,18 @@
 from typing import Optional
 from src.database.db_manager import DatabaseManager
+from src.utils.empresa_context import donde_empresa, parametros_empresa
+from src.utils.sync_hooks import sync_insert, sync_update, sync_delete
+
+
+def _subtotal_detalle_oc(d: dict) -> float:
+    """Subtotal del renglón: Σ(pares × precio) por talla si hay precios por talla;
+    si no, cantidad × precio_unitario."""
+    con_precio = [t for t in (d.get("tallas") or [])
+                  if float(t.get("precio", 0) or 0) > 0]
+    if con_precio:
+        return sum(float(t.get("pares", 0) or 0) * float(t.get("precio", 0) or 0)
+                   for t in con_precio)
+    return float(d.get("cantidad", 0) or 0) * float(d.get("precio_unitario", 0) or 0)
 
 
 class ProveedorModel:
@@ -15,9 +28,13 @@ class ProveedorModel:
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa()
+        params: list = [q, q, q] + parametros_empresa()
         return self.db.fetch_all(
-            "SELECT * FROM proveedores WHERE activo=1 AND (rfc LIKE ? OR nombre LIKE ?) ORDER BY nombre",
-            (q, q),
+            "SELECT * FROM proveedores WHERE activo=1 AND "
+            "(rfc LIKE ? OR nombre LIKE ? OR nombre_comercial LIKE ?)"
+            + where_emp + " ORDER BY nombre",
+            tuple(params),
         )
 
     def obtener(self, proveedor_id: int) -> Optional[dict]:
@@ -132,37 +149,44 @@ class OrdenCompraModel:
         return ordenes
 
     def listar(self) -> list[dict]:
+        where_emp = donde_empresa('oc')
+        params = parametros_empresa()
         ordenes = self.db.fetch_all(
-            """SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
+            f"""SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
                       p.email as proveedor_email, p.rfc as proveedor_rfc,
                       p.direccion as proveedor_direccion
                FROM ordenes_compra oc
                LEFT JOIN proveedores p ON p.id = oc.proveedor_id
-               ORDER BY oc.created_at DESC"""
+               WHERE 1=1 {where_emp}
+               ORDER BY oc.created_at DESC""",
+            tuple(params)
         )
         return self._con_proveedores(ordenes)
 
     def buscar(self, termino: str) -> list[dict]:
         q = "%" + termino + "%"
+        where_emp = donde_empresa('oc')
+        params: list = [q, q, q, q, q] + parametros_empresa()
         ordenes = self.db.fetch_all(
-            """SELECT oc.*, p.nombre as proveedor_nombre, p.telefono as proveedor_telefono,
-                      p.email as proveedor_email, p.rfc as proveedor_rfc,
-                      p.direccion as proveedor_direccion
-               FROM ordenes_compra oc
-               LEFT JOIN proveedores p ON p.id = oc.proveedor_id
-               WHERE oc.folio LIKE ? OR EXISTS (
-                    SELECT 1 FROM detalle_orden_compra d
-                    JOIN proveedores dp ON dp.id = d.proveedor_id
-                    WHERE d.orden_compra_id = oc.id
-                      AND (dp.nombre LIKE ? OR dp.rfc LIKE ?)
-               ) OR EXISTS (
-                    SELECT 1 FROM detalle_orden_compra d2
-                    JOIN insumos i ON i.id = d2.insumo_id
-                    WHERE d2.orden_compra_id = oc.id
-                      AND (i.nombre LIKE ? OR i.codigo LIKE ?)
-               )
-               ORDER BY oc.created_at DESC""",
-            (q, q, q, q, q),
+            "SELECT oc.*, p.nombre as proveedor_nombre,"
+            " p.telefono as proveedor_telefono,"
+            " p.email as proveedor_email, p.rfc as proveedor_rfc,"
+            " p.direccion as proveedor_direccion"
+            " FROM ordenes_compra oc"
+            " LEFT JOIN proveedores p ON p.id = oc.proveedor_id"
+            " WHERE (oc.folio LIKE ? OR EXISTS ("
+            "    SELECT 1 FROM detalle_orden_compra d"
+            "    JOIN proveedores dp ON dp.id = d.proveedor_id"
+            "    WHERE d.orden_compra_id = oc.id"
+            "      AND (dp.nombre LIKE ? OR dp.rfc LIKE ?)"
+            " ) OR EXISTS ("
+            "    SELECT 1 FROM detalle_orden_compra d2"
+            "    JOIN insumos i ON i.id = d2.insumo_id"
+            "    WHERE d2.orden_compra_id = oc.id"
+            "      AND (i.nombre LIKE ? OR i.codigo LIKE ?)))"
+            + where_emp +
+            " ORDER BY oc.created_at DESC",
+            tuple(params),
         )
         return self._con_proveedores(ordenes)
 
@@ -200,7 +224,7 @@ class OrdenCompraModel:
             return detalle
         ids = ",".join(str(d["id"]) for d in detalle)
         rows = self.db.fetch_all(
-            f"""SELECT dt.detalle_id, dt.pares, tc.talla, tc.id as talla_id
+            f"""SELECT dt.detalle_id, dt.pares, dt.precio_unitario, tc.talla, tc.id as talla_id
                 FROM detalle_orden_compra_puntos dt
                 JOIN tallas_catalogo tc ON tc.id = dt.talla_id
                 WHERE dt.detalle_id IN ({ids})
@@ -212,6 +236,7 @@ class OrdenCompraModel:
                 "talla_id": r["talla_id"],
                 "talla": r["talla"],
                 "pares": r["pares"],
+                "precio": r["precio_unitario"],
             })
         for d in detalle:
             d["tallas"] = por_detalle.get(d["id"], [])
@@ -230,6 +255,10 @@ class OrdenCompraModel:
             "INSERT INTO ordenes_compra (folio, observaciones, proveedor_id, metodo_pago, solo_remision, tipo) VALUES (?, ?, ?, ?, ?, ?)",
             (folio, observaciones, proveedor_id, metodo_pago, 1 if solo_remision else 0, tipo),
         )
+        sync_insert('ordenes_compra', cursor.lastrowid, {
+            'folio': folio, 'observaciones': observaciones,
+            'proveedor_id': proveedor_id, 'estatus': 'pendiente', 'tipo': tipo,
+        })
         return cursor.lastrowid
 
     def agregar_detalle(self, oc_id: int, insumo_id: int, cantidad: float,
@@ -243,8 +272,9 @@ class OrdenCompraModel:
         for p in (puntos or []):
             if p.get("pares", 0) > 0:
                 self.db.execute(
-                    "INSERT OR REPLACE INTO detalle_orden_compra_puntos (detalle_id, talla_id, pares) VALUES (?, ?, ?)",
-                    (detalle_id, p["talla_id"], p["pares"]),
+                    "INSERT OR REPLACE INTO detalle_orden_compra_puntos "
+                    "(detalle_id, talla_id, pares, precio_unitario) VALUES (?, ?, ?, ?)",
+                    (detalle_id, p["talla_id"], p["pares"], p.get("precio", 0) or 0),
                 )
         return detalle_id
 
@@ -253,11 +283,10 @@ class OrdenCompraModel:
             "UPDATE ordenes_compra SET estatus='cancelada' WHERE id=? AND estatus='pendiente'",
             (oc_id,),
         )
+        sync_update('ordenes_compra', oc_id, {'estatus': 'cancelada'})
 
     def recibir(self, oc_id: int) -> None:
-        detalle = self.db.fetch_all(
-            "SELECT * FROM detalle_orden_compra WHERE orden_compra_id = ?", (oc_id,)
-        )
+        detalle = self.obtener_detalle(oc_id)
         for d in detalle:
             self.db.execute(
                 "UPDATE insumos SET stock_actual = stock_actual + ?, updated_at = datetime('now') WHERE id = ?",
@@ -267,8 +296,9 @@ class OrdenCompraModel:
                 "INSERT INTO movimiento_inventario (insumo_id, tipo_movimiento, cantidad, referencia_tipo, referencia_id, observaciones) VALUES (?, 'entrada', ?, 'orden_compra', ?, ?)",
                 (d["insumo_id"], d["cantidad"], oc_id, f"OC {d['orden_compra_id']}"),
             )
-        total = sum(d["cantidad"] * d["precio_unitario"] for d in detalle)
+        total = sum(_subtotal_detalle_oc(d) for d in detalle)
         self.db.execute(
             "UPDATE ordenes_compra SET estatus='recibida', fecha_recibido=datetime('now'), total=? WHERE id=?",
             (total, oc_id),
         )
+        sync_update('ordenes_compra', oc_id, {'estatus': 'recibida', 'total': total})
