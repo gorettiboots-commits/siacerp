@@ -2,346 +2,25 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manual de Usuario — SIAC ERP</title>
     <style>
-        :root {
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --primary-light: #dbeafe;
-            --success: #16a34a;
-            --success-light: #dcfce7;
-            --warning: #d97706;
-            --warning-light: #fef3c7;
-            --danger: #dc2626;
-            --danger-light: #fee2e2;
-            --gray-50: #f9fafb;
-            --gray-100: #f3f4f6;
-            --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
-            --gray-500: #6b7280;
-            --gray-700: #374151;
-            --gray-900: #111827;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: var(--gray-900);
-            background: var(--gray-50);
-            line-height: 1.6;
-        }
-        .container { max-width: 960px; margin: 0 auto; padding: 20px 30px; }
-
-        /* ── Portada ── */
-        .cover {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            text-align: center;
-            padding: 80px 40px;
-            border-radius: 16px;
-            margin-bottom: 40px;
-        }
-        .cover h1 { font-size: 2.8em; margin-bottom: 10px; font-weight: 800; }
-        .cover .subtitle { font-size: 1.3em; opacity: 0.9; margin-bottom: 30px; }
-        .cover .version {
-            background: rgba(255,255,255,0.2);
-            display: inline-block;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 0.95em;
-        }
-
-        /* ── Navegación lateral ── */
-        .sidebar {
-            position: fixed;
-            left: 0; top: 0;
-            width: 260px; height: 100vh;
-            background: white;
-            border-right: 1px solid var(--gray-200);
-            overflow-y: auto;
-            padding: 20px 0;
-            z-index: 100;
-        }
-        .sidebar h3 {
-            padding: 0 20px 10px;
-            font-size: 0.85em;
-            text-transform: uppercase;
-            color: var(--gray-500);
-            letter-spacing: 1px;
-        }
-        .sidebar a {
-            display: block;
-            padding: 8px 20px;
-            color: var(--gray-700);
-            text-decoration: none;
-            font-size: 0.92em;
-            border-left: 3px solid transparent;
-            transition: all 0.2s;
-        }
-        .sidebar a:hover {
-            background: var(--primary-light);
-            color: var(--primary);
-            border-left-color: var(--primary);
-        }
-        .main-content { margin-left: 280px; }
-
-        /* ── Secciones ── */
-        .section {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .section h2 {
-            font-size: 1.6em;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid var(--primary-light);
-        }
-        .section h3 {
-            font-size: 1.2em;
-            color: var(--gray-700);
-            margin: 20px 0 10px;
-        }
-        .section p { margin-bottom: 12px; color: var(--gray-700); }
-        .section ul, .section ol { margin: 10px 0 10px 20px; }
-        .section li { margin-bottom: 6px; color: var(--gray-700); }
-
-        /* ── Mock UI ── */
-        .mock-window {
-            background: white;
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
-            overflow: hidden;
-            margin: 16px 0;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .mock-titlebar {
-            background: var(--gray-100);
-            padding: 8px 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border-bottom: 1px solid var(--gray-200);
-        }
-        .mock-dot { width: 12px; height: 12px; border-radius: 50%; }
-        .mock-dot.r { background: #ef4444; }
-        .mock-dot.y { background: #f59e0b; }
-        .mock-dot.g { background: #22c55e; }
-        .mock-title { font-size: 0.85em; color: var(--gray-500); margin-left: 8px; }
-        .mock-body { padding: 16px; }
-
-        /* ── Mock toolbar ── */
-        .mock-toolbar {
-            background: var(--gray-50);
-            border-bottom: 1px solid var(--gray-200);
-            padding: 8px 12px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-        .mock-btn {
-            padding: 6px 14px;
-            border-radius: 6px;
-            font-size: 0.82em;
-            font-weight: 600;
-            border: none;
-            cursor: default;
-        }
-        .mock-btn.primary { background: var(--primary); color: white; }
-        .mock-btn.success { background: var(--success); color: white; }
-        .mock-btn.warning { background: var(--warning); color: white; }
-        .mock-btn.danger { background: var(--danger); color: white; }
-        .mock-btn.outline { background: white; border: 1px solid var(--gray-300); color: var(--gray-700); }
-
-        /* ── Mock table ── */
-        .mock-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85em;
-        }
-        .mock-table th {
-            background: var(--gray-100);
-            padding: 8px 12px;
-            text-align: left;
-            font-weight: 600;
-            color: var(--gray-700);
-            border-bottom: 2px solid var(--gray-200);
-        }
-        .mock-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--gray-100);
-            color: var(--gray-700);
-        }
-        .mock-table tr:hover td { background: var(--primary-light); }
-
-        /* ── Mock form ── */
-        .mock-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .mock-field {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .mock-field label {
-            font-size: 0.82em;
-            font-weight: 600;
-            color: var(--gray-500);
-        }
-        .mock-field input, .mock-field select, .mock-field textarea {
-            padding: 8px 10px;
-            border: 1px solid var(--gray-300);
-            border-radius: 6px;
-            font-size: 0.88em;
-            background: white;
-            color: var(--gray-700);
-        }
-
-        /* ── Badges ── */
-        .badge {
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 0.78em;
-            font-weight: 600;
-        }
-        .badge.success { background: var(--success-light); color: var(--success); }
-        .badge.warning { background: var(--warning-light); color: var(--warning); }
-        .badge.danger { background: var(--danger-light); color: var(--danger); }
-        .badge.info { background: var(--primary-light); color: var(--primary); }
-
-        /* ── Gantt mock ── */
-        .mock-gantt { overflow-x: auto; }
-        .mock-gantt table { width: 100%; border-collapse: collapse; font-size: 0.8em; }
-        .mock-gantt th {
-            background: var(--gray-100);
-            padding: 6px 4px;
-            text-align: center;
-            font-size: 0.85em;
-            border-bottom: 1px solid var(--gray-200);
-            min-width: 32px;
-        }
-        .mock-gantt td {
-            padding: 4px 2px;
-            text-align: center;
-            border-bottom: 1px solid var(--gray-100);
-        }
-        .gantt-bar {
-            height: 22px;
-            border-radius: 4px;
-            margin: 1px 0;
-        }
-        .gantt-corte { background: #6366f1; }
-        .gantt-pespunte { background: #f59e0b; }
-        .gantt-montado { background: #ef4444; }
-        .gantt-ensuelado { background: #10b981; }
-        .gantt-acabado { background: #3b82f6; }
-        .gantt-empaque { background: #8b5cf6; }
-        .gantt-label {
-            font-weight: 600;
-            font-size: 0.85em;
-            color: var(--gray-700);
-            text-align: left;
-            padding-left: 8px !important;
-            white-space: nowrap;
-        }
-
-        /* ── Nota / Tip ── */
-        .note {
-            background: var(--primary-light);
-            border-left: 4px solid var(--primary);
-            padding: 12px 16px;
-            border-radius: 0 8px 8px 0;
-            margin: 16px 0;
-        }
-        .note.warning {
-            background: var(--warning-light);
-            border-left-color: var(--warning);
-        }
-        .note.success {
-            background: var(--success-light);
-            border-left-color: var(--success);
-        }
-        .note strong { color: var(--gray-900); }
-
-        /* ── Tabs mock ── */
-        .mock-tabs {
-            display: flex;
-            gap: 0;
-            border-bottom: 2px solid var(--gray-200);
-            margin-bottom: 16px;
-        }
-        .mock-tab {
-            padding: 10px 20px;
-            font-size: 0.88em;
-            font-weight: 600;
-            color: var(--gray-500);
-            cursor: default;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-        }
-        .mock-tab.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-        }
-
-        /* ── Login mock ── */
-        .mock-login {
-            max-width: 380px;
-            margin: 0 auto;
-            text-align: center;
-        }
-        .mock-login .logo { font-size: 1.8em; font-weight: 800; color: var(--primary); margin-bottom: 20px; }
-        .mock-login .field { margin-bottom: 12px; text-align: left; }
-
-        /* ── Keyboard shortcut ── */
-        kbd {
-            background: var(--gray-100);
-            border: 1px solid var(--gray-300);
-            border-radius: 4px;
-            padding: 2px 8px;
-            font-family: monospace;
-            font-size: 0.88em;
-            box-shadow: 0 1px 1px var(--gray-200);
-        }
-
-        /* ── Responsive ── */
-        @media (max-width: 1100px) {
-            .sidebar { display: none; }
-            .main-content { margin-left: 0; }
-        }
+        body { font-family: Segoe UI, Tahoma, sans-serif; color: #111827; background: #f9fafb; line-height: 1.6; }
+        h2 { color: #1d4ed8; font-size: 1.4em; margin: 16px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #dbeafe; }
+        h3 { color: #374151; font-size: 1.1em; margin: 14px 0 6px; }
+        p { margin-bottom: 10px; color: #374151; }
+        ul, ol { margin: 8px 0 8px 20px; }
+        li { margin-bottom: 4px; color: #374151; }
+        kbd { background: #f3f4f6; border: 1px solid #d1d5db; padding: 1px 6px; font-family: monospace; font-size: 0.9em; }
     </style>
 </head>
 <body>
 
-<!-- ════════════════ SIDEBAR ════════════════ -->
-<nav class="sidebar">
-    <h3>Manual SIAC ERP</h3>
-    <a href="#inicio">🏠 Inicio de Sesión</a>
-    <a href="#dashboard">📊 Dashboard</a>
-    <a href="#ordenes_compra">🛒 Órdenes de Compra</a>
-    <a href="#produccion">🏭 Producción</a>
-    <a href="#inventario">📦 Inventario</a>
-    <a href="#clientes">👥 Clientes y Pedidos</a>
-    <a href="#programacion">📅 Programación Semanal</a>
-    <a href="#gantt">📈 Diagrama Gantt</a>
-    <a href="#fichas">📋 Fichas Técnicas</a>
-    <a href="#configuracion">⚙️ Configuración</a>
-    <a href="#usuarios">🔐 Usuarios y Permisos</a>
-    <a href="#atajos">⌨️ Atajos de Teclado</a>
-    <a href="#soporte">📞 Soporte</a>
-</nav>
-
-<div class="main-content">
-<div class="container">
-
 <!-- ════════════════ PORTADA ════════════════ -->
-<div class="cover" id="portada">
-    <h1>SIAC ERP</h1>
-    <div class="subtitle">Sistema Integral de Administración y Control</div>
-    <p style="margin-bottom:30px; opacity:0.85;">Manual de Usuario — Guía Completa</p>
-    <div class="version">Versión 1.2.0 — Septiembre 2026</div>
+<div style="background:#2563eb; color:white; text-align:center; padding:40px; margin-bottom:20px;">
+    <h1 style="font-size:2.2em; margin:0 0 8px;">SIAC ERP</h1>
+    <p style="font-size:1.2em; opacity:0.9; margin-bottom:16px;">Sistema Integral de Administración y Control</p>
+    <p style="margin-bottom:16px; opacity:0.85;">Manual de Usuario — Guía Completa</p>
+    <span style="background:rgba(255,255,255,0.2); padding:6px 16px; font-size:0.9em;">Versión 1.2.0 — Septiembre 2026</span>
 </div>
 
 <!-- ════════════════ 1. INICIO DE SESIÓN ════════════════ -->
@@ -349,35 +28,30 @@
     <h2>1. Inicio de Sesión</h2>
     <p>Al abrir SIAC ERP, se muestra la pantalla de acceso. Ingrese su usuario y contraseña para entrar al sistema.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Acceso</span>
-        </div>
-        <div class="mock-body">
-            <div class="mock-login">
-                <div class="logo">SIAC ERP</div>
-                <div class="field">
-                    <label>Usuario</label>
-                    <input type="text" value="admin" style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px;">
-                </div>
-                <div class="field">
-                    <label>Contraseña</label>
-                    <input type="password" value="••••••" style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px;">
-                </div>
-                <div style="margin-top:16px;">
-                    <span class="mock-btn primary" style="padding:10px 40px; font-size:0.95em;">Iniciar Sesión</span>
-                </div>
-            </div>
-        </div>
-    </div>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Acceso</b>
+        </td></tr>
+        <tr><td style="padding:20px; text-align:center;">
+            <div style="font-size:1.6em; font-weight:800; color:#2563eb; margin-bottom:16px;">SIAC ERP</div>
+            <table style="margin:0 auto; width:280px;">
+                <tr><td style="padding:4px 0; font-size:0.85em; font-weight:600; color:#6b7280; text-align:left;">Usuario</td></tr>
+                <tr><td><input type="text" value="admin" style="width:100%; padding:8px; border:1px solid #d1d5db;" readonly></td></tr>
+                <tr><td style="padding:8px 0 4px; font-size:0.85em; font-weight:600; color:#6b7280; text-align:left;">Contraseña</td></tr>
+                <tr><td><input type="password" value="••••••" style="width:100%; padding:8px; border:1px solid #d1d5db;" readonly></td></tr>
+                <tr><td style="padding-top:12px; text-align:center;">
+                    <span style="background:#2563eb; color:white; padding:8px 30px; font-size:0.95em; font-weight:600;">Iniciar Sesión</span>
+                </td></tr>
+            </table>
+        </td></tr>
+    </table>
 
-    <div class="note">
-        <strong>💡 Primera vez:</strong> Si es la primera vez que ejecuta el sistema, aparecerá el <strong>Asistente de Configuración</strong> donde deberá ingresar los datos de su empresa, contacto y crear el usuario administrador.
-    </div>
+    <p style="background:#dbeafe; border-left:4px solid #2563eb; padding:10px 14px; margin:12px 0;">
+        <b>💡 Primera vez:</b> Si es la primera vez que ejecuta el sistema, aparecerá el <b>Asistente de Configuración</b> donde deberá ingresar los datos de su empresa, contacto y crear el usuario administrador.
+    </p>
 
     <h3>¿Qué hacer si olvidó su contraseña?</h3>
-    <p>El administrador del sistema puede restablecer su contraseña desde <strong>Configuración → Usuarios</strong>.</p>
+    <p>El administrador del sistema puede restablecer su contraseña desde <b>Configuración → Usuarios</b>.</p>
 </div>
 
 <!-- ════════════════ 2. DASHBOARD ════════════════ -->
@@ -385,35 +59,44 @@
     <h2>2. Dashboard</h2>
     <p>Al iniciar sesión, se muestra el tablero principal con un resumen de la operación.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Dashboard</span>
-        </div>
-        <div class="mock-body">
-            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:16px;">
-                <div style="background:var(--primary-light); padding:16px; border-radius:8px; text-align:center;">
-                    <div style="font-size:1.8em; font-weight:800; color:var(--primary);">156</div>
-                    <div style="font-size:0.82em; color:var(--gray-500);">Pedidos Activos</div>
-                </div>
-                <div style="background:var(--success-light); padding:16px; border-radius:8px; text-align:center;">
-                    <div style="font-size:1.8em; font-weight:800; color:var(--success);">43</div>
-                    <div style="font-size:0.82em; color:var(--gray-500);">Órdenes Producción</div>
-                </div>
-                <div style="background:var(--warning-light); padding:16px; border-radius:8px; text-align:center;">
-                    <div style="font-size:1.8em; font-weight:800; color:var(--warning);">60</div>
-                    <div style="font-size:0.82em; color:var(--gray-500);">Órdenes de Compra</div>
-                </div>
-                <div style="background:var(--danger-light); padding:16px; border-radius:8px; text-align:center;">
-                    <div style="font-size:1.8em; font-weight:800; color:var(--danger);">8</div>
-                    <div style="font-size:0.82em; color:var(--gray-500);">Alertas Stock Bajo</div>
-                </div>
-            </div>
-            <div style="background:var(--gray-50); padding:12px; border-radius:8px; font-size:0.88em; color:var(--gray-500);">
-                📊 Gráficas de pedidos por mes, producción por estación y top clientes se muestran al向下 scroll.
-            </div>
-        </div>
-    </div>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Dashboard</b>
+        </td></tr>
+        <tr><td style="padding:16px;">
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="width:25%; padding:4px;">
+                        <div style="background:#dbeafe; padding:14px; text-align:center;">
+                            <div style="font-size:1.6em; font-weight:800; color:#2563eb;">156</div>
+                            <div style="font-size:0.8em; color:#6b7280;">Pedidos Activos</div>
+                        </div>
+                    </td>
+                    <td style="width:25%; padding:4px;">
+                        <div style="background:#dcfce7; padding:14px; text-align:center;">
+                            <div style="font-size:1.6em; font-weight:800; color:#16a34a;">43</div>
+                            <div style="font-size:0.8em; color:#6b7280;">Órdenes Producción</div>
+                        </div>
+                    </td>
+                    <td style="width:25%; padding:4px;">
+                        <div style="background:#fef3c7; padding:14px; text-align:center;">
+                            <div style="font-size:1.6em; font-weight:800; color:#d97706;">60</div>
+                            <div style="font-size:0.8em; color:#6b7280;">Órdenes de Compra</div>
+                        </div>
+                    </td>
+                    <td style="width:25%; padding:4px;">
+                        <div style="background:#fee2e2; padding:14px; text-align:center;">
+                            <div style="font-size:1.6em; font-weight:800; color:#dc2626;">8</div>
+                            <div style="font-size:0.8em; color:#6b7280;">Alertas Stock Bajo</div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            <p style="margin-top:12px; background:#f9fafb; padding:10px; font-size:0.85em; color:#6b7280;">
+                📊 Gráficas de pedidos por mes, producción por estación y top clientes se muestran al hacer scroll.
+            </p>
+        </td></tr>
+    </table>
 
     <h3>Navegación</h3>
     <p>Use la barra lateral izquierda o los atajos de teclado para navegar entre módulos:</p>
@@ -432,64 +115,76 @@
     <h2>3. Órdenes de Compra</h2>
     <p>Administra las compras de materia prima (piel, suela, forro, herrajes, etc.) a proveedores.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Órdenes de Compra</span>
-        </div>
-        <div class="mock-toolbar">
-            <span class="mock-btn primary">➕ Nueva OC</span>
-            <span class="mock-btn outline">🔄 Actualizar</span>
-            <span class="mock-btn outline">📋 Exportar</span>
-            <span class="mock-btn outline">🖨️ Imprimir</span>
-            <div style="flex:1;"></div>
-            <input type="text" placeholder="🔍 Buscar proveedor, folio..." style="padding:6px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; width:250px;">
-        </div>
-        <div class="mock-body" style="padding:0;">
-            <table class="mock-table">
-                <thead>
-                    <tr>
-                        <th>Folio</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estatus</th><th>Tipo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td><strong>OC-0059</strong></td><td>CUEROS DEL NORTE</td><td>01/Sep/2026</td><td>$185,400</td><td><span class="badge warning">Pendiente</span></td><td>Orden</td></tr>
-                    <tr><td><strong>OC-0058</strong></td><td>SUELAS DEL CENTRO</td><td>28/Ago/2026</td><td>$92,300</td><td><span class="badge success">Recibida</span></td><td>Orden</td></tr>
-                    <tr><td><strong>OC-0057</strong></td><td>TEXTILES GOYESCOS</td><td>20/Ago/2026</td><td>$45,800</td><td><span class="badge success">Recibida</span></td><td>Orden</td></tr>
-                    <tr><td style="background:#daf2d0;"><strong>OC-0056</strong></td><td style="background:#daf2d0;">SUELAS DEL CENTRO</td><td style="background:#daf2d0;">15/Ago/2026</td><td style="background:#daf2d0;">$0</td><td style="background:#daf2d0;"><span class="badge info">Factura</span></td><td style="background:#daf2d0;">Factura</td></tr>
-                    <tr><td><strong>OC-0055</strong></td><td>HERRAJES PRECISION</td><td>10/Ago/2026</td><td>$28,650</td><td><span class="badge success">Recibida</span></td><td>Orden</td></tr>
-                </tbody>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Órdenes de Compra</b>
+        </td></tr>
+        <tr><td style="background:#f9fafb; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-size:0.82em;">
+            <span style="background:#2563eb; color:white; padding:4px 10px; font-weight:600;">➕ Nueva OC</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">🔄 Actualizar</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">📋 Exportar</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">🖨️ Imprimir</span>
+        </td></tr>
+        <tr><td style="padding:0;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Folio</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Proveedor</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Fecha</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Total</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Estatus</th>
+                </tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OC-0059</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">CUEROS DEL NORTE</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">01/Sep/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">$185,400</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#fef3c7; color:#d97706; padding:2px 8px; font-size:0.85em; font-weight:600;">Pendiente</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OC-0058</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">SUELAS DEL CENTRO</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">28/Ago/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">$92,300</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-size:0.85em; font-weight:600;">Recibida</span></td></tr>
+                <tr style="background:#daf2d0;"><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OC-0056</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">SUELAS DEL CENTRO</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">15/Ago/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">$0</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dbeafe; color:#2563eb; padding:2px 8px; font-size:0.85em; font-weight:600;">Factura</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OC-0055</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">HERRAJES PRECISION</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">10/Ago/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">$28,650</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-size:0.85em; font-weight:600;">Recibida</span></td></tr>
             </table>
-        </div>
-    </div>
+        </td></tr>
+    </table>
 
-    <div class="note">
-        <strong>💡 Las facturas</strong> se muestran en <span style="background:#daf2d0; padding:2px 6px; border-radius:4px;">verde claro</span> y no generan movimientos de inventario. Solo son registros contables.
-    </div>
+    <p style="background:#dbeafe; border-left:4px solid #2563eb; padding:10px 14px; margin:12px 0;">
+        <b>💡 Las facturas</b> se muestran en <span style="background:#daf2d0; padding:1px 4px;">verde claro</span> y no generan movimientos de inventario. Solo son registros contables.
+    </p>
 
     <h3>Crear una Nueva Orden de Compra</h3>
     <ol>
-        <li>Haga clic en <strong>➕ Nueva OC</strong></li>
-        <li>Seleccione el <strong>Proveedor</strong> del catálogo</li>
+        <li>Haga clic en <b>➕ Nueva OC</b></li>
+        <li>Seleccione el <b>Proveedor</b> del catálogo</li>
         <li>Agregue los insumos con cantidad y precio unitario</li>
-        <li>Para suelas: capture los <strong>pares por talla</strong> (corrida)</li>
+        <li>Para suelas: capture los <b>pares por talla</b> (corrida)</li>
         <li>Guarde la orden. El folio se asigna automáticamente (OC-XXXX)</li>
     </ol>
 
     <h3>Estatus de las Órdenes</h3>
     <ul>
-        <li><span class="badge warning">Pendiente</span> — Creada, aún no recibida</li>
-        <li><span class="badge success">Recibida</span> — Los insumos fueron recibidos en almacén</li>
-        <li><span class="badge danger">Cancelada</span> — Orden cancelada</li>
-        <li><span class="badge info">Recibida con diferencias</span> — Recibida con cantidades distintas</li>
+        <li><span style="background:#fef3c7; color:#d97706; padding:1px 6px; font-weight:600;">Pendiente</span> — Creada, aún no recibida</li>
+        <li><span style="background:#dcfce7; color:#16a34a; padding:1px 6px; font-weight:600;">Recibida</span> — Los insumos fueron recibidos en almacén</li>
+        <li><span style="background:#fee2e2; color:#dc2626; padding:1px 6px; font-weight:600;">Cancelada</span> — Orden cancelada</li>
+        <li><span style="background:#dbeafe; color:#2563eb; padding:1px 6px; font-weight:600;">Recibida con diferencias</span> — Recibida con cantidades distintas</li>
     </ul>
 
     <h3>Recepción de Mercancía</h3>
     <ol>
-        <li>Abra la orden de compra en estatus <strong>Pendiente</strong></li>
-        <li>Haga clic en <strong>📦 Recibir</strong></li>
+        <li>Abra la orden de compra en estatus <b>Pendiente</b></li>
+        <li>Haga clic en <b>📦 Recibir</b></li>
         <li>Confirme las cantidades recibidas</li>
-        <li>El sistema registra automáticamente el <strong>movimiento de inventario</strong> (entrada)</li>
+        <li>El sistema registra automáticamente el <b>movimiento de inventario</b> (entrada)</li>
     </ol>
 </div>
 
@@ -498,96 +193,118 @@
     <h2>4. Producción</h2>
     <p>Gestiona las órdenes de producción (OP), el seguimiento por estación y las fichas técnicas de los modelos.</p>
 
-    <div class="mock-tabs">
-        <div class="mock-tab active">📋 Órdenes</div>
-        <div class="mock-tab">📈 Gantt</div>
-        <div class="mock-tab">📁 Modelos</div>
-        <div class="mock-tab">📄 Fichas</div>
-    </div>
+    <table style="width:100%; border-bottom:2px solid #e5e7eb; margin-bottom:16px;">
+        <tr>
+            <td style="padding:8px 16px; font-weight:600; color:#2563eb; border-bottom:2px solid #2563eb; margin-bottom:-2px;">📋 Órdenes</td>
+            <td style="padding:8px 16px; font-weight:600; color:#6b7280;">📈 Gantt</td>
+            <td style="padding:8px 16px; font-weight:600; color:#6b7280;">📁 Modelos</td>
+            <td style="padding:8px 16px; font-weight:600; color:#6b7280;">📄 Fichas</td>
+        </tr>
+    </table>
 
     <h3>Crear una Orden de Producción</h3>
     <ol>
-        <li>Vaya a <strong>Producción → Órdenes</strong></li>
-        <li>Haga clic en <strong>➕ Nueva OP</strong></li>
-        <li>Seleccione la <strong>variante</strong> (modelo × color × piel)</li>
-        <li>Capture la <strong>matriz de tallas</strong> con pares por talla</li>
-        <li>Establezca <strong>fecha de entrega</strong></li>
+        <li>Vaya a <b>Producción → Órdenes</b></li>
+        <li>Haga clic en <b>➕ Nueva OP</b></li>
+        <li>Seleccione la <b>variante</b> (modelo × color × piel)</li>
+        <li>Capture la <b>matriz de tallas</b> con pares por talla</li>
+        <li>Establezca <b>fecha de entrega</b></li>
         <li>Guarde. Se crea el seguimiento por estación automáticamente</li>
     </ol>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Órdenes de Producción</span>
-        </div>
-        <div class="mock-toolbar">
-            <span class="mock-btn primary">➕ Nueva OP</span>
-            <span class="mock-btn success">📦 Recibir</span>
-            <span class="mock-btn outline">🖨️ Imprimir</span>
-        </div>
-        <div class="mock-body" style="padding:0;">
-            <table class="mock-table">
-                <thead><tr><th>Folio</th><th>Variante</th><th>Pares</th><th>Entrega</th><th>Estatus</th></tr></thead>
-                <tbody>
-                    <tr><td><strong>OP-0043</strong></td><td>9215-NEG-CRAZ</td><td>300</td><td>15/Sep/2026</td><td><span class="badge warning">Planeada</span></td></tr>
-                    <tr><td><strong>OP-0042</strong></td><td>9213-CAM-PIEL</td><td>250</td><td>10/Sep/2026</td><td><span class="badge info">En Producción</span></td></tr>
-                    <tr><td><strong>OP-0041</strong></td><td>9209-CAF-CRAZ</td><td>200</td><td>05/Sep/2026</td><td><span class="badge info">En Producción</span></td></tr>
-                    <tr><td><strong>OP-0040</strong></td><td>1002-NEG-NUCA</td><td>150</td><td>28/Ago/2026</td><td><span class="badge success">Terminada</span></td></tr>
-                </tbody>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Órdenes de Producción</b>
+        </td></tr>
+        <tr><td style="background:#f9fafb; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-size:0.82em;">
+            <span style="background:#2563eb; color:white; padding:4px 10px; font-weight:600;">➕ Nueva OP</span>
+            <span style="background:#16a34a; color:white; padding:4px 10px; font-weight:600;">📦 Recibir</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">🖨️ Imprimir</span>
+        </td></tr>
+        <tr><td style="padding:0;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Folio</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Variante</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Pares</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Entrega</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Estatus</th>
+                </tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OP-0043</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">9215-NEG-CRAZ</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">300</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">15/Sep/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#fef3c7; color:#d97706; padding:2px 8px; font-weight:600;">Planeada</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OP-0042</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">9213-CAM-PIEL</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">250</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">10/Sep/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dbeafe; color:#2563eb; padding:2px 8px; font-weight:600;">En Producción</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OP-0041</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">9209-CAF-CRAZ</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">200</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">05/Sep/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dbeafe; color:#2563eb; padding:2px 8px; font-weight:600;">En Producción</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>OP-0040</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">1002-NEG-NUCA</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">150</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">28/Ago/2026</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">Terminada</span></td></tr>
             </table>
-        </div>
-    </div>
+        </td></tr>
+    </table>
 
     <h3>Seguimiento por Estación</h3>
     <p>Cada OP tiene un seguimiento automático por las 6 estaciones del taller:</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">Seguimiento — OP-0042</span>
-        </div>
-        <div class="mock-body">
-            <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; text-align:center;">
-                <div style="padding:12px; background:var(--success-light); border-radius:8px;">
-                    <div style="font-size:1.2em;">✅</div>
-                    <div style="font-weight:600; font-size:0.85em;">Corte</div>
-                    <div style="font-size:0.75em; color:var(--gray-500);">01 Sep</div>
-                </div>
-                <div style="padding:12px; background:var(--success-light); border-radius:8px;">
-                    <div style="font-size:1.2em;">✅</div>
-                    <div style="font-weight:600; font-size:0.85em;">Pespunte</div>
-                    <div style="font-size:0.75em; color:var(--gray-500);">02 Sep</div>
-                </div>
-                <div style="padding:12px; background:var(--success-light); border-radius:8px;">
-                    <div style="font-size:1.2em;">✅</div>
-                    <div style="font-weight:600; font-size:0.85em;">Montado</div>
-                    <div style="font-size:0.75em; color:var(--gray-500);">04 Sep</div>
-                </div>
-                <div style="padding:12px; background:var(--warning-light); border:2px solid var(--warning); border-radius:8px;">
-                    <div style="font-size:1.2em;">⚙️</div>
-                    <div style="font-weight:600; font-size:0.85em;">Ensuelado</div>
-                    <div style="font-size:0.75em; color:var(--warning);">En proceso</div>
-                </div>
-                <div style="padding:12px; background:var(--gray-50); border-radius:8px;">
-                    <div style="font-size:1.2em;">⏳</div>
-                    <div style="font-weight:600; font-size:0.85em;">Acabado</div>
-                    <div style="font-size:0.75em; color:var(--gray-500);">Pendiente</div>
-                </div>
-                <div style="padding:12px; background:var(--gray-50); border-radius:8px;">
-                    <div style="font-size:1.2em;">⏳</div>
-                    <div style="font-weight:600; font-size:0.85em;">Empaque</div>
-                    <div style="font-size:0.75em; color:var(--gray-500);">Pendiente</div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>Seguimiento — OP-0042</b>
+        </td></tr>
+        <tr><td style="padding:16px;">
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="padding:8px; text-align:center; background:#dcfce7; width:16%;">
+                        <div>✅</div>
+                        <div style="font-weight:600; font-size:0.85em;">Corte</div>
+                        <div style="font-size:0.75em; color:#6b7280;">01 Sep</div>
+                    </td>
+                    <td style="padding:8px; text-align:center; background:#dcfce7; width:16%;">
+                        <div>✅</div>
+                        <div style="font-weight:600; font-size:0.85em;">Pespunte</div>
+                        <div style="font-size:0.75em; color:#6b7280;">02 Sep</div>
+                    </td>
+                    <td style="padding:8px; text-align:center; background:#dcfce7; width:16%;">
+                        <div>✅</div>
+                        <div style="font-weight:600; font-size:0.85em;">Montado</div>
+                        <div style="font-size:0.75em; color:#6b7280;">04 Sep</div>
+                    </td>
+                    <td style="padding:8px; text-align:center; background:#fef3c7; border:2px solid #d97706; width:16%;">
+                        <div>⚙️</div>
+                        <div style="font-weight:600; font-size:0.85em;">Ensuelado</div>
+                        <div style="font-size:0.75em; color:#d97706;">En proceso</div>
+                    </td>
+                    <td style="padding:8px; text-align:center; background:#f9fafb; width:16%;">
+                        <div>⏳</div>
+                        <div style="font-weight:600; font-size:0.85em;">Acabado</div>
+                        <div style="font-size:0.75em; color:#6b7280;">Pendiente</div>
+                    </td>
+                    <td style="padding:8px; text-align:center; background:#f9fafb; width:16%;">
+                        <div>⏳</div>
+                        <div style="font-weight:600; font-size:0.85em;">Empaque</div>
+                        <div style="font-size:0.75em; color:#6b7280;">Pendiente</div>
+                    </td>
+                </tr>
+            </table>
+        </td></tr>
+    </table>
 
     <h3>Registrar Avance en una Estación</h3>
     <ol>
-        <li>Abra la OP y vaya a la pestaña <strong>Seguimiento</strong></li>
+        <li>Abra la OP y vaya a la pestaña <b>Seguimiento</b></li>
         <li>Haga doble clic en la estación que desea actualizar</li>
-        <li>Capture los <strong>pares procesados</strong> y <strong>pares defectuosos</strong></li>
-        <li>La estación cambia a <span class="badge success">Completado</span></li>
+        <li>Capture los <b>pares procesados</b> y <b>pares defectuosos</b></li>
+        <li>La estación cambia a <span style="background:#dcfce7; color:#16a34a; padding:1px 6px; font-weight:600;">Completado</span></li>
         <li>La siguiente estación se habilita automáticamente</li>
     </ol>
 </div>
@@ -597,50 +314,71 @@
     <h2>5. Inventario de Insumos</h2>
     <p>Control de materia prima: piel, suela, forro, herrajes, empaque y más.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Inventario</span>
-        </div>
-        <div class="mock-toolbar">
-            <span class="mock-btn primary">➕ Nuevo Insumo</span>
-            <span class="mock-btn success">📥 Entrada</span>
-            <span class="mock-btn danger">📤 Salida</span>
-            <span class="mock-btn outline">🔄 Ajuste</span>
-            <span class="mock-btn outline">📋 Exportar</span>
-            <div style="flex:1;"></div>
-            <select style="padding:6px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em;">
-                <option>Todas las categorías</option>
-                <option>Piel</option>
-                <option>Suelas</option>
-                <option>Forro</option>
-                <option>Herraje</option>
-            </select>
-        </div>
-        <div class="mock-body" style="padding:0;">
-            <table class="mock-table">
-                <thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Stock</th><th>Mínimo</th><th>Estado</th></tr></thead>
-                <tbody>
-                    <tr><td>PIEL-001</td><td>Piel CRAZY Negro</td><td>Piel</td><td>856 dm²</td><td>500</td><td><span class="badge success">OK</span></td></tr>
-                    <tr><td>SUEL-001</td><td>Suela RX Hombre 23-27</td><td>Suelas</td><td>3,200 pza</td><td>2,000</td><td><span class="badge success">OK</span></td></tr>
-                    <tr><td>FORR-001</td><td>Forro Textil Negro</td><td>Forro</td><td>180 dm²</td><td>600</td><td><span class="badge danger">⚠ Bajo</span></td></tr>
-                    <tr><td>PIEL-007</td><td>Piel LIZARD Negro</td><td>Piel</td><td>95 dm²</td><td>150</td><td><span class="badge danger">⚠ Bajo</span></td></tr>
-                    <tr><td>HERR-002</td><td>Ojales metálicos</td><td>Herraje</td><td>4,500 pza</td><td>5,000</td><td><span class="badge warning">Cerca</span></td></tr>
-                </tbody>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Inventario</b>
+        </td></tr>
+        <tr><td style="background:#f9fafb; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-size:0.82em;">
+            <span style="background:#2563eb; color:white; padding:4px 10px; font-weight:600;">➕ Nuevo Insumo</span>
+            <span style="background:#16a34a; color:white; padding:4px 10px; font-weight:600;">📥 Entrada</span>
+            <span style="background:#dc2626; color:white; padding:4px 10px; font-weight:600;">📤 Salida</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">🔄 Ajuste</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">📋 Exportar</span>
+        </td></tr>
+        <tr><td style="padding:0;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Código</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Nombre</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Categoría</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Stock</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Mínimo</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Estado</th>
+                </tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">PIEL-001</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Piel CRAZY Negro</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Piel</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">856 dm²</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">500</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">OK</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">SUEL-001</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Suela RX Hombre 23-27</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Suelas</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">3,200 pza</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">2,000</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">OK</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">FORR-001</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Forro Textil Negro</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Forro</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">180 dm²</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">600</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#fee2e2; color:#dc2626; padding:2px 8px; font-weight:600;">⚠ Bajo</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">PIEL-007</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Piel LIZARD Negro</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Piel</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">95 dm²</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">150</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#fee2e2; color:#dc2626; padding:2px 8px; font-weight:600;">⚠ Bajo</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">HERR-002</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Ojales metálicos</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Herraje</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">4,500 pza</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">5,000</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#fef3c7; color:#d97706; padding:2px 8px; font-weight:600;">Cerca</span></td></tr>
             </table>
-        </div>
-    </div>
+        </td></tr>
+    </table>
 
     <h3>Movimientos de Inventario</h3>
     <ul>
-        <li><strong>📥 Entrada:</strong> Registrar recepción de mercancía (también se al al recibir una OC)</li>
-        <li><strong>📤 Salida:</strong> Registrar salida de material (uso en producción, merma)</li>
-        <li><strong>🔄 Ajuste:</strong> Corregir diferencias de inventario (conteo físico)</li>
+        <li><b>📥 Entrada:</b> Registrar recepción de mercancía (también se al recibir una OC)</li>
+        <li><b>📤 Salida:</b> Registrar salida de material (uso en producción, merma)</li>
+        <li><b>🔄 Ajuste:</b> Corregir diferencias de inventario (conteo físico)</li>
     </ul>
 
-    <div class="note warning">
-        <strong>⚠️ Stock mínimo:</strong> Cuando el stock de un insumo cae por debajo del mínimo, aparece una alerta en el Dashboard y en la vista de inventario. Es importante generar una orden de compra antes de quedarse sin material.
-    </div>
+    <p style="background:#fef3c7; border-left:4px solid #d97706; padding:10px 14px; margin:12px 0;">
+        <b>⚠️ Stock mínimo:</b> Cuando el stock de un insumo cae por debajo del mínimo, aparece una alerta en el Dashboard y en la vista de inventario. Es importante generar una orden de compra antes de quedarse sin material.
+    </p>
 </div>
 
 <!-- ════════════════ 6. CLIENTES Y PEDIDOS ════════════════ -->
@@ -648,62 +386,69 @@
     <h2>6. Clientes y Pedidos</h2>
     <p>Gestiona el catálogo de clientes y los pedidos que realizan.</p>
 
-    <div class="mock-tabs">
-        <div class="mock-tab active">👥 Clientes</div>
-        <div class="mock-tab">📋 Pedidos</div>
-    </div>
+    <table style="width:100%; border-bottom:2px solid #e5e7eb; margin-bottom:16px;">
+        <tr>
+            <td style="padding:8px 16px; font-weight:600; color:#2563eb; border-bottom:2px solid #2563eb;">👥 Clientes</td>
+            <td style="padding:8px 16px; font-weight:600; color:#6b7280;">📋 Pedidos</td>
+        </tr>
+    </table>
 
     <h3>Crear un Nuevo Pedido</h3>
     <ol>
-        <li>Vaya a <strong>Clientes → Pedidos</strong></li>
-        <li>Haga clic en <strong>➕ Nuevo Pedido</strong></li>
-        <li>Seleccione el <strong>cliente</strong></li>
-        <li>Capture las líneas del pedido: <strong>modelo, piel, color</strong></li>
-        <li>Para cada línea, ingrese los <strong>pares por talla</strong></li>
+        <li>Vaya a <b>Clientes → Pedidos</b></li>
+        <li>Haga clic en <b>➕ Nuevo Pedido</b></li>
+        <li>Seleccione el <b>cliente</b></li>
+        <li>Capture las líneas del pedido: <b>modelo, piel, color</b></li>
+        <li>Para cada línea, ingrese los <b>pares por talla</b></li>
         <li>Guarde el pedido. El folio se asigna automáticamente (PED-XXXX)</li>
     </ol>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">Nuevo Pedido de Cliente</span>
-        </div>
-        <div class="mock-body">
-            <div class="mock-form">
-                <div class="mock-field">
-                    <label>Cliente *</label>
-                    <input type="text" value="CARMELO LÓPEZ" readonly>
-                </div>
-                <div class="mock-field">
-                    <label>Suela</label>
-                    <select><option>RX</option><option>Flex</option><option>Crepe</option></select>
-                </div>
-                <div class="mock-field">
-                    <label>Horma</label>
-                    <input type="text" value="Horma 12">
-                </div>
-                <div class="mock-field">
-                    <label>Observaciones</label>
-                    <input type="text" placeholder="Opcional">
-                </div>
-            </div>
-            <hr style="margin:16px 0; border:none; border-top:1px solid #e5e7eb;">
-            <h4 style="margin-bottom:8px;">Líneas del Pedido</h4>
-            <table class="mock-table">
-                <thead><tr><th>Modelo</th><th>Piel</th><th>Color</th><th>Total Pares</th></tr></thead>
-                <tbody>
-                    <tr><td>9215</td><td>CINCELADO</td><td>NEGRO/NEGRO</td><td>120</td></tr>
-                    <tr><td>9213</td><td>NUCA</td><td>CAFÉ/CAMEL</td><td>80</td></tr>
-                    <tr><td>1002</td><td>CRAZY</td><td>CAMEL/CAMEL</td><td>60</td></tr>
-                </tbody>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>Nuevo Pedido de Cliente</b>
+        </td></tr>
+        <tr><td style="padding:16px;">
+            <table style="width:100%; border-collapse:collapse; margin-bottom:12px;">
+                <tr>
+                    <td style="padding:4px 8px; width:50%; font-size:0.85em;">
+                        <b style="color:#6b7280;">Cliente *</b><br>
+                        <input type="text" value="CARMELO LÓPEZ" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                    <td style="padding:4px 8px; width:50%; font-size:0.85em;">
+                        <b style="color:#6b7280;">Suela</b><br>
+                        <input type="text" value="RX" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                </tr>
             </table>
-        </div>
-    </div>
+            <hr style="margin:8px 0; border:none; border-top:1px solid #e5e7eb;">
+            <h4 style="margin-bottom:6px;">Líneas del Pedido</h4>
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Modelo</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Piel</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Color</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Total Pares</th>
+                </tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">9215</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">CINCELADO</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">NEGRO/NEGRO</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">120</td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">9213</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">NUCA</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">CAFÉ/CAMEL</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">80</td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">1002</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">CRAZY</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">CAMEL/CAMEL</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">60</td></tr>
+            </table>
+        </td></tr>
+    </table>
 
     <h3>Estatus de los Pedidos</h3>
     <ul>
-        <li><span class="badge warning">Pendiente</span> — Pedido registrado, pendiente de programar</li>
-        <li><span class="badge info">Programado</span> — Asignado a una semana de producción</li>
+        <li><span style="background:#fef3c7; color:#d97706; padding:1px 6px; font-weight:600;">Pendiente</span> — Pedido registrado, pendiente de programar</li>
+        <li><span style="background:#dbeafe; color:#2563eb; padding:1px 6px; font-weight:600;">Programado</span> — Asignado a una semana de producción</li>
     </ul>
 </div>
 
@@ -712,42 +457,57 @@
     <h2>7. Programación Semanal</h2>
     <p>Planifica qué pedidos se producen en cada semana. Las líneas programadas generan automáticamente las órdenes de producción.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Programación Semanal</span>
-        </div>
-        <div class="mock-toolbar">
-            <span class="mock-btn primary">➕ Programar Línea</span>
-            <span class="mock-btn outline">📥 Importar Excel</span>
-            <span class="mock-btn outline">📋 Exportar</span>
-            <div style="flex:1;"></div>
-            <span style="padding:6px 14px; background:var(--primary-light); border-radius:6px; font-size:0.85em; font-weight:600; color:var(--primary);">📅 Semana: 01 Sep - 05 Sep 2026</span>
-        </div>
-        <div class="mock-body" style="padding:0;">
-            <table class="mock-table">
-                <thead><tr><th>#</th><th>Folio</th><th>Cliente</th><th>Modelo</th><th>Piel</th><th>Color</th><th>Pares</th><th>Estatus</th></tr></thead>
-                <tbody>
-                    <tr><td>1</td><td>901</td><td>CARMELO LÓPEZ</td><td>9215</td><td>CRAZY</td><td>NEGRO/NEGRO</td><td>120</td><td><span class="badge success">Programado</span></td></tr>
-                    <tr><td>2</td><td>902</td><td>RENATO GALAN</td><td>9213</td><td>NUCA</td><td>CAFÉ/CAMEL</td><td>80</td><td><span class="badge success">Programado</span></td></tr>
-                    <tr><td>3</td><td>903</td><td>MAGALY</td><td>1002</td><td>CRAZY</td><td>CAMEL/CAMEL</td><td>60</td><td><span class="badge success">Programado</span></td></tr>
-                </tbody>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Programación Semanal</b>
+        </td></tr>
+        <tr><td style="background:#f9fafb; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-size:0.82em;">
+            <span style="background:#2563eb; color:white; padding:4px 10px; font-weight:600;">➕ Programar Línea</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">📥 Importar Excel</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">📋 Exportar</span>
+            <span style="float:right; padding:4px 10px; background:#dbeafe; font-weight:600; color:#2563eb;">📅 Semana: 01 Sep - 05 Sep 2026</span>
+        </td></tr>
+        <tr><td style="padding:0;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">#</th>
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">Cliente</th>
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">Modelo</th>
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">Piel</th>
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">Color</th>
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">Pares</th>
+                    <th style="padding:6px 8px; text-align:left; border-bottom:2px solid #e5e7eb;">Estatus</th>
+                </tr>
+                <tr><td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">1</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">CARMELO LÓPEZ</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">9215</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">CRAZY</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">NEGRO/NEGRO</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">120</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">Programado</span></td></tr>
+                <tr><td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">2</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">RENATO GALAN</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">9213</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">NUCA</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">CAFÉ/CAMEL</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;">80</td>
+                    <td style="padding:6px 8px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">Programado</span></td></tr>
             </table>
-        </div>
-    </div>
+        </td></tr>
+    </table>
 
     <h3>Programar un Pedido</h3>
     <ol>
-        <li>Seleccione la <strong>semana</strong> en el panel izquierdo</li>
-        <li>Haga clic en <strong>➕ Programar Línea</strong></li>
-        <li>Seleccione el <strong>pedido</strong> del cliente (solo aparecen los pendientes)</li>
+        <li>Seleccione la <b>semana</b> en el panel izquierdo</li>
+        <li>Haga clic en <b>➕ Programar Línea</b></li>
+        <li>Seleccione el <b>pedido</b> del cliente (solo aparecen los pendientes)</li>
         <li>Confirme la línea y sus tallas</li>
-        <li>El sistema crea automáticamente la <strong>Orden de Producción</strong> asociada</li>
+        <li>El sistema crea automáticamente la <b>Orden de Producción</b> asociada</li>
     </ol>
 
-    <div class="note success">
-        <strong>✅ Generación automática de OP:</strong> Al programar una línea, se crea una Orden de Producción con estatus <em>Planeada</em>, lista para iniciar en la pestaña de Producción.
-    </div>
+    <p style="background:#dcfce7; border-left:4px solid #16a34a; padding:10px 14px; margin:12px 0;">
+        <b>✅ Generación automática de OP:</b> Al programar una línea, se crea una Orden de Producción con estatus <i>Planeada</i>, lista para iniciar en la pestaña de Producción.
+    </p>
 </div>
 
 <!-- ════════════════ 8. DIAGRAMA GANTT ════════════════ -->
@@ -755,95 +515,87 @@
     <h2>8. Diagrama Gantt de Producción</h2>
     <p>Visualización temporal de todas las órdenes de producción con el avance por estación.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">SIAC ERP — Gantt de Producción</span>
-        </div>
-        <div class="mock-toolbar">
-            <span class="mock-btn outline">◀ Anterior</span>
-            <span class="mock-btn primary">Hoy</span>
-            <span class="mock-btn outline">Siguiente ▶</span>
-            <div style="flex:1;"></div>
-            <span style="font-weight:600; color:var(--gray-700);">Septiembre 2026</span>
-        </div>
-        <div class="mock-body">
-            <div class="mock-gantt">
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="text-align:left; min-width:180px;">Orden</th>
-                            <th>1</th><th>2</th><th>3</th><th>4</th><th>5</th>
-                            <th>6</th><th>7</th><th>8</th><th>9</th><th>10</th>
-                            <th>11</th><th>12</th><th>13</th><th>14</th><th>15</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td class="gantt-label">OP-0043 • 9215</td>
-                            <td colspan="3"><div class="gantt-bar gantt-corte" title="Corte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-pespunte" title="Pespunte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-montado" title="Montado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-ensuelado" title="Ensuelado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-acabado" title="Acabado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-empaque" title="Empaque"></div></td>
-                            <td></td>
-                        </tr>
-                        <tr>
-                            <td class="gantt-label">OP-0042 • 9213</td>
-                            <td colspan="2"><div class="gantt-bar gantt-corte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-pespunte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-montado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-ensuelado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-acabado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-empaque"></div></td>
-                            <td></td><td></td><td></td>
-                        </tr>
-                        <tr>
-                            <td class="gantt-label">OP-0041 • 9209</td>
-                            <td colspan="2"><div class="gantt-bar gantt-corte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-pespunte"></div></td>
-                            <td colspan="3"><div class="gantt-bar gantt-montado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-ensuelado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-acabado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-empaque"></div></td>
-                            <td></td>
-                        </tr>
-                        <tr>
-                            <td class="gantt-label">OP-0040 • 1002</td>
-                            <td colspan="2"><div class="gantt-bar gantt-corte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-pespunte"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-montado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-ensuelado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-acabado"></div></td>
-                            <td colspan="2"><div class="gantt-bar gantt-empaque"></div></td>
-                            <td></td><td></td><td></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div style="margin-top:12px; display:flex; gap:16px; flex-wrap:wrap; font-size:0.82em;">
-                <span><span class="gantt-bar gantt-corte" style="display:inline-block; width:16px; height:12px; vertical-align:middle;"></span> Corte</span>
-                <span><span class="gantt-bar gantt-pespunte" style="display:inline-block; width:16px; height:12px; vertical-align:middle;"></span> Pespunte</span>
-                <span><span class="gantt-bar gantt-montado" style="display:inline-block; width:16px; height:12px; vertical-align:middle;"></span> Montado</span>
-                <span><span class="gantt-bar gantt-ensuelado" style="display:inline-block; width:16px; height:12px; vertical-align:middle;"></span> Ensuelado</span>
-                <span><span class="gantt-bar gantt-acabado" style="display:inline-block; width:16px; height:12px; vertical-align:middle;"></span> Acabado</span>
-                <span><span class="gantt-bar gantt-empaque" style="display:inline-block; width:16px; height:12px; vertical-align:middle;"></span> Empaque</span>
-            </div>
-        </div>
-    </div>
-
-    <h3>Cómo leer el Gantt</h3>
-    <ul>
-        <li><strong>Filas:</strong> Cada fila es una Orden de Producción</li>
-        <li><strong>Columnas:</strong> Días del mes</li>
-        <li><strong>Colores:</strong> Cada color representa la estación de producción</li>
-        <li><strong>Colores persistentes:</strong> Cuando una OP pasa de una estación a otra, el color cambia pero el anterior se conserva visualmente</li>
-    </ul>
-
-    <div class="note">
-        <strong>💡 Interacción:</strong> Haga clic en las flechas ◀ ▶ para navegar entre meses. El botón <strong>Hoy</strong> regresa al mes actual. Haga doble clic en una barra para ver el seguimiento detallado de la OP.
-    </div>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Gantt de Producción</b>
+        </td></tr>
+        <tr><td style="background:#f9fafb; padding:6px 10px; border-bottom:1px solid #e5e7eb; font-size:0.82em;">
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">◀ Anterior</span>
+            <span style="background:#2563eb; color:white; padding:4px 10px; font-weight:600;">Hoy</span>
+            <span style="border:1px solid #d1d5db; padding:4px 10px; color:#374151;">Siguiente ▶</span>
+            <span style="float:right; font-weight:600; color:#374151;">Septiembre 2026</span>
+        </td></tr>
+        <tr><td style="padding:8px;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.8em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:4px; text-align:left; min-width:140px; border-bottom:1px solid #e5e7eb;">Orden</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">1</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">2</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">3</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">4</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">5</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">6</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">7</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">8</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">9</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">10</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">11</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">12</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">13</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">14</th>
+                    <th style="padding:4px; text-align:center; border-bottom:1px solid #e5e7eb;">15</th>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-weight:600; white-space:nowrap;">OP-0043 • 9215</td>
+                    <td colspan="3" style="padding:1px;"><div style="background:#6366f1; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#f59e0b; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#ef4444; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#10b981; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#3b82f6; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#8b5cf6; height:18px; border-radius:3px;"></div></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-weight:600; white-space:nowrap;">OP-0042 • 9213</td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#6366f1; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#f59e0b; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#ef4444; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#10b981; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#3b82f6; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#8b5cf6; height:18px; border-radius:3px;"></div></td>
+                    <td></td><td></td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-weight:600; white-space:nowrap;">OP-0041 • 9209</td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#6366f1; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#f59e0b; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="3" style="padding:1px;"><div style="background:#ef4444; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#10b981; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#3b82f6; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#8b5cf6; height:18px; border-radius:3px;"></div></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-weight:600; white-space:nowrap;">OP-0040 • 1002</td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#6366f1; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#f59e0b; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#ef4444; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#10b981; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#3b82f6; height:18px; border-radius:3px;"></div></td>
+                    <td colspan="2" style="padding:1px;"><div style="background:#8b5cf6; height:18px; border-radius:3px;"></div></td>
+                    <td></td><td></td>
+                </tr>
+            </table>
+            <p style="margin-top:8px; font-size:0.82em;">
+                <span style="display:inline-block; width:12px; height:10px; background:#6366f1; vertical-align:middle;"></span> Corte
+                <span style="display:inline-block; width:12px; height:10px; background:#f59e0b; vertical-align:middle; margin-left:8px;"></span> Pespunte
+                <span style="display:inline-block; width:12px; height:10px; background:#ef4444; vertical-align:middle; margin-left:8px;"></span> Montado
+                <span style="display:inline-block; width:12px; height:10px; background:#10b981; vertical-align:middle; margin-left:8px;"></span> Ensuelado
+                <span style="display:inline-block; width:12px; height:10px; background:#3b82f6; vertical-align:middle; margin-left:8px;"></span> Acabado
+                <span style="display:inline-block; width:12px; height:10px; background:#8b5cf6; vertical-align:middle; margin-left:8px;"></span> Empaque
+            </p>
+        </td></tr>
+    </table>
 </div>
 
 <!-- ════════════════ 9. FICHAS TÉCNICAS ════════════════ -->
@@ -851,28 +603,65 @@
     <h2>9. Fichas Técnicas</h2>
     <p>Especificaciones de diseño para cada modelo de zapato. Contiene todos los materiales y características del producto.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">Ficha Técnica — Modelo 9215</span>
-        </div>
-        <div class="mock-body">
-            <div class="mock-form">
-                <div class="mock-field"><label>Proyecto</label><input type="text" value="Modelo 9215" readonly></div>
-                <div class="mock-field"><label>Etapa</label><select><option>PRODUCCIÓN</option><option>MUESTRA</option></select></div>
-                <div class="mock-field"><label>ID Diseño</label><input type="text" value="DIS-9215"></div>
-                <div class="mock-field"><label>Color</label><input type="text" value="NEGRO / CAFÉ"></div>
-                <div class="mock-field"><label>Piel Corte 1</label><input type="text" value="CINCELADO"></div>
-                <div class="mock-field"><label>Forro</label><input type="text" value="Textil Negro"></div>
-                <div class="mock-field"><label>Suela</label><input type="text" value="RX Hombre"></div>
-                <div class="mock-field"><label>Plantilla</label><input type="text" value="Eva 3mm"></div>
-                <div class="mock-field"><label>Herraje</label><input type="text" value="Hebilla + Ojales"></div>
-                <div class="mock-field"><label>Acabado</label><input type="text" value="Pintura + Cepillado"></div>
-                <div class="mock-field"><label>Caja</label><input type="text" value="Caja Estándar"></div>
-                <div class="mock-field"><label>Hilo Armado</label><input type="text" value="Nylon #40 Negro"></div>
-            </div>
-        </div>
-    </div>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>Ficha Técnica — Modelo 9215</b>
+        </td></tr>
+        <tr><td style="padding:16px;">
+            <table style="width:100%; border-collapse:collapse;">
+                <tr>
+                    <td style="padding:4px 8px; width:50%; font-size:0.85em;">
+                        <b style="color:#6b7280;">Proyecto</b><br>
+                        <input type="text" value="Modelo 9215" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                    <td style="padding:4px 8px; width:50%; font-size:0.85em;">
+                        <b style="color:#6b7280;">Etapa</b><br>
+                        <input type="text" value="PRODUCCIÓN" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">ID Diseño</b><br>
+                        <input type="text" value="DIS-9215" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Color</b><br>
+                        <input type="text" value="NEGRO / CAFÉ" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Piel Corte 1</b><br>
+                        <input type="text" value="CINCELADO" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Forro</b><br>
+                        <input type="text" value="Textil Negro" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Suela</b><br>
+                        <input type="text" value="RX Hombre" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Plantilla</b><br>
+                        <input type="text" value="Eva 3mm" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Herraje</b><br>
+                        <input type="text" value="Hebilla + Ojales" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                    <td style="padding:4px 8px; font-size:0.85em;">
+                        <b style="color:#6b7280;">Acabado</b><br>
+                        <input type="text" value="Pintura + Cepillado" style="width:100%; padding:6px; border:1px solid #d1d5db;" readonly>
+                    </td>
+                </tr>
+            </table>
+        </td></tr>
+    </table>
 </div>
 
 <!-- ════════════════ 10. CONFIGURACIÓN ════════════════ -->
@@ -880,21 +669,33 @@
     <h2>10. Configuración del Sistema</h2>
     <p>Accedida desde el menú o con <kbd>Ctrl</kbd>+<kbd>,</kbd>. Solo visible para administradores.</p>
 
-    <h3>Datos de la Empresa</h3>
-    <ul>
-        <li>Nombre, Razón Social, RFC</li>
-        <li>Domicilio, Teléfono, Email</li>
-        <li>Logo (para impresiones y splash)</li>
-    </ul>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>SIAC ERP — Configuración</b>
+        </td></tr>
+        <tr><td style="padding:16px;">
+            <h3 style="margin-top:0;">Datos de la Empresa</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em; margin-bottom:12px;">
+                <tr>
+                    <td style="padding:4px 8px; width:50%;"><b style="color:#6b7280;">Nombre:</b> Goretti Calzado</td>
+                    <td style="padding:4px 8px; width:50%;"><b style="color:#6b7280;">RFC:</b> GCA123456XX0</td>
+                </tr>
+                <tr>
+                    <td style="padding:4px 8px;"><b style="color:#6b7280;">Teléfono:</b> 818-123-4567</td>
+                    <td style="padding:4px 8px;"><b style="color:#6b7280;">Email:</b> contacto@goretti.com</td>
+                </tr>
+            </table>
 
-    <h3>Configuración de Base de Datos</h3>
-    <ul>
-        <li><strong>SQLite:</strong> Base de datos local (desarrollo/estaciones secundarias)</li>
-        <li><strong>PostgreSQL:</strong> Estación principal / producción</li>
-    </ul>
+            <h3>Configuración de Base de Datos</h3>
+            <ul>
+                <li><b>SQLite:</b> Base de datos local (desarrollo/estaciones secundarias)</li>
+                <li><b>PostgreSQL:</b> Estación principal / producción</li>
+            </ul>
 
-    <h3>Sincronización</h3>
-    <p>El sistema sincroniza automáticamente con Supabase cuando hay conexión a Internet. Los cambios realizados offline se envían en segundo plano.</p>
+            <h3>Sincronización</h3>
+            <p>El sistema sincroniza automáticamente con Supabase cuando hay conexión a Internet. Los cambios realizados offline se envían en segundo plano.</p>
+        </td></tr>
+    </table>
 </div>
 
 <!-- ════════════════ 11. USUARIOS ════════════════ -->
@@ -902,25 +703,36 @@
     <h2>11. Usuarios y Permisos</h2>
     <p>Control de acceso por módulo y acción.</p>
 
-    <div class="mock-window">
-        <div class="mock-titlebar">
-            <div class="mock-dot r"></div><div class="mock-dot y"></div><div class="mock-dot g"></div>
-            <span class="mock-title">Administración de Usuarios</span>
-        </div>
-        <div class="mock-body" style="padding:0;">
-            <table class="mock-table">
-                <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th></tr></thead>
-                <tbody>
-                    <tr><td><strong>admin</strong></td><td>Administrador del Sistema</td><td><span class="badge info">Admin</span></td><td><span class="badge success">Activo</span></td></tr>
-                    <tr><td><strong>maria</strong></td><td>María García</td><td><span class="badge warning">Supervisor</span></td><td><span class="badge success">Activo</span></td></tr>
-                    <tr><td><strong>juan</strong></td><td>Juan Pérez</td><td><span class="badge">Operador</span></td><td><span class="badge success">Activo</span></td></tr>
-                </tbody>
+    <table style="width:100%; border:1px solid #d1d5db; margin:12px 0;">
+        <tr><td style="background:#f3f4f6; padding:6px 10px; font-size:0.85em; color:#6b7280; border-bottom:1px solid #e5e7eb;">
+            <b>Administración de Usuarios</b>
+        </td></tr>
+        <tr><td style="padding:0;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                <tr style="background:#f3f4f6;">
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Usuario</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Nombre</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Rol</th>
+                    <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Estado</th>
+                </tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>admin</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Administrador del Sistema</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dbeafe; color:#2563eb; padding:2px 8px; font-weight:600;">Admin</span></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">Activo</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>maria</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">María García</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#fef3c7; color:#d97706; padding:2px 8px; font-weight:600;">Supervisor</span></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">Activo</span></td></tr>
+                <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><b>juan</b></td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Juan Pérez</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Operador</td>
+                    <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><span style="background:#dcfce7; color:#16a34a; padding:2px 8px; font-weight:600;">Activo</span></td></tr>
             </table>
-        </div>
-    </div>
+        </td></tr>
+    </table>
 
     <h3>Permisos por Módulo</h3>
-    <p>Cada usuario puede tener permisos para: <strong>ver, crear, editar, eliminar, exportar</strong> en cada módulo:</p>
+    <p>Cada usuario puede tener permisos para: <b>ver, crear, editar, eliminar, exportar</b> en cada módulo:</p>
     <ul>
         <li>Órdenes de Compra</li>
         <li>Producción</li>
@@ -936,23 +748,24 @@
 <div class="section" id="atajos">
     <h2>12. Atajos de Teclado</h2>
 
-    <table class="mock-table" style="max-width:500px;">
-        <thead><tr><th>Atajo</th><th>Acción</th></tr></thead>
-        <tbody>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd></td><td>Órdenes de Compra</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>2</kbd></td><td>Producción</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>3</kbd></td><td>Inventario</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>4</kbd></td><td>Clientes</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>5</kbd></td><td>Programación</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>6</kbd></td><td>Dashboard</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Nuevo registro</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Guardar</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Buscar</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Imprimir</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Exportar</td></tr>
-            <tr><td><kbd>F5</kbd></td><td>Actualizar vista</td></tr>
-            <tr><td><kbd>Escape</kbd></td><td>Cerrar diálogo</td></tr>
-        </tbody>
+    <table style="width:100%; border-collapse:collapse; font-size:0.85em; max-width:500px;">
+        <tr style="background:#f3f4f6;">
+            <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Atajo</th>
+            <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Acción</th>
+        </tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>1</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Órdenes de Compra</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>2</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Producción</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>3</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Inventario</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>4</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Clientes</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>5</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Programación</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>6</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Dashboard</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Nuevo registro</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Editar registro</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Imprimir</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>X</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Exportar a Excel</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Buscador global</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>F5</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Actualizar vista</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;"><kbd>Escape</kbd></td><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Cerrar diálogo</td></tr>
     </table>
 </div>
 
@@ -960,40 +773,48 @@
 <div class="section" id="soporte">
     <h2>13. Soporte y Contacto</h2>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
-        <div style="background:var(--primary-light); padding:20px; border-radius:8px;">
-            <h3 style="color:var(--primary-dark); margin-top:0;">📧 Soporte Técnico</h3>
-            <p><strong>Email:</strong> soporte@siac-erp.com</p>
-            <p><strong>Teléfono:</strong> 818-123-4567</p>
-            <p><strong>Horario:</strong> Lunes a Viernes 9:00 - 18:00</p>
-        </div>
-        <div style="background:var(--success-light); padding:20px; border-radius:8px;">
-            <h3 style="color:var(--success); margin-top:0;">📋 Actualizaciones</h3>
-            <p>El sistema verifica actualizaciones automáticamente al iniciar sesión.</p>
-            <p>Si hay una nueva versión, aparecerá un diálogo con la opción de instalar.</p>
-        </div>
-    </div>
+    <table style="width:100%; border-collapse:collapse;">
+        <tr>
+            <td style="width:50%; padding:8px; vertical-align:top;">
+                <div style="background:#dbeafe; padding:16px;">
+                    <h3 style="color:#1d4ed8; margin-top:0;">📧 Soporte Técnico</h3>
+                    <p><b>Email:</b> mluevanov@gmail.com</p>
+                    <p><b>Teléfono:</b> +52 477 452 1438</p>
+                    <p><b>Horario:</b> Lunes a Viernes 9:00 - 18:00</p>
+                </div>
+            </td>
+            <td style="width:50%; padding:8px; vertical-align:top;">
+                <div style="background:#dcfce7; padding:16px;">
+                    <h3 style="color:#16a34a; margin-top:0;">📋 Actualizaciones</h3>
+                    <p>El sistema verifica actualizaciones automáticamente al iniciar sesión.</p>
+                    <p>Si hay una nueva versión, aparecerá un diálogo con la opción de instalar.</p>
+                </div>
+            </td>
+        </tr>
+    </table>
 
     <h3>Solución de Problemas Comunes</h3>
-    <table class="mock-table">
-        <thead><tr><th>Problema</th><th>Solución</th></tr></thead>
-        <tbody>
-            <tr><td>No puedo iniciar sesión</td><td>Verifique su usuario y contraseña. Si es admin, restablezca desde另一 terminal.</td></tr>
-            <tr><td>El sistema va lento</td><td>Verifique la conexión de red. La sincronización puede tardar si hay muchos cambios pendientes.</td></tr>
-            <tr><td>No aparece un módulo</td><td>Sus permisos pueden no incluir acceso a ese módulo. Consulte al administrador.</td></tr>
-            <tr><td>Error al guardar</td><td>Verifique que todos los campos obligatorios estén llenos. Revise la conexión a la BD.</td></tr>
-        </tbody>
+    <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+        <tr style="background:#f3f4f6;">
+            <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Problema</th>
+            <th style="padding:6px 10px; text-align:left; border-bottom:2px solid #e5e7eb;">Solución</th>
+        </tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">No puedo iniciar sesión</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Verifique su usuario y contraseña. Si es admin, restablezca desde Configuración.</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">El sistema va lento</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Verifique la conexión de red. La sincronización puede tardar si hay muchos cambios pendientes.</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">No aparece un módulo</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Sus permisos pueden no incluir acceso a ese módulo. Consulte al administrador.</td></tr>
+        <tr><td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Error al guardar</td>
+            <td style="padding:6px 10px; border-bottom:1px solid #f3f4f6;">Verifique que todos los campos obligatorios estén llenos. Revise la conexión a la BD.</td></tr>
     </table>
 </div>
 
-<div style="text-align:center; padding:40px 0; color:var(--gray-500); font-size:0.88em;">
-    <p><strong>SIAC ERP</strong> — Sistema Integral de Administración y Control</p>
+<div style="text-align:center; padding:30px 0; color:#6b7280; font-size:0.88em;">
+    <p><b>SIAC ERP</b> — Sistema Integral de Administración y Control</p>
     <p>© 2026 Mario Felipe Luevano — Todos los derechos reservados</p>
-    <p style="margin-top:8px;">Versión 1.2.0 | Documentación generada automáticamente</p>
+    <p style="margin-top:6px;">Versión 1.2.0 | Documentación generada automáticamente</p>
 </div>
-
-</div><!-- container -->
-</div><!-- main-content -->
 
 </body>
 </html>

@@ -285,81 +285,21 @@ class ManualDialog(QDialog):
         self._sidebar.setCurrentRow(idx_inicial)
 
     def _css_qt(self) -> str:
-        """CSS extra para mejorar el renderizado dentro de QTextBrowser."""
+        """CSS extra para mejorar el renderizado dentro de QTextBrowser.
+        Solo usa propiedades soportadas por Qt's HTML engine."""
         return """
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 color: #111827;
                 line-height: 1.6;
-                padding: 20px 30px;
+                padding: 16px 20px;
             }
-            .cover {
-                background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-                color: white;
-                text-align: center;
-                padding: 60px 30px;
-                border-radius: 16px;
-                margin-bottom: 30px;
-            }
-            .cover h1 { font-size: 2.4em; margin-bottom: 8px; font-weight: 800; }
-            .cover .subtitle { font-size: 1.2em; opacity: 0.9; margin-bottom: 20px; }
-            .cover .version {
-                background: rgba(255,255,255,0.2);
-                display: inline-block;
-                padding: 6px 16px;
-                border-radius: 20px;
-                font-size: 0.9em;
-            }
-            .section {
-                background: white;
-                border-radius: 12px;
-                padding: 24px;
-                margin-bottom: 24px;
-            }
-            .section h2 {
-                font-size: 1.5em;
-                color: #1d4ed8;
-                margin-bottom: 16px;
-                padding-bottom: 8px;
-                border-bottom: 2px solid #dbeafe;
-            }
-            .section h3 {
-                font-size: 1.15em;
-                color: #374151;
-                margin: 18px 0 8px;
-            }
-            .section p { margin-bottom: 10px; color: #374151; }
-            .section ul, .section ol { margin: 8px 0 8px 20px; }
-            .section li { margin-bottom: 5px; color: #374151; }
-            .note {
-                background: #dbeafe;
-                border-left: 4px solid #2563eb;
-                padding: 12px 16px;
-                border-radius: 0 8px 8px 0;
-                margin: 14px 0;
-            }
-            .note.warning { background: #fef3c7; border-left-color: #d97706; }
-            .note.success { background: #dcfce7; border-left-color: #16a34a; }
-            .note strong { color: #111827; }
-            .badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 12px;
-                font-size: 0.82em;
-                font-weight: 600;
-            }
-            .badge.success { background: #dcfce7; color: #16a34a; }
-            .badge.warning { background: #fef3c7; color: #d97706; }
-            .badge.danger { background: #fee2e2; color: #dc2626; }
-            .badge.info { background: #dbeafe; color: #2563eb; }
-            kbd {
-                background: #f3f4f6;
-                border: 1px solid #d1d5db;
-                border-radius: 4px;
-                padding: 2px 8px;
-                font-family: monospace;
-                font-size: 0.9em;
-            }
+            h2 { color: #1d4ed8; font-size: 1.4em; margin: 16px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #dbeafe; }
+            h3 { color: #374151; font-size: 1.1em; margin: 14px 0 6px; }
+            p { margin-bottom: 10px; color: #374151; }
+            ul, ol { margin: 8px 0 8px 20px; }
+            li { margin-bottom: 4px; color: #374151; }
+            kbd { background: #f3f4f6; border: 1px solid #d1d5db; padding: 1px 6px; font-family: monospace; font-size: 0.9em; }
         """
 
     def _navegar_a(self, indice: int) -> None:
