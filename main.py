@@ -95,6 +95,86 @@ def _pre_configurar() -> bool:
     return True
 
 
+def _procesar_onboarding_json() -> bool:
+    """Lee onboarding.json del instalador y configura empresa + admin.
+
+    El instalador Inno Setup guarda los datos en un archivo JSON en el
+    mismo directorio que el ejecutable. Esta función los lee, crea la
+    empresa y el usuario admin en la BD, y elimina el archivo.
+    Devuelve True si procesó el archivo (empresa configurada).
+    """
+    import json
+    from pathlib import Path
+
+    # Buscar onboarding.json junto al ejecutable o junto al script
+    if getattr(sys, 'frozen', False):
+        base_dir = Path(sys.executable).parent
+    else:
+        base_dir = Path(__file__).resolve().parent
+    json_path = base_dir / "onboarding.json"
+    if not json_path.exists():
+        return False
+
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            datos = json.load(f)
+    except Exception as e:
+        print(f"Error leyendo onboarding.json: {e}")
+        return False
+
+    print("=" * 50)
+    print("  SIAC ERP — Configuración desde instalador")
+    print("=" * 50)
+
+    # 1. Guardar datos de empresa
+    try:
+        from src.models.empresa_model import EmpresaModel
+        model = EmpresaModel()
+        model.guardar_varias({
+            "nombre_empresa": datos.get("nombre_empresa", ""),
+            "razon_social": datos.get("razon_social", ""),
+            "rfc": datos.get("rfc", ""),
+            "domicilio": datos.get("domicilio", ""),
+            "telefono": datos.get("telefono", ""),
+            "email": datos.get("email", ""),
+        })
+        print(f"Empresa configurada: {datos.get('nombre_empresa', '')}")
+    except Exception as e:
+        print(f"Error guardando empresa: {e}")
+
+    # 2. Crear usuario admin
+    admin_user = datos.get("admin_user", "admin")
+    admin_pass = datos.get("admin_password", "admin123")
+    admin_nombre = datos.get("admin_nombre", "Administrador del Sistema")
+    try:
+        from src.models.accesos_model import UsuarioModel, PermisosModel
+        user_model = UsuarioModel()
+        perm_model = PermisosModel()
+        existing = user_model.obtener_por_username(admin_user)
+        if not existing:
+            admin_id = user_model.crear(
+                admin_user, admin_pass, admin_nombre, "admin")
+            perm_model.guardar(admin_id, perm_model.claves_totales())
+            print(f"Usuario admin creado: {admin_user}")
+        else:
+            user_model.cambiar_password(existing["id"], admin_pass)
+            user_model.actualizar(
+                existing["id"], admin_user, admin_nombre, "admin")
+            print(f"Usuario admin actualizado: {admin_user}")
+    except Exception as e:
+        print(f"Error creando admin: {e}")
+
+    # 3. Eliminar el archivo de configuración
+    try:
+        json_path.unlink()
+        print("Archivo onboarding.json eliminado.")
+    except Exception:
+        pass
+
+    print("Configuración completada exitosamente.")
+    return True
+
+
 def _verificar_onboarding() -> None:
     """Muestra el wizard de onboarding si la empresa no está configurada.
 
@@ -132,8 +212,11 @@ def main() -> None:
     db = DatabaseManager()
     db.initialize_schema()
 
-    # Onboarding: solo se muestra si el instalador no pre-configuró la empresa
-    _verificar_onboarding()
+    # Onboarding: primero intentar leer datos del instalador (JSON)
+    # Si no hay JSON, intentar el modo --pre-configurar (legacy)
+    # Si nada de lo anterior, mostrar wizard de onboarding en la app
+    if not _procesar_onboarding_json():
+        _verificar_onboarding()
 
     InstaladorHistorico.instalar()
 

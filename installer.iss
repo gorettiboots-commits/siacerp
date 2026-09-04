@@ -1,10 +1,12 @@
 ; ============================================================
 ; SIAC ERP — Inno Setup Script
 ; Genera el instalador (.exe) con configuración de empresa
+; NO ejecuta SIAC_ERP.exe durante la instalación (evita AV)
+; Guarda datos en onboarding.json para que la app lea al abrir
 ; ============================================================
 
 #define MyAppName "SIAC ERP"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "Mario Felipe Luevano"
 #define MyAppExeName "SIAC_ERP.exe"
 #define MySourceDir "dist\SIAC_ERP"
@@ -19,7 +21,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=installer_output
 OutputBaseFilename=SIAC_ERP_Instalador_{#MyAppVersion}
-Compression=lzma2/ultra64
+Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
@@ -42,7 +44,7 @@ Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Pre-configuración se ejecuta en CurStepChanged
+Filename: "{app}\{#MyAppExeName}"; Description: "Iniciar {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 var
@@ -251,30 +253,57 @@ begin
   end;
 end;
 
+function EscapeJsonString(const S: String): String;
+var
+  I: Integer;
+  C: Char;
+  Tmp: String;
+begin
+  Tmp := '';
+  for I := 1 to Length(S) do
+  begin
+    C := S[I];
+    case C of
+      '\': Tmp := Tmp + '\\';
+      '"': Tmp := Tmp + '\"';
+      Chr(13): Tmp := Tmp + '\r';
+      Chr(10): Tmp := Tmp + '\n';
+      Chr(9): Tmp := Tmp + '\t';
+    else
+      Tmp := Tmp + C;
+    end;
+  end;
+  Result := Tmp;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
-  ResultCode: Integer;
-  ExePath: String;
-  Params: String;
+  JsonContent: String;
+  JsonFile: String;
+  SL: TStringList;
 begin
   if CurStep = ssPostInstall then
   begin
-    ExePath := ExpandConstant('{app}\{#MyAppExeName}');
-    Params := '--pre-configurar --nombre "' + EditNombreEmpresa.Text + '" ';
-    if Trim(EditRazonSocial.Text) <> '' then
-      Params := Params + '--razon "' + EditRazonSocial.Text + '" ';
-    if Trim(EditRFC.Text) <> '' then
-      Params := Params + '--rfc "' + EditRFC.Text + '" ';
-    if Trim(EditDomicilio.Text) <> '' then
-      Params := Params + '--domicilio "' + EditDomicilio.Text + '" ';
-    if Trim(EditTelefono.Text) <> '' then
-      Params := Params + '--telefono "' + EditTelefono.Text + '" ';
-    if Trim(EditEmail.Text) <> '' then
-      Params := Params + '--email "' + EditEmail.Text + '" ';
-    Params := Params + '--admin-user "' + EditAdminUser.Text + '" ';
-    Params := Params + '--admin-password "' + EditAdminPassword.Text + '" ';
-    if Trim(EditAdminNombre.Text) <> '' then
-      Params := Params + '--admin-nombre "' + EditAdminNombre.Text + '" ';
-    Exec(ExePath, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    JsonFile := ExpandConstant('{app}\onboarding.json');
+
+    JsonContent := '{' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "nombre_empresa": "' + EscapeJsonString(EditNombreEmpresa.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "razon_social": "' + EscapeJsonString(EditRazonSocial.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "rfc": "' + EscapeJsonString(EditRFC.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "domicilio": "' + EscapeJsonString(EditDomicilio.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "telefono": "' + EscapeJsonString(EditTelefono.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "email": "' + EscapeJsonString(EditEmail.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "admin_user": "' + EscapeJsonString(EditAdminUser.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "admin_password": "' + EscapeJsonString(EditAdminPassword.Text) + '",' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '  "admin_nombre": "' + EscapeJsonString(EditAdminNombre.Text) + '"' + Chr(13) + Chr(10);
+    JsonContent := JsonContent + '}';
+
+    SL := TStringList.Create;
+    try
+      SL.Text := JsonContent;
+      SL.SaveToFile(JsonFile);
+    finally
+      SL.Free;
+    end;
   end;
 end;

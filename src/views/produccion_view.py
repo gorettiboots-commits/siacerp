@@ -32,8 +32,8 @@ class ProduccionView(QWidget):
         self.grid_variantes.set_datos([])
         self.grid_bom.set_datos([])
         self.grid_pt.set_datos([])
-        if hasattr(self, 'kanban'):
-            self.kanban.recargar()
+        if hasattr(self, 'gantt'):
+            self.gantt.recargar()
 
     def recargar(self) -> None:
         """Recarga todos los datos de la vista (OPs, catálogos, PT)."""
@@ -84,28 +84,31 @@ class ProduccionView(QWidget):
         hlayout.addLayout(title_col)
         hlayout.addStretch()
 
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("produccion", "#16A34A"))
+
         self.tabs = QTabWidget()
-        self.tab_kanban = QWidget()
+        self.tab_gantt = QWidget()
         self.tab_ops = QWidget()
         self.tab_catalogos = QWidget()
         self.tab_pt = QWidget()
-        self.tabs.addTab(self.tab_kanban, "Kanban")
+        self.tabs.addTab(self.tab_gantt, "Gantt")
         self.tabs.addTab(self.tab_ops, "Órdenes de Producción")
         self.tabs.addTab(self.tab_catalogos, "Catálogos")
         self.tabs.addTab(self.tab_pt, "Producto Terminado")
-        self._setup_tab_kanban()
+        self._setup_tab_gantt()
         self._setup_tab_ops()
         self._setup_tab_catalogos()
         self._setup_tab_pt()
         layout.addWidget(header)
         layout.addWidget(self.tabs)
 
-    def _setup_tab_kanban(self) -> None:
-        from src.views.kanban_view import KanbanView
-        self.kanban = KanbanView(self.controller, on_change=self._load_ops)
-        layout = QVBoxLayout(self.tab_kanban)
+    def _setup_tab_gantt(self) -> None:
+        from src.views.gantt_view import GanttView
+        self.gantt = GanttView(self.controller, on_change=self._load_ops)
+        layout = QVBoxLayout(self.tab_gantt)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.kanban)
+        layout.addWidget(self.gantt)
 
     def _setup_tab_ops(self) -> None:
         layout = QVBoxLayout(self.tab_ops)
@@ -286,8 +289,8 @@ class ProduccionView(QWidget):
     def _load_ops(self) -> None:
         try:
             ops = self.controller.listar_ops()
-            if hasattr(self, "kanban"):
-                self.kanban.recargar()
+            if hasattr(self, "gantt"):
+                self.gantt.recargar()
             self.vista.set_datos(ops)
             self._load_catalogos()
             self._load_pt()

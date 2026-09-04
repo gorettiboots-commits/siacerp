@@ -67,6 +67,9 @@ class OrdenesCompraView(QWidget):
         hlayout.addLayout(title_col)
         hlayout.addStretch()
 
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("ordenes_compra", "#1892D4"))
+
         self.tabs = QTabWidget()
         self.tab_ordenes = QWidget()
         self.tab_proveedores = QWidget()

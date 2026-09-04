@@ -61,6 +61,9 @@ class StockView(QWidget):
         hlayout.addLayout(title_col)
         hlayout.addStretch()
 
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("inventario", "#E3C14D"))
+
         self.tabs = QTabWidget()
         self.tab_insumos = QWidget()
         self.tab_movimientos = QWidget()

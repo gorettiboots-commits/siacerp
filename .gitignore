@@ -18,6 +18,9 @@ goretti_erp.db*
 config.ini
 # opencode.json contiene API key (Google Stitch MCP) — no subir
 opencode.json
+# Code signing (contiene contrasena del certificado .pfx)
+sign_config.ini
+*.pfx
 
 # Exportaciones generadas por la app
 OC_*.xlsx

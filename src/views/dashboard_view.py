@@ -193,6 +193,10 @@ class DashboardView(QWidget):
         btn_actualizar.clicked.connect(self.recargar)
         fila_header.addWidget(titulo)
         fila_header.addStretch()
+
+        from src.views.manual_dialog import crear_boton_ayuda
+        fila_header.addWidget(crear_boton_ayuda("dashboard", "#0D9488"))
+
         fila_header.addWidget(self.lbl_fecha)
         fila_header.addWidget(btn_actualizar)
         cl.addLayout(fila_header)

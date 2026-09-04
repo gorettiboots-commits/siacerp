@@ -25,6 +25,137 @@ from src.views.sandbox_view import SandboxView
 from src.views.stock_view import StockView
 
 
+class DialogoActualizacion(QDialog):
+    """Dialogo de actualizacion con verificacion de firma digital."""
+
+    def __init__(self, info: dict, parent=None) -> None:
+        super().__init__(parent)
+        self.info = info
+        self.setWindowTitle("Actualizar SIAC ERP")
+        self.setFixedSize(480, 380)
+        self.setModal(True)
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        layout.setContentsMargins(32, 24, 32, 24)
+
+        # Icono de actualizacion
+        lbl_icon = QLabel("🔄")
+        lbl_icon.setAlignment(Qt.AlignCenter)
+        lbl_icon.setStyleSheet("font-size: 48px;")
+        layout.addWidget(lbl_icon)
+
+        # Titulo
+        titulo = QLabel("Nueva version disponible")
+        titulo.setAlignment(Qt.AlignCenter)
+        titulo.setStyleSheet("font-size: 18px; font-weight: bold; color: #1e293b;")
+        layout.addWidget(titulo)
+
+        # Info de versiones
+        info_text = (
+            f"<b>Version actual:</b> {self.info.get('version_actual', '?')}<br>"
+            f"<b>Nueva version:</b> {self.info.get('version_remota', '?')}"
+        )
+        lbl_info = QLabel(info_text)
+        lbl_info.setAlignment(Qt.AlignCenter)
+        layout.addWidget(lbl_info)
+
+        # Mensaje de cambios
+        mensaje = self.info.get("mensaje", "")
+        if mensaje:
+            lbl_mensaje = QLabel(f"<i>{mensaje}</i>")
+            lbl_mensaje.setAlignment(Qt.AlignCenter)
+            lbl_mensaje.setWordWrap(True)
+            lbl_mensaje.setStyleSheet("color: #64748b;")
+            layout.addWidget(lbl_mensaje)
+
+        # Indicador de firma digital
+        if self.info.get("firma_requerida", True):
+            lbl_firma = QLabel("🔐 Esta actualizacion incluye firma digital verificada")
+            lbl_firma.setAlignment(Qt.AlignCenter)
+            lbl_firma.setStyleSheet("color: #16a34a; font-size: 12px;")
+            layout.addWidget(lbl_firma)
+
+        # Barra de progreso
+        self._barra_progreso = QLabel("Presione Instalar para comenzar")
+        self._barra_progreso.setAlignment(Qt.AlignCenter)
+        self._barra_progreso.setStyleSheet("color: #64748b;")
+        layout.addWidget(self._barra_progreso)
+
+        layout.addStretch()
+
+        # Botones
+        botones = QHBoxLayout()
+
+        self._btn_cancelar = QPushButton("Cancelar")
+        self._btn_cancelar.clicked.connect(self.reject)
+        botones.addWidget(self._btn_cancelar)
+
+        self._btn_instalar = QPushButton("Instalar")
+        self._btn_instalar.setObjectName("btnPrimary")
+        self._btn_instalar.clicked.connect(self._iniciar_descarga)
+        botones.addWidget(self._btn_instalar)
+
+        layout.addLayout(botones)
+
+    def _iniciar_descarga(self) -> None:
+        """Inicia el proceso de descarga y verificacion."""
+        self._btn_instalar.setEnabled(False)
+        self._btn_instalar.setText("Descargando...")
+        self._btn_cancelar.setEnabled(False)
+        self._barra_progreso.setText("Descargando actualizacion...")
+
+        from src.services.actualizacion_service import ActualizacionService
+        servicio = ActualizacionService(self.info.get("version_actual", ""))
+
+        url = self.info.get("url_instalador") or self.info.get("url_descarga", "")
+        hash_val = self.info.get("hash_sha256", "")
+        verificar = self.info.get("firma_requerida", True)
+
+        servicio.descargar_e_instalar(
+            url_instalador=url,
+            hash_esperado=hash_val if hash_val else None,
+            verificar_firma=verificar,
+            callback_progreso=self._on_progreso,
+            callback_completo=self._on_completo,
+        )
+
+    def _on_progreso(self, bytes_desc: int, total: int) -> None:
+        """Callback de progreso de descarga (se ejecuta en hilo)."""
+        from PySide6.QtCore import QMetaObject, Qt
+        if total > 0:
+            pct = int(bytes_desc * 100 / total)
+            texto = f"Descargando... {pct}% ({bytes_desc // 1024} KB / {total // 1024} KB)"
+        else:
+            texto = f"Descargando... {bytes_desc // 1024} KB"
+        # Actualizar UI desde hilo secundario
+        QMetaObject.invokeMethod(
+            self._barra_progreso, "setText",
+            Qt.QueuedConnection, texto
+        )
+
+    def _on_completo(self, exito: bool, mensaje: str) -> None:
+        """Callback al completar la descarga/instalacion."""
+        from PySide6.QtCore import QMetaObject, Qt
+        def _actualizar():
+            if exito:
+                self._barra_progreso.setText(mensaje)
+                self._barra_progreso.setStyleSheet("color: #16a34a;")
+                self._btn_instalar.setText("Instalado")
+                self._btn_cancelar.setText("Cerrar")
+                self._btn_cancelar.setEnabled(True)
+                self._btn_cancelar.clicked.connect(self.accept)
+            else:
+                self._barra_progreso.setText(mensaje)
+                self._barra_progreso.setStyleSheet("color: #dc2626;")
+                self._btn_instalar.setEnabled(True)
+                self._btn_instalar.setText("Reintentar")
+                self._btn_cancelar.setEnabled(True)
+        QMetaObject.invokeMethod(self, _actualizar, Qt.QueuedConnection)
+
+
 class AcercaDeDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -157,6 +288,9 @@ class MainWindow(QMainWindow):
         self._logs_action.triggered.connect(self._mostrar_logs)
         ayuda_menu.addAction(self._logs_action)
         ayuda_menu.addSeparator()
+        manual_action = QAction("Manual de Usuario", self)
+        manual_action.triggered.connect(self._mostrar_manual)
+        ayuda_menu.addAction(manual_action)
         acerca_action = QAction("Acerca de SIAC ERP", self)
         acerca_action.triggered.connect(self._mostrar_acerca)
         ayuda_menu.addAction(acerca_action)
@@ -179,6 +313,12 @@ class MainWindow(QMainWindow):
             return
         from src.views.logs_view import DialogLogs
         dlg = DialogLogs(self)
+        dlg.exec()
+
+    def _mostrar_manual(self, seccion: str = "") -> None:
+        """Abre el manual de usuario en un dialogo navegnable dentro del sistema."""
+        from src.views.manual_dialog import ManualDialog
+        dlg = ManualDialog(self, seccion_inicial=seccion)
         dlg.exec()
 
     def _mostrar_acerca(self) -> None:
@@ -398,7 +538,7 @@ class MainWindow(QMainWindow):
             "programacion", "Programación", mono_icon("programacion", 26, "#22A8C6"), 4)
         self.nav_programacion.setToolTip("Programación (Ctrl+5)")
 
-        # --- Estilos/colores de botones módulo (izquierda) ---
+        # --- Estilos/colores de botones modulo ---
         _iconos_nav = {
             "oc": ("navToolOC", "#1892D4"),
             "produccion": ("navToolProduccion", "#16A34A"),
@@ -491,6 +631,8 @@ class MainWindow(QMainWindow):
         btn.clicked.connect(lambda checked=False, i=idx: self._switch_view(i))
         return btn
 
+
+
     def _setup_status_bar(self) -> None:
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -513,6 +655,8 @@ class MainWindow(QMainWindow):
         sc.activated.connect(self._abrir_buscador)
         sc = QShortcut(QKeySequence("Ctrl+,"), self)
         sc.activated.connect(self._mostrar_configuracion)
+        sc = QShortcut(QKeySequence("F1"), self)
+        sc.activated.connect(self._mostrar_manual)
 
     def _abrir_buscador(self) -> None:
         if self._stack.currentWidget() != self._main_container:
@@ -523,14 +667,23 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _navegar_desde_buscador(self, modulo: str, registro: dict) -> None:
-        mod_indices = {
-            "ordenes_compra": 0,
-            "produccion": 1,
-            "inventario": 2,
-            "clientes": 3,
-        }
-        if modulo in mod_indices:
-            self._switch_view(mod_indices[modulo])
+        """Navega al modulo solicitado desde el buscador global."""
+        if modulo == "dashboard":
+            self._mostrar_dashboard()
+        elif modulo == "configuracion":
+            self._mostrar_configuracion()
+        elif modulo == "sandbox":
+            self._mostrar_sandbox()
+        else:
+            mod_indices = {
+                "ordenes_compra": 0,
+                "produccion": 1,
+                "inventario": 2,
+                "clientes": 3,
+                "programacion": 4,
+            }
+            if modulo in mod_indices:
+                self._switch_view(mod_indices[modulo])
 
     def _on_video_status(self, status) -> None:
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
@@ -705,6 +858,17 @@ class MainWindow(QMainWindow):
                     sync.iniciar(intervalo_segundos=120)
             except Exception:
                 pass  # Sync es opcional, no bloquear el login
+
+            # Verificar actualizaciones en background
+            try:
+                from src.services.actualizacion_service import ActualizacionService
+                from src.__version__ import __version__
+                updater = ActualizacionService(__version__)
+                updater.verificar_en_background(
+                    callback=self._on_actualizacion_disponible
+                )
+            except Exception:
+                pass  # Actualizacion es opcional, no bloquear el login
         else:
             from src.views.login_view import LoginView
             for w in self._stack.findChildren(LoginView):
@@ -712,6 +876,17 @@ class MainWindow(QMainWindow):
                 w.lbl_error.setVisible(True)
                 w.btn_login.setEnabled(True)
                 w.btn_login.setText("Iniciar Sesion")
+
+    def _on_actualizacion_disponible(self, info: dict) -> None:
+        """Callback cuando se detecta una actualizacion disponible."""
+        from src.services.actualizacion_service import ActualizacionService
+        info["version_actual"] = ActualizacionService("").version_actual
+        # Mostrar dialogo de actualizacion en el hilo principal
+        from PySide6.QtCore import QMetaObject, Qt
+        def _mostrar():
+            dlg = DialogoActualizacion(info, self)
+            dlg.exec()
+        QMetaObject.invokeMethod(self, _mostrar, Qt.QueuedConnection)
 
     def _mostrar_sandbox(self) -> None:
         self._content_area.setCurrentWidget(self._view_sandbox)

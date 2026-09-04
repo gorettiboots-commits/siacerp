@@ -1,7 +1,10 @@
 from datetime import date, datetime, timedelta
 
 from src.models.clientes_model import PedidoClienteModel
+from src.models.produccion_model import OrdenProduccionModel
 from src.models.programacion_model import ProgramacionModel
+from src.utils.folios import siguiente_folio
+from src.utils.logs import registrar_log
 
 
 class ProgramacionController:
@@ -89,8 +92,9 @@ class ProgramacionController:
     def programar_pedido(self, pedido_id: int, folio_pedido: str, cliente: str,
                          total_pedido: int, semana_id: int, fecha_prog: str,
                          corridas: list[dict]) -> list[str]:
-        """Crea un folio de programación por modelo; sincroniza el estatus."""
+        """Crea un folio de programación por modelo y genera OP automáticamente."""
         folios: list[str] = []
+        ops_generadas: list[int] = []
         for c in corridas:
             folio = self.model.siguiente_folio_prog()
             tallas = [t for t in c.get("tallas", []) if int(t["pares"] or 0) > 0]
@@ -104,7 +108,73 @@ class ProgramacionController:
                 color=c.get("color", ""), fecha_prog=fecha_prog,
                 tallas=tallas, total_pares=total)
             folios.append(folio)
+
+            # ── Generar Orden de Producción automáticamente ──
+            op_id = self._crear_op_desde_corrida(
+                c, tallas, total, fecha_prog, folio_pedido, cliente)
+            if op_id:
+                ops_generadas.append(op_id)
+
         if folios:
             self.model.sincronizar_estatus_pedido(pedido_id, total_pedido)
             self.pedido_model.cambiar_estatus(pedido_id, "programado")
+
+        if ops_generadas:
+            registrar_log(
+                "produccion", "crear_desde_programacion", "orden_produccion",
+                None, datos={"ops": ops_generadas, "folios_prog": folios})
+
         return folios
+
+    def _crear_op_desde_corrida(self, corrida: dict, tallas: list[dict],
+                                total_pares: int, fecha_prog: str,
+                                folio_pedido: str, cliente: str) -> int | None:
+        """Crea una orden de producción a partir de una corrida programada.
+
+        Returns:
+            ID de la OP creada o None si no se pudo crear.
+        """
+        modelo = corrida.get("modelo", "")
+        color = corrida.get("color", "")
+        piel = corrida.get("piel", "")
+
+        # Buscar o crear la variante base
+        variante_id = self.model.crear_variante_si_no_existe(modelo, color, piel)
+        if not variante_id:
+            # Si el modelo no existe, no se puede crear la OP
+            return None
+
+        # Generar folio OP
+        folio_op = siguiente_folio("ordenes_produccion", "folio", "OP")
+
+        # Construir matriz de tallas para la OP
+        matriz_tallas = []
+        for t in tallas:
+            talla_id = self.model.buscar_talla_id(t["talla"])
+            if talla_id and int(t["pares"] or 0) > 0:
+                matriz_tallas.append({
+                    "talla_id": talla_id,
+                    "pares": int(t["pares"]),
+                })
+
+        if not matriz_tallas:
+            return None
+
+        # Crear la OP usando el model directamente
+        op_model = OrdenProduccionModel()
+        op_id = op_model.crear(
+            folio=folio_op,
+            variante_id=variante_id,
+            total_pares=total_pares,
+            fecha_inicio=fecha_prog,
+            fecha_entrega="",
+            prioridad="normal",
+            observaciones=f"Generada desde programación {corrida.get('modelo', '')} "
+                          f"- Pedido: {folio_pedido} - Cliente: {cliente}",
+        )
+
+        # Agregar tallas a la OP
+        for m in matriz_tallas:
+            op_model.agregar_talla(op_id, m["talla_id"], m["pares"])
+
+        return op_id

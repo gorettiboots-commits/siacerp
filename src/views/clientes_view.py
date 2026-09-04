@@ -85,6 +85,9 @@ class ClientesView(QWidget):
         hlayout.addLayout(title_col)
         hlayout.addStretch()
 
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("clientes", "#77307E"))
+
         self.tabs = QTabWidget()
         self.tab_pedidos = QWidget()
         self.tab_clientes = QWidget()

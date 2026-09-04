@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -205,6 +206,82 @@ class ProgramacionModel:
                WHERE pl.detalle_pedido_id = ?
                GROUP BY lt.talla""", (detalle_id,))
         return {f["talla"]: int(f["n"]) for f in filas}
+
+    def buscar_variante_por_modelo_color_piel(self, modelo_nombre: str,
+                                              color: str, piel: str) -> Optional[dict]:
+        """Busca la variante base (talla='') para un modelo/color/piel."""
+        return self.db.fetch_one(
+            """SELECT v.*, m.nombre AS modelo_nombre
+               FROM variantes v
+               JOIN modelos m ON m.id = v.modelo_id
+               WHERE m.nombre = ? AND v.color = ? AND v.piel = ?
+                     AND v.talla = '' AND v.activo = 1""",
+            (modelo_nombre, color, piel),
+        )
+
+    def crear_variante_si_no_existe(self, modelo_nombre: str,
+                                    color: str, piel: str) -> Optional[int]:
+        """Busca o crea la variante base para un modelo/color/piel.
+        Si el modelo no existe, lo crea automaticamente."""
+        v = self.buscar_variante_por_modelo_color_piel(
+            modelo_nombre, color, piel)
+        if v:
+            return v["id"]
+        # Buscar modelo por nombre
+        modelo = self.db.fetch_one(
+            "SELECT id FROM modelos WHERE nombre = ?",
+            (modelo_nombre,),
+        )
+        if not modelo:
+            # Crear el modelo automaticamente si no existe
+            codigo_limpio = re.sub(r'[^A-Z0-9]', '', modelo_nombre.upper())
+            if not codigo_limpio:
+                codigo_limpio = 'MOD' + str(abs(hash(modelo_nombre)) % 100000)
+            # Verificar que el codigo no este en uso
+            existente_codigo = self.db.fetch_one(
+                "SELECT id FROM modelos WHERE codigo = ?",
+                (codigo_limpio,),
+            )
+            if existente_codigo:
+                modelo_id = existente_codigo["id"]
+            else:
+                cur_modelo = self.db.execute(
+                    "INSERT INTO modelos (codigo, nombre) VALUES (?, ?)",
+                    (codigo_limpio, modelo_nombre),
+                )
+                sync_insert('modelos', cur_modelo.lastrowid, {
+                    'codigo': codigo_limpio, 'nombre': modelo_nombre,
+                })
+                modelo_id = cur_modelo.lastrowid
+        else:
+            modelo_id = modelo["id"]
+        # Generar codigo de variante unico
+        codigo = f"{modelo_nombre.upper()}-{color[:3].upper()}-{piel[:3].upper()}"
+        # Verificar que no exista
+        existente = self.db.fetch_one(
+            "SELECT id FROM variantes WHERE codigo_variante = ?",
+            (codigo,),
+        )
+        if existente:
+            return existente["id"]
+        cur = self.db.execute(
+            "INSERT INTO variantes (modelo_id, color, piel, talla, codigo_variante) "
+            "VALUES (?, ?, ?, '', ?)",
+            (modelo_id, color, piel, codigo),
+        )
+        sync_insert('variantes', cur.lastrowid, {
+            'modelo_id': modelo_id, 'color': color, 'piel': piel,
+            'talla': '', 'codigo_variante': codigo,
+        })
+        return cur.lastrowid
+
+    def buscar_talla_id(self, talla_texto: str) -> Optional[int]:
+        """Busca el id de una talla en el catalogo."""
+        row = self.db.fetch_one(
+            "SELECT id FROM tallas_catalogo WHERE talla = ?",
+            (str(talla_texto).strip(),),
+        )
+        return row["id"] if row else None
 
     def crear_linea(self, semana_id: int, folio_prog: str, pedido_id: int,
                     detalle_pedido_id: int, folio_pedido: str, cliente: str,

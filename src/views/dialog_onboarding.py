@@ -89,8 +89,66 @@ class PaginaContacto(QWizardPage):
         self.setLayout(form)
 
 
+class PaginaAdmin(QWizardPage):
+    """Paso 3: Usuario administrador."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setTitle("Usuario Administrador")
+        self.setSubTitle(
+            "Configure las credenciales del usuario administrador del sistema."
+            " Este usuario tendra acceso total al sistema.")
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        self.txt_usuario = QLineEdit()
+        self.txt_usuario.setText("admin")
+        self.txt_usuario.setPlaceholderText("Ej: admin")
+        form.addRow("Nombre de usuario:", self.txt_usuario)
+
+        self.txt_password = QLineEdit()
+        self.txt_password.setEchoMode(QLineEdit.Password)
+        self.txt_password.setPlaceholderText("Minimo 4 caracteres")
+        form.addRow("Contrasena:", self.txt_password)
+
+        self.txt_password2 = QLineEdit()
+        self.txt_password2.setEchoMode(QLineEdit.Password)
+        self.txt_password2.setPlaceholderText("Repita la contrasena")
+        form.addRow("Confirmar contrasena:", self.txt_password2)
+
+        self.txt_nombre_admin = QLineEdit()
+        self.txt_nombre_admin.setText("Administrador del Sistema")
+        self.txt_nombre_admin.setPlaceholderText("Ej: Juan Perez")
+        form.addRow("Nombre completo:", self.txt_nombre_admin)
+
+        self.setLayout(form)
+
+    def validatePage(self) -> bool:
+        usuario = self.txt_usuario.text().strip()
+        if not usuario:
+            QMessageBox.warning(
+                self, "Campo obligatorio",
+                "Debe ingresar un nombre de usuario.")
+            return False
+        pwd = self.txt_password.text()
+        if len(pwd) < 4:
+            QMessageBox.warning(
+                self, "Contrasena corta",
+                "La contrasena debe tener al menos 4 caracteres.")
+            return False
+        if pwd != self.txt_password2.text():
+            QMessageBox.warning(
+                self, "No coinciden",
+                "Las contrasenas no coinciden.")
+            return False
+        return True
+
+
 class PaginaLogo(QWizardPage):
-    """Paso 3: Logotipo de la empresa."""
+    """Paso 4: Logotipo de la empresa."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -263,18 +321,20 @@ class DialogOnboarding(QWizard):
 
         self._page_empresa = PaginaEmpresa()
         self._page_contacto = PaginaContacto()
+        self._page_admin = PaginaAdmin()
         self._page_logo = PaginaLogo()
         self._page_video = PaginaVideo()
 
         self.addPage(self._page_empresa)
         self.addPage(self._page_contacto)
+        self.addPage(self._page_admin)
         self.addPage(self._page_logo)
         self.addPage(self._page_video)
 
         self.currentIdChanged.connect(self._on_page_changed)
 
     def _on_page_changed(self, page_id: int) -> None:
-        if page_id == 3:
+        if page_id == 4:
             self.setButtonText(
                 self.NextButton,
                 "Finalizar")
@@ -302,12 +362,37 @@ class DialogOnboarding(QWizard):
         except Exception as e:
             QMessageBox.critical(
                 self, "Error",
-                f"No se pudieron guardar los datos:\n{e}")
+                f"No se pudieron guardar los datos de empresa:\n{e}")
             return
+
+        # Crear usuario administrador
+        try:
+            from src.models.accesos_model import UsuarioModel, PermisosModel
+            user_model = UsuarioModel()
+            perm_model = PermisosModel()
+
+            usuario = self._page_admin.txt_usuario.text().strip()
+            password = self._page_admin.txt_password.text()
+            nombre = self._page_admin.txt_nombre_admin.text().strip()
+            if not nombre:
+                nombre = "Administrador del Sistema"
+
+            existing = user_model.obtener_por_username(usuario)
+            if not existing:
+                admin_id = user_model.crear(usuario, password, nombre, "admin")
+                perm_model.guardar(admin_id, perm_model.claves_totales())
+            else:
+                user_model.cambiar_password(existing["id"], password)
+                user_model.actualizar(existing["id"], usuario, nombre, "admin")
+        except Exception as e:
+            QMessageBox.warning(
+                self, "Advertencia",
+                f"Los datos de empresa se guardaron pero no se pudo crear el usuario admin:\n{e}\n\n"
+                "Puede crear el usuario manualmente desde el login.")
 
         QMessageBox.information(
             self, "Configuración completada",
-            "Los datos de la empresa se han guardado correctamente.\n\n"
-            "Puede modificarlos más tarde desde Configuración > Empresa.")
+            "Los datos de la empresa y el usuario administrador se han guardado correctamente.\n\n"
+            "Puede modificarlos más tarde desde Configuración.")
 
         super().accept()

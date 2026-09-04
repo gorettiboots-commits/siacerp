@@ -95,6 +95,9 @@ class ProgramacionView(QWidget):
         hlayout.addLayout(title_col)
         hlayout.addStretch()
 
+        from src.views.manual_dialog import crear_boton_ayuda
+        hlayout.addWidget(crear_boton_ayuda("programacion", "#22A8C6"))
+
         self._cards_row = QHBoxLayout()
         hlayout.addLayout(self._cards_row)
 

@@ -1,9 +1,11 @@
 {
-  "version": "2026.8.30",
+  "version": "2026.9.3",
   "url_descarga": "https://github.com/gorettiboots-commits/siacerp/releases/latest",
+  "url_instalador": "https://github.com/gorettiboots-commits/siacerp/releases/latest/download/SIAC_ERP_Instalador_1.2.0.exe",
   "url_changelog": "https://github.com/gorettiboots-commits/siacerp/blob/main/CHANGELOG.md",
-  "fecha": "2026-08-30",
-  "mensaje": "Módulo Clientes/Pedidos/Programación en móvil, selector de empresa, RLS mejorado, auto-actualizador",
+  "fecha": "2026-09-03",
+  "mensaje": "Gantt de produccion, manual de usuario navegable, buscador global mejorado, code signing, instalador NSIS, ayuda contextual en vistas",
   "obligatorio": false,
-  "hash_sha256": ""
+  "hash_sha256": "",
+  "firma_requerida": true
 }
